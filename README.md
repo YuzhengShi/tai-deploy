@@ -192,6 +192,23 @@ ssh -i ~/.ssh/tai-deploy ubuntu@<EC2_IP> \
 
 ---
 
+## Documentation
+
+The [`memory-bank/`](memory-bank/) folder contains detailed design documents and operational context:
+
+| File | Contents |
+|------|----------|
+| [`activeContext.md`](memory-bank/activeContext.md) | Current deployment state, EC2 setup, registered groups, open issues |
+| [`progress.md`](memory-bank/progress.md) | Full implementation status, bug fixes, feature history |
+| [`systemPatterns.md`](memory-bank/systemPatterns.md) | Architecture deep-dive: group queue, mounts, model routing, session management, all integrations |
+| [`ec2-deployment.md`](memory-bank/ec2-deployment.md) | EC2 ops playbook: storage layout, systemd services, deploy workflow, backups, troubleshooting |
+| [`voice-system.md`](memory-bank/voice-system.md) | Voice interview technical reference: Nova Sonic protocol, echo prevention, token lifecycle |
+| [`deepgram-voice-design.md`](memory-bank/deepgram-voice-design.md) | Deepgram Voice Agent migration design (planned replacement for Nova Sonic) |
+| [`dashboard.md`](memory-bank/dashboard.md) | Instructor dashboard design: 7 pages, analytics algorithms, implementation plan |
+| [`TAi-Capabilities.md`](memory-bank/TAi-Capabilities.md) | High-level capability summary for external audiences |
+
+---
+
 ## Based On
 
 [NanoClaw](https://github.com/gavrielc/nanoclaw) — a lightweight personal Claude assistant that runs securely in containers. TAi extends it with teaching-specific agentic behavior, AWS Bedrock integration, voice interviews, course system integration, and the graduated student model.

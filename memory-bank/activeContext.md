@@ -143,15 +143,17 @@ When Duo code appears in output (format `XXX`), enter it in Duo Mobile within 90
 - ~~**Lecture transcripts**~~ ✅ DONE 2026-05-19 — All 11 lectures transcribed, polished, ready for LeanRAG
 - ~~**YouTube transcript tool**~~ ✅ FIXED 2026-05-19 — yt-dlp + S3 cookies, no more residential proxy needed
 - ~~**Piped messages silently dropped**~~ ✅ FIXED 2026-05-19 — `outputAfterPipe` tracking
+- ~~**Piazza integration**~~ ✅ DONE 2026-05-22 — piazza_query tool live, search/tags/posts working
 - **Student groups not registered**: All removed for now. Need to re-register when ready.
 - **PLACEHOLDER secrets**: YOUTUBE_API_KEY (for Data API metadata only — transcripts now use yt-dlp), VOICE_INTERVIEW_SECRET
-- **LeanRAG not available**: Partial extraction cache (54/868 chunks). 66 files in cs6650-materials/ ready. Need manual `build_graph` run.
+- ~~**LeanRAG not available**~~ ✅ DONE 2026-05-22 — Full graph built: 4310 nodes, 14767 edges. Cross-source retrieval verified (circuit breaker → Sam Newman transcript, Week 6 microservices, Week 7 teamwork, Week 11 replication).
 - **S3 backups**: Bucket exists but cron not configured on this instance yet
 - **Evaluating Deepgram**: As replacement for Nova Sonic in voice interviews. MCP docs server added (`.mcp.json`)
 
 ### Next Work
 - **Deepgram Voice Agent migration** — Replace Nova Sonic with Deepgram Voice Agent API for mock interviews. Deepgram docs MCP server added to `.mcp.json` (`deepgram-docs` → `https://api.dx.deepgram.com/kapa/mcp`). Motivation: Nova Sonic has unresolved content filter issues + no reconnect support + service-side timing sensitivity.
-- Run LeanRAG `build_graph` manually to ingest all 66 course material files
+- ~~Run LeanRAG `build_graph` full pipeline~~ ✅ DONE — 4310 nodes, 14767 edges, retrieval working
 - Re-register student groups when ready
 - Add remaining .env secrets (YOUTUBE_API_KEY, voice interview secret)
 - Configure backup cron
+- **Instructor dashboard** — design complete (memory-bank/dashboard.md), ~30h estimate, not started

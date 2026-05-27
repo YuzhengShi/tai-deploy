@@ -427,7 +427,39 @@ s3.send(new PutObjectCommand({ Bucket: 'tai-backups-prod', Key: 'youtube-cookies
 
 ---
 
-## 17. Future Scale Path
+## 17. Running LeanRAG build_graph on EC2
+
+The `leanrag/` source and `cs6650-materials/` both exist on the host at `/home/nanoclaw/TAi/`. The Docker image has a Python venv at `/opt/leanrag` with all required dependencies (tiktoken, scikit-learn, pdfplumber, boto3, networkx, numpy, etc.) installed via `container/leanrag-requirements.txt`.
+
+```bash
+ssh -i ~/.ssh/tai-deploy ubuntu@<EC2_IP>
+
+sudo docker run --rm \
+  --user root \
+  -v /home/nanoclaw/TAi/leanrag:/workspace/leanrag \
+  -v /home/nanoclaw/TAi/cs6650-materials:/workspace/cs6650-materials:ro \
+  -v /home/nanoclaw/TAi/.env:/workspace/.env:ro \
+  -w /workspace \
+  --entrypoint /opt/leanrag/bin/python \
+  nanoclaw-agent:latest \
+  -m leanrag.build_graph
+```
+
+**Options:**
+- `--dry-run` — load + chunk only, no Bedrock API calls
+- `--force` — ignore all caches, rebuild from scratch
+
+**Output files** (written to host at `/home/nanoclaw/TAi/leanrag/`):
+- `cache/` — chunking + extraction checkpoints
+- `graph.pkl` — final NetworkX hierarchical graph
+- `chunk_index.json` — chunk ID → source text mapping
+
+**Key details:**
+- Must use `--user root` because `.env` is `chmod 600` owned by nanoclaw; the container's default `node` user can't read it
+- `leanrag/` must be mounted read-write (not `:ro`) because it writes cache and output there
+- `config.py` resolves paths relative to its parent directory (`_PROJECT_ROOT = Path(__file__).parent.parent`), so mounting at `/workspace/leanrag` means it looks for `/workspace/cs6650-materials` and `/workspace/.env`
+- Corpus: 68 documents → 2180 chunks (as of 2026-05-22)
+- Uses DeepSeek R1 (entity extraction) and Cohere Embed v3 (embeddings) via Bedrock
 
 ---
 

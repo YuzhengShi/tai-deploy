@@ -25,6 +25,7 @@ groups/global/*
 # Secrets
 *.keys.json
 .env
+memory-bank/secrets-reference.md
 
 # OS
 .DS_Store

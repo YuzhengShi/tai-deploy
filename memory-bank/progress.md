@@ -95,6 +95,32 @@
 - [x] Agent `build_graph` prohibition — added rule to `groups/global/CLAUDE.md` preventing agent from autonomously running `python -m leanrag.build_graph` (expensive, developer-triggered only)
 - [x] Canvas deep review — TAi downloaded 8 new files: 2 homework specs (midterm-mastery-part-ii, fundamentals-background), 1 lecture (boolean-blindness.md), 5 YouTube background transcripts (network, cloud, SQL, threads, git)
 
+## Docker Image + LeanRAG build_graph on EC2 (2026-05-22)
+- [x] Dockerfile updated — `container/leanrag-requirements.txt` added (tiktoken, scikit-learn, pdfplumber) so `/opt/leanrag` venv can run `build_graph`
+- [x] Verified `build_graph --dry-run` works on EC2: 68 documents, 2180 chunks
+- [x] Documented run command in `memory-bank/ec2-deployment.md` § 17
+- [x] Gotchas resolved: `--user root` needed (`.env` is chmod 600), leanrag mount must be rw (writes cache + graph), paths resolve relative to `config.py` parent
+
+## Self-Improving Teaching + Piazza Integration (2026-05-22)
+- [x] Self-improving teaching strategy loop — agent now measures confidence deltas per strategy, detects patterns (2+ failures / 3+ successes), writes per-student "Effective Approaches" that override the default matrix
+- [x] COMPETENCY_TEMPLATE.md — new "Effective Approaches (Self-Improving)" section: Approaches That Work, Approaches That Don't Work, Strategy Shift Patterns
+- [x] CLAUDE.md Step 3 — student-specific evidence explicitly overrides default strategy matrix
+- [x] CLAUDE.md Step 6 — strategy log now requires confidence delta measurement + pattern detection trigger
+- [x] TEACHING_STRATEGIES.md — full self-improvement loop documented with worked 5-session example
+- [x] COMPETENCY_PROTOCOL.md — strategy log format updated: `DATE: STRATEGY on TOPIC | conf_before→conf_after (delta) | engagement | outcome | notes`
+- [x] Piazza integration — `piazza_query` MCP tool (read-only, 20/session rate limit)
+  - Actions: recent_posts, get_post, search (search_feed), get_pinned, get_by_tag, list_tags, stats
+  - Script: `container/scripts/piazza_query.py` (piazza-api 0.15.0 library)
+  - Secrets: PIAZZA_EMAIL, PIAZZA_PASSWORD, PIAZZA_NETWORK_ID passed through container-runner.ts
+  - Dockerfile: piazza-api added to pip install
+  - Bug fix: script renamed from `piazza_api.py` → `piazza_query.py` (filename shadowed the installed package via sys.path[0])
+  - Bug fix: `network.search()` → `network.search_feed()` (correct API method)
+  - Dynamic tag discovery via `list_tags` action (no hardcoded tags)
+- [x] Piazza trigger rules in CLAUDE.md — 6 specific triggers (assignment questions, patrol, mock prep, homework components, common questions, citing instructor)
+- [x] Mock interview prep updated — agent now fetches student's Piazza post beforehand, asks them to defend it, flags missing posts
+- [x] README.md fully rewritten — reflects all 3 phases implemented, capabilities, infrastructure, roadmap
+- [x] .env configured on EC2: PIAZZA_EMAIL=shi.yuzh@northeastern.edu, PIAZZA_NETWORK_ID=<PIAZZA_NETWORK_ID>
+
 ## Redeployment (2026-05-16)
 - [x] New AWS account (<AWS_ACCOUNT_ID>) — terraform-managed infrastructure
 - [x] EC2 provisioned: <EC2_INSTANCE_ID>, EIP <EC2_IP>, IAM role with Bedrock+S3+Marketplace
@@ -113,7 +139,7 @@
 - [x] YouTube transcript tool — yt-dlp + S3 cookies (replaces external API + residential proxy)
 - [ ] Remaining .env secrets (YOUTUBE_API_KEY for Data API, voice secret)
 - [ ] Student group re-registration
-- [ ] LeanRAG graph rebuild — 66 files in cs6650-materials/ (20 lectures, 27 transcripts, 17 homeworks, 2 other). Partial extraction cache exists (54/868 chunks done before interrupted)
+- [x] LeanRAG graph rebuild — full build complete (4310 nodes, 14767 edges). Verified: query returns grounded answers tracing back to Sam Newman transcript, Week 6/7/11 lectures.
 - [ ] Backup cron configuration
 - [ ] Deepgram Voice Agent migration — replace Nova Sonic for mock interviews. Deepgram docs MCP added to `.mcp.json` for research.
 
@@ -127,7 +153,8 @@
 - [x] All 11 lectures transcribed, polished, and placed in `cs6650-materials/transcripts/` (153 chunks total)
 - [x] Docker image includes `@aws-sdk/client-bedrock-runtime` + `@aws-sdk/client-transcribe`
 - [x] YouTube background transcripts (5) + homework specs (2) + lecture file (1) added via Canvas deep review
-- [ ] LeanRAG `build_graph` needs to be run to ingest all files (partial cache at 54/868 chunks)
+- [x] LeanRAG Docker deps installed (tiktoken, scikit-learn, pdfplumber) — image rebuilt 2026-05-22
+- [x] LeanRAG `build_graph` full run — complete. 4310 nodes, 14767 edges. Cross-source retrieval verified (transcripts + lectures + videos).
 
 ## Known Issues
 - CLAUDE.md phase checklists are behind actual implementation (Phase 3 marked not started but is done)

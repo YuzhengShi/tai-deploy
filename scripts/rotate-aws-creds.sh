@@ -4,7 +4,7 @@
 
 set -e
 
-EC2_HOST="ubuntu@<EC2_IP_OLD>"
+EC2_HOST="ubuntu@${EC2_IP:-<EC2_IP>}"
 SSH_KEY="$HOME/.ssh/tai-deploy"
 
 if [ $# -ne 3 ]; then

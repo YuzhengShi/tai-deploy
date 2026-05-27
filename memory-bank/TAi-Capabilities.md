@@ -24,6 +24,14 @@ The misconceptions section of `COMPETENCY.md` starts empty and is never pre-load
 
 Strategy history is logged per student so the agent avoids repeating approaches that didn't work.
 
+### Self-improving teaching strategy loop
+The agent measures confidence deltas per strategy and detects patterns:
+- 2+ failures with the same strategy on the same topic → marks as "Approach That Doesn't Work"
+- 3+ successes → marks as "Approach That Works"
+- Per-student "Effective Approaches" section in COMPETENCY.md **overrides** the default strategy matrix
+
+Strategy log format: `DATE: STRATEGY on TOPIC | conf_before→conf_after (delta) | engagement | outcome | notes`
+
 ### Cross-session memory
 Two mechanisms: (1) Claude Agent SDK session state persisted to `data/sessions/{folder}/.claude/`, resumed via `resumeAt` UUID on every spawn. (2) SQLite FTS5 memory system — `memory_store` MCP tool writes facts with decay classes (permanent/stable 90d/active 14d/session 24h). Retrieved via porter-stemming FTS search, injected into every container's context before the agent sees anything.
 
@@ -52,8 +60,27 @@ Part of the 6-hour sync — fetches recent graded submission bodies, extracts un
 ### External links from Canvas
 When the instructor posts a link to a paper, tutorial, documentation, or product page in Canvas, course-sync follows it via agent-browser and summarizes the content into `COURSE_STATUS.md`. The agent can also browse these links on-demand during a student conversation.
 
+### Piazza
+`piazza_query` MCP tool — read-only access to class discussion forum. Search posts, get pinned/tagged posts, discover tags dynamically. Agent fetches student's posts before mock interviews (asks them to defend their answers verbally). Rate-limited to 20 calls per session.
+
 ### SharePoint & OneDrive access
 TAi can access files and videos shared via `northeastern.sharepoint.com` and `northeastern-my.sharepoint.com`. Authentication uses `ms-auth-browse.mjs` — headless Puppeteer script handling Microsoft login → Duo MFA → device trust. Session cookies saved to S3 (`tai-backups-prod/ms-session.json`) and reused, so Duo approval only needed once every 30+ days. Professor Coady can share lecture recordings, assignments, or course materials via SharePoint links and TAi will access them directly.
+
+---
+
+## Piazza Discussion Forum
+
+`piazza_query` MCP tool provides read-only access to the class Piazza (piazza-api 0.15.0). Rate-limited to 20 calls per agent session.
+
+**Actions:** `recent_posts`, `get_post` (by cid), `search` (full-text via `search_feed`), `get_pinned`, `get_by_tag`, `list_tags` (dynamic discovery), `stats`.
+
+**Agent trigger rules:**
+1. Student asks about an assignment → search for related posts + get pinned
+2. Teaching patrol → check recent activity for common confusions
+3. Mock interview prep → fetch student's Piazza posts, ask them to defend their answers verbally
+4. Homework component question → `get_by_tag` for hw folder
+5. Student asks "did anyone else have this problem" → search
+6. Citing instructor answers → `get_post` for specific cid
 
 ---
 
@@ -63,7 +90,7 @@ When the instructor posts a YouTube link in Canvas (lecture recording, tutorial,
 
 `mcp__nanoclaw__youtube_info` — calls the official YouTube Data API via `youtube_info.py`. Returns title, description, channel, duration, tags.
 
-`mcp__nanoclaw__youtube_transcript` — calls `youtube_transcript.py` which routes through a **residential IP proxy** (required because YouTube blocks datacenter IPs from transcript access). Returns the full spoken transcript, cached to `/home/node/youtube/` so repeated calls are instant.
+`mcp__nanoclaw__youtube_transcript` — calls `youtube_transcript.py` which uses **yt-dlp + S3 cookie auth** (cookies exported from Chrome, uploaded to S3). Supports auto-generated and manual subtitles. Uses `--js-runtimes node:/usr/local/bin/node` for YouTube cipher solving. Returns the full spoken transcript, cached to `/home/node/youtube/` so repeated calls are instant.
 
 `CLAUDE.md` instructs: when encountering any YouTube link — from Canvas, an announcement, or sent by a student — call `youtube_info` first then `youtube_transcript` to get the full content. This means the agent can answer questions grounded in the actual video content, not just the title.
 
@@ -98,7 +125,9 @@ What it does:
 
 Zero LLM calls at query time — embedding + graph traversal only. Results are grounded in course materials, not Claude's general training data.
 
-The graph is built offline: DeepSeek V3.2 extracts entities and relations from Obsidian lecture notes, assignment specs, and research papers (MapReduce, Paxos, Raft). Cohere Embed v4 embeds entities. GMM clustering produces the hierarchical graph. `src/leanrag-sync.ts` rebuilds it incrementally every 6 hours when Canvas uploads new lecture files.
+The graph is built offline: DeepSeek V3.2 extracts entities and relations from lecture transcripts, assignment specs, and research papers (MapReduce, Paxos, Raft). Cohere Embed v4 embeds entities. GMM clustering produces the hierarchical graph. Current graph: **4310 nodes, 14767 edges** from 68 documents (2180 chunks).
+
+**Auto-sync:** `src/leanrag-sync.ts` runs every 6 hours — polls Canvas for new lecture files, downloads to `cs6650-materials/`, triggers incremental `build_graph`. Per-chunk SHA256 content-hash cache means only new/changed content is processed.
 
 `CLAUDE.md` mandates: call `mcp__leanrag__query_knowledge` **first** before any other search when a student asks about assignments or lectures. Does not count against the 3-tool-call search limit.
 

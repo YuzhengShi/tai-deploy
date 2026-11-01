@@ -1,5 +1,5 @@
 # The gateway between Claude Code (Anthropic Messages API) and Cerebras (OpenAI chat completions) for the evaluation.
-# Two aliases, one per model under test. Every model slot Claude Code has (sonnet, haiku, opus, small-fast) is pointed at the alias
+# Two aliases, one per model under test (qwen falls back to gpt-oss). Every model slot Claude Code has (sonnet, haiku, opus, small-fast) is pointed at the alias
 # in TAi's .env, so no request carries a name this file does not know.
 model_list:
   - model_name: qwen                       # Nora's model, reasoning off (Nora's setting)
@@ -18,10 +18,23 @@ model_list:
         reasoning_effort: "low"
         parallel_tool_calls: false
 
+  # Test alias for eval/harness/fallback.py: a deployment that always fails (Cerebras answers 401) and falls back to gpt-oss as qwen does.
+  - model_name: test-bad-key
+    litellm_params:
+      model: cerebras/qwen-3.8-27b
+      api_key: not-a-real-key
+      extra_body:
+        reasoning_effort: "none"
+        parallel_tool_calls: false
+
 litellm_settings:
   drop_params: true
   request_timeout: 300
-  callbacks: tai_callbacks.proxy_handler_instance   # strips replayed thinking blocks; logs the upstream status of every call
+  callbacks: tai_callbacks.proxy_handler_instance   # strips replayed thinking blocks; logs the upstream status of every call;
+                                                    # keeps qwen inside TAi's share of the tokens-per-minute bucket (spills to gpt-oss)
 
 router_settings:
-  num_retries: 0        # a 429 from Cerebras must reach Claude Code and the log, not be retried out of sight here
+  num_retries: 0        # a 429 from Cerebras must reach the fallback and the log, not be retried out of sight here
+  fallbacks:            # gpt-oss backs qwen up when qwen cannot answer (a 429 because Nora used the shared bucket, a 5xx, a timeout)
+    - qwen: [gpt-oss]
+    - test-bad-key: [gpt-oss]

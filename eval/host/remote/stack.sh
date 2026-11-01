@@ -8,7 +8,9 @@
 #   stack.sh rebuild          tsc only, after a change to src/
 #   stack.sh backend NAME     write TAi's .env for the model under test: mock | qwen | gpt-oss (read at every container spawn)
 #   stack.sh mocks            start the scripted model and the Canvas/GitHub stand-ins
-#   stack.sh litellm          start the Cerebras gateway
+#   stack.sh litellm          start the Cerebras gateway (its settings: ~/tai-eval/gateway.env, see gwenv below)
+#   stack.sh gwenv KEY VALUE  | --clear | (no args: show)   settings the gateway reads when it starts
+#   stack.sh fallbacktest     does gpt-oss answer when qwen cannot? (harness/fallback.py)
 #   stack.sh orch start|stop|restart
 #   stack.sh status | down | logs NAME
 set -u
@@ -27,8 +29,6 @@ ensure_secrets() {
 ensure_orch_env() {
   [ -f "$ORCH_ENV" ] || cat > "$ORCH_ENV" <<'EOF'
 MAX_CONCURRENT_CONTAINERS=5
-IDLE_TIMEOUT=1800000
-CONTAINER_TIMEOUT=1800000
 LOG_LEVEL=info
 TAI_NO_SEEDS=1
 EOF
@@ -98,8 +98,9 @@ start_litellm() {
   [ -n "$CEREBRAS_API_KEY" ] || { echo "no Cerebras key found in the world's .env"; return 1; }
   docker network inspect nanoclaw-net >/dev/null 2>&1 || docker network create nanoclaw-net >/dev/null
   docker rm -f tai-litellm >/dev/null 2>&1
+  [ -f "$E/gateway.env" ] || : > "$E/gateway.env"
   docker run -d --name tai-litellm --network nanoclaw-net -e CEREBRAS_API_KEY -e LITELLM_MASTER_KEY -e GATEWAY_LOG=/logs/gateway.jsonl \
-    -v "$T/eval/litellm:/app/cfg:ro" -v "$E/logs:/logs" ghcr.io/berriai/litellm:main-stable --config /app/cfg/config.yaml --port 4000 >/dev/null \
+    --env-file "$E/gateway.env" -v "$T/eval/litellm:/app/cfg:ro" -v "$E/logs:/logs" ghcr.io/berriai/litellm:main-stable --config /app/cfg/config.yaml --port 4000 >/dev/null \
     && echo "tai-litellm started"
   for i in $(seq 1 40); do
     docker exec tai-litellm python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=3)" >/dev/null 2>&1 \
@@ -165,6 +166,17 @@ case "${1:-status}" in
     echo "-- host side: $(ls -la "$T/leanrag/graph.pkl" "$T/leanrag/stub_corpus.json" 2>&1 | cut -c1-110 | tr '
 ' ' ')"
     docker run --rm --entrypoint sh -v "$T/leanrag:/workspace/leanrag:ro" tai-agent:eval -c 'ls -la /workspace/leanrag | head -20; echo "--- python import:"; cd /workspace && PYTHONPATH=/workspace /opt/leanrag/bin/python3 -c "import leanrag.mcp_server; print(\"import ok\")" 2>&1 | tail -12; echo "--- query:"; PYTHONPATH=/workspace /opt/leanrag/bin/python3 -c "from leanrag.query import query_knowledge; r=query_knowledge(\"Raft split votes\", top_k=3); print(len(r[\"source_texts\"]), \"source chunks;\", r[\"seed_entities\"][:2])" 2>&1 | tail -8' ;;
+  gwenv)
+    # settings of the gateway (read when it starts), e.g.  stack.sh gwenv TAI_QWEN_TPM_BUDGET 100 ; stack.sh gwenv --clear ; stack.sh gwenv
+    if [ "${2:-}" = "--clear" ]; then : > "$E/gateway.env"; echo "gateway.env cleared"
+    elif [ -n "${2:-}" ] && [ -n "${3:-}" ]; then
+      { grep -v "^$2=" "$E/gateway.env" 2>/dev/null; echo "$2=$3"; } > "$E/gateway.env.new"; mv "$E/gateway.env.new" "$E/gateway.env"; echo "gateway.env: $2=$3"
+    else cat "$E/gateway.env" 2>/dev/null; fi ;;
+  fallbacktest)
+    # does gpt-oss answer when qwen cannot? (harness/fallback.py). `fallbacktest budget` adds the budget case: first
+    # `gwenv TAI_QWEN_TPM_BUDGET 100`, restart the gateway (`litellm`), and `gwenv --clear` afterwards
+    docker run --rm --network nanoclaw-net -e SECRETS_ENV=/secrets.env -v "$SECRETS:/secrets.env:ro" -v "$E/logs:/logs" -v "$T/eval/harness:/probe:ro" \
+      "$PY_IMAGE" python -u /probe/fallback.py "${2:-}" ;;
   toolprobe)
     # empty-arguments tool calls: model or gateway? runs in a container on nanoclaw-net (it must reach tai-litellm by name); keys stay inside
     docker run --rm --network nanoclaw-net -e WORLD_ENV=/world.env -e SECRETS_ENV=/secrets.env -v "$HOME/cs6650-world/.env:/world.env:ro"       -v "$SECRETS:/secrets.env:ro" -v "$T/eval/harness:/probe:ro" "$PY_IMAGE" python -u /probe/toolcall_probe.py "${2:-qwen}" "${3:-8}" ;;
@@ -172,20 +184,24 @@ case "${1:-status}" in
     # TAi's own unit tests for the orchestrator (queue, db, ipc authorisation, container args, routing); the skills-engine tests are not about this.
     # Detached; read the per-file summary with: stack.sh unit-look
     rm -f "$E/logs/vitest.json"
-    setsid nohup bash -c "cd '$T' && timeout 900 npx vitest run src/ --reporter=json --outputFile='$E/logs/vitest.json'" > "$E/logs/vitest.out" 2>&1 < /dev/null &
+    setsid nohup bash -c "cd '$T' && timeout 900 npx vitest run src/ container/agent-runner/test --reporter=json --outputFile='$E/logs/vitest.json'" > "$E/logs/vitest.out" 2>&1 < /dev/null &
     sleep 1; echo "unit tests started detached" ;;
   unit-look)
     [ -f "$E/logs/vitest.json" ] || { echo "not finished yet"; exit 0; }
-    python3 - "$E/logs/vitest.json" <<'PY'
+    python3 - "$E/logs/vitest.json" "${2:-2}" "${3:-}" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
+show = int(sys.argv[2])       # failures to list per file: stack.sh unit-look 20 [only-files-containing]
+only = sys.argv[3]
 print("tests: %d passed, %d failed, %d total; files: %d" % (d["numPassedTests"], d["numFailedTests"], d["numTotalTests"], len(d["testResults"])))
 for f in d["testResults"]:
-    name = f["name"].split("/src/")[-1]
+    name = f["name"].split("/tai/")[-1].replace("container/agent-runner/", "runner/")
     bad = [a for a in f["assertionResults"] if a["status"] == "failed"]
+    if only and only not in name:
+        continue
     print("%-34s %3d passed %3d failed" % (name, sum(1 for a in f["assertionResults"] if a["status"] == "passed"), len(bad)))
-    for a in bad[:2]:
-        print("     FAIL:", a["fullName"][:90], "|", (a["failureMessages"][0] if a["failureMessages"] else "")[:150].replace("\n", " "))
+    for a in bad[:show]:
+        print("     FAIL:", a["fullName"][:90], "|", (a["failureMessages"][0] if a["failureMessages"] else "")[:230].replace("\n", " "))
 PY
     ;;
   peek)

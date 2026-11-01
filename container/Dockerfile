@@ -77,10 +77,10 @@ RUN npm run build
 # Create workspace directories
 RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/leanrag /workspace/ipc/messages /workspace/ipc/tasks
 
-# Create entrypoint script
-# Initial input + follow-up messages arrive via stdin (NDJSON protocol)
-# exec replaces bash so node inherits stdin directly from Docker
-RUN printf '#!/bin/bash\nset -e\ncd /app && npx tsc --outDir /tmp/dist 1>&2\nln -s /app/node_modules /tmp/dist/node_modules\nchmod -R a-w /tmp/dist\nexec node /tmp/dist/index.js\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+# Entrypoint: runs the dist built above. TAI_COMPILE_ON_START=1 (development, the evaluation harness) compiles the agent-runner source
+# the host mounts at /app/src instead, which costs 8-10 s of tsc at every container start, so it is off by default.
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # Set ownership to node user (non-root) for writable directories
 RUN chown -R node:node /workspace && chmod 777 /home/node

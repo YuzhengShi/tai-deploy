@@ -124,7 +124,12 @@ orch_start() {
   set -a; . "$ORCH_ENV"; set +a
   cd "$T" || return 1
   : > "$E/logs/orchestrator.log"
-  TAI_CHANNELS=web CONTAINER_IMAGE=tai-agent:eval setsid nohup node dist/index.js > "$E/logs/orchestrator.log" 2>&1 < /dev/null &
+  # The harness swaps the agent-runner source (variants) and edits the hooks between runs, so containers compile the mounted source
+  # unless orch.env says TAI_COMPILE_ON_START=0 (the sched.py measurement of the precompiled start). The image is tai-agent:eval unless
+  # orch.env names another (tai-agent:clean is the one built from the repository's Dockerfile without a cache).
+  export TAI_COMPILE_ON_START="${TAI_COMPILE_ON_START-1}"
+  export CONTAINER_IMAGE="${CONTAINER_IMAGE:-tai-agent:eval}"
+  TAI_CHANNELS=web setsid nohup node dist/index.js > "$E/logs/orchestrator.log" 2>&1 < /dev/null &
   for i in $(seq 1 20); do
     curl -fsS -m 2 http://127.0.0.1:8099/api/health >/dev/null 2>&1 && { echo "orchestrator up (pid $(orch_pid)), web channel on 127.0.0.1:8099"; return 0; }
     sleep 1

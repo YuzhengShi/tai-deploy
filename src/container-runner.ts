@@ -355,6 +355,9 @@ function buildContainerArgs(mounts: VolumeMount[], containerName: string, isMain
   // Pass host timezone so the Claude Code preset's date injection is correct
   args.push('-e', `TZ=${TIMEZONE}`);
 
+  // Development: compile the mounted agent-runner source at start instead of running the dist built into the image
+  if (process.env.TAI_COMPILE_ON_START === '1') args.push('-e', 'TAI_COMPILE_ON_START=1');
+
   // Resource limits — prevent runaway containers from exhausting host
   args.push('--memory', CONTAINER_MEMORY_LIMIT);
   args.push('--cpus', CONTAINER_CPU_LIMIT);

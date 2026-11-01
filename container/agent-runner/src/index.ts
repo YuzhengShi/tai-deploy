@@ -13,11 +13,21 @@
  *   Final marker after loop ends signals completion.
  */
 
-import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { query, HookCallback, PreCompactHookInput, PreToolUseHookInput } from '@anthropic-ai/claude-agent-sdk';
+import { query, HookCallback, PreCompactHookInput } from '@anthropic-ai/claude-agent-sdk';
 import { fileURLToPath } from 'url';
+import {
+  createCompetencyGuardHook,
+  createFileSizeGuardHook,
+  createSanitizeBashHook,
+  createSensitiveFileReadHook,
+  createWebFetchGuardHook,
+  createWorkspaceSizeGuardHook,
+  isCleanupCommand,
+  newTurnCounters,
+  secretEnvNames,
+} from './guards.js';
 
 interface ContainerInput {
   prompt: string;
@@ -233,259 +243,6 @@ function createPreCompactHook(): HookCallback {
       log(`Archived conversation to ${filePath}`);
     } catch (err) {
       log(`Failed to archive transcript: ${err instanceof Error ? err.message : String(err)}`);
-    }
-
-    return {};
-  };
-}
-
-// NOTE on the shape of a blocking hook result: the Agent SDK reads a PreToolUse decision from
-// hookSpecificOutput.permissionDecision ('deny') and permissionDecisionReason. These hooks used to return
-// `decision: 'block'` and `reason` inside hookSpecificOutput, which the SDK ignores: the tool ran anyway (see eval/ in the fork).
-// Secrets to strip from Bash tool subprocess environments.
-// These are needed by claude-code for API auth but should never
-// be visible to commands the agent runs.
-const SECRET_ENV_VARS = [
-  'ANTHROPIC_API_KEY',
-  'ANTHROPIC_AUTH_TOKEN',
-  'CLAUDE_CODE_OAUTH_TOKEN',
-  'AWS_ACCESS_KEY_ID',
-  'AWS_SECRET_ACCESS_KEY',
-  'AWS_SESSION_TOKEN',
-  'CANVAS_API_TOKEN',
-  'GITHUB_TOKEN',
-];
-
-// Dangerous commands blocked for non-main containers.
-// These patterns are checked against the raw command string.
-const BLOCKED_COMMANDS: RegExp[] = [
-  // Destructive filesystem operations
-  /\brm\s+(-[^\s]*\s+)*-[^\s]*r[^\s]*\s+\//,  // rm -rf / (anything starting from root)
-  /\bmkfs\b/,
-  /\bdd\b.*\bof\s*=\s*\/dev\//,
-  // Outbound network tools (data exfiltration, proxy attacks)
-  /\bcurl\b/,
-  /\bwget\b/,
-  /\bncat?\b/,           // nc / ncat
-  /\bsocat\b/,
-  /\btelnet\b/,
-  /\bpython3?\b.*\b(http\.server|SimpleHTTPServer|requests\.|urllib|socket\b|aiohttp|httpx)/,
-  /\bnode\b.*\b(http|https|net|fetch)\b/,
-  // Indirect execution (blocklist bypass via encoding or eval)
-  /\bbase64\b.*\|\s*(ba)?sh\b/,           // base64 -d | bash
-  /\beval\b/,                              // eval "$cmd"
-  /\bsource\s+\/dev\/stdin\b/,            // source /dev/stdin (pipe to shell)
-  /\b(ba)?sh\s+-c\s.*\$[({]/,             // sh -c "...$(...)" or sh -c "...${...}"
-];
-
-function createSanitizeBashHook(isMain: boolean): HookCallback {
-  return async (input, _toolUseId, _context) => {
-    const preInput = input as PreToolUseHookInput;
-    const command = (preInput.tool_input as { command?: string })?.command;
-    if (!command) return {};
-
-    // Block attempts to read sensitive files via shell commands
-    // Broad match: any command mentioning .env/.db files with common read/copy/edit tools
-    if (/\/proc\/[^\s]*environ/i.test(command) ||
-        /\.(env|db|sqlite)\b/.test(command) && /(cat|head|tail|less|more|strings|xxd|hexdump|sqlite3|cp|mv|vi|vim|nano|sed|awk|grep|sort|tee|dd|tar|zip|base64)\b/.test(command)) {
-      return {
-        hookSpecificOutput: {
-          hookEventName: 'PreToolUse',
-          permissionDecision: 'deny' as const,
-          permissionDecisionReason: 'Access to sensitive files (.env, .db, /proc) is blocked.',
-        },
-      };
-    }
-
-    // Non-main containers: block dangerous and network commands
-    if (!isMain) {
-      for (const pattern of BLOCKED_COMMANDS) {
-        if (pattern.test(command)) {
-          return {
-            hookSpecificOutput: {
-              hookEventName: 'PreToolUse',
-              permissionDecision: 'deny' as const,
-              permissionDecisionReason: `Command blocked for security: matches restricted pattern. If you need network access, use the provided MCP tools (canvas_query, github_query, youtube_transcript, etc.) instead.`,
-            },
-          };
-        }
-      }
-    }
-
-    const unsetPrefix = `unset ${SECRET_ENV_VARS.join(' ')} 2>/dev/null; `;
-    return {
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        updatedInput: {
-          ...(preInput.tool_input as Record<string, unknown>),
-          command: unsetPrefix + command,
-        },
-      },
-    };
-  };
-}
-
-// Sensitive file patterns blocked from Read tool (all containers, including main).
-// Even admin agents shouldn't read these — prevents prompt injection from leaking secrets.
-const SENSITIVE_FILE_PATTERNS: RegExp[] = [
-  /^\/proc\/.*\/(environ|cmdline)$/i,     // procfs secrets
-  /\/\.env$/,                               // .env files
-  /\/\.env\..+$/,                           // .env.local, .env.production, etc.
-  /\/nanoclaw\.db$/,                        // SQLite database (all messages, groups, sessions)
-  /\/nanoclaw\.db-(wal|shm)$/,             // SQLite WAL/SHM files
-];
-
-function createSensitiveFileReadHook(): HookCallback {
-  return async (input, _toolUseId, _context) => {
-    const preInput = input as PreToolUseHookInput;
-    const filePath = (preInput.tool_input as { file_path?: string })?.file_path;
-    if (!filePath) return {};
-
-    for (const pattern of SENSITIVE_FILE_PATTERNS) {
-      if (pattern.test(filePath)) {
-        return {
-          hookSpecificOutput: {
-            hookEventName: 'PreToolUse',
-            permissionDecision: 'deny' as const,
-            permissionDecisionReason: 'This file contains sensitive data and cannot be read directly.',
-          },
-        };
-      }
-    }
-    return {};
-  };
-}
-
-/** Guard WebFetch for non-main containers: rate limit + block private/internal URLs. */
-function createWebFetchGuardHook(maxCalls: number): HookCallback {
-  let callCount = 0;
-  // Private/internal IP ranges and localhost — prevents SSRF to internal services
-  const PRIVATE_URL_PATTERNS: RegExp[] = [
-    /^https?:\/\/localhost\b/i,
-    /^https?:\/\/127\./,
-    /^https?:\/\/10\./,
-    /^https?:\/\/172\.(1[6-9]|2\d|3[01])\./,
-    /^https?:\/\/192\.168\./,
-    /^https?:\/\/0\./,
-    /^https?:\/\/\[::1\]/,
-    /^file:/i,
-  ];
-
-  return async (input, _toolUseId, _context) => {
-    const preInput = input as PreToolUseHookInput;
-    const url = (preInput.tool_input as { url?: string })?.url || '';
-
-    // Rate limit
-    callCount++;
-    if (callCount > maxCalls) {
-      return {
-        hookSpecificOutput: {
-          hookEventName: 'PreToolUse',
-          permissionDecision: 'deny' as const,
-          permissionDecisionReason: `WebFetch rate limit exceeded: max ${maxCalls} calls per session.`,
-        },
-      };
-    }
-
-    // Block private/internal URLs
-    for (const pattern of PRIVATE_URL_PATTERNS) {
-      if (pattern.test(url)) {
-        return {
-          hookSpecificOutput: {
-            hookEventName: 'PreToolUse',
-            permissionDecision: 'deny' as const,
-            permissionDecisionReason: 'Cannot fetch internal/private URLs. Only public web pages are accessible.',
-          },
-        };
-      }
-    }
-
-    return {};
-  };
-}
-
-/** Block writes larger than maxBytes (non-main only). */
-function createFileSizeGuardHook(maxBytes: number): HookCallback {
-  return async (input, _toolUseId, _context) => {
-    const preInput = input as PreToolUseHookInput;
-    const toolInput = preInput.tool_input as Record<string, unknown>;
-    const content = (toolInput.content as string) || (toolInput.new_string as string) || '';
-    if (content.length > maxBytes) {
-      return {
-        hookSpecificOutput: {
-          hookEventName: 'PreToolUse',
-          permissionDecision: 'deny' as const,
-          permissionDecisionReason: `File content too large (${(content.length / 1024 / 1024).toFixed(1)}MB). Maximum allowed: ${(maxBytes / 1024 / 1024).toFixed(0)}MB.`,
-        },
-      };
-    }
-    return {};
-  };
-}
-
-/** Block writes if workspace directory exceeds maxMB total (non-main only). */
-function createWorkspaceSizeGuardHook(maxMB: number): HookCallback {
-  return async (_input, _toolUseId, _context) => {
-    try {
-      const output = execSync('du -sm /workspace/group', { timeout: 3000, encoding: 'utf-8' });
-      const sizeMB = parseInt(output.trim().split(/\s+/)[0], 10);
-      if (sizeMB >= maxMB) {
-        return {
-          hookSpecificOutput: {
-            hookEventName: 'PreToolUse',
-            permissionDecision: 'deny' as const,
-            permissionDecisionReason: `Workspace is full (${sizeMB}MB / ${maxMB}MB limit). Remove unnecessary files before writing new ones.`,
-          },
-        };
-      }
-    } catch {
-      // If du fails or times out, allow the write (defense in depth: tmpfs + file size limits still apply)
-    }
-    return {};
-  };
-}
-
-/**
- * Hook to prevent suspicious bulk modifications to COMPETENCY.md.
- * Normal teaching updates 1-2 concepts at a time with small increments.
- * A student tricking the agent into setting all confidences to 1.0 is detectable.
- */
-function createCompetencyGuardHook(isMain: boolean): HookCallback {
-  return async (input, _toolUseId, _context) => {
-    if (isMain) return {}; // Admin can do anything
-
-    const preInput = input as PreToolUseHookInput;
-    const toolInput = preInput.tool_input as Record<string, unknown>;
-
-    // Check Edit tool: old_string + new_string
-    // Check Write tool: content (full file rewrite)
-    const filePath = (toolInput.file_path as string) || '';
-    if (!filePath.endsWith('COMPETENCY.md')) return {};
-
-    // For Write (full rewrite), check the content
-    const content = (toolInput.content as string) || '';
-    // For Edit, check the new_string
-    const newString = (toolInput.new_string as string) || '';
-    const textToCheck = content || newString;
-    if (!textToCheck) return {};
-
-    // Count high-confidence values being set (>= 0.8)
-    const confidenceMatches = textToCheck.match(/confidence:\s*([\d.]+)/g) || [];
-    let highConfCount = 0;
-    for (const match of confidenceMatches) {
-      const val = parseFloat(match.replace('confidence:', '').trim());
-      if (val >= 0.8) highConfCount++;
-    }
-
-    // Block if 3+ concepts are being set to high confidence in one operation
-    if (highConfCount >= 3) {
-      return {
-        hookSpecificOutput: {
-          hookEventName: 'PreToolUse',
-          permissionDecision: 'deny' as const,
-          permissionDecisionReason: `Blocked: setting ${highConfCount} concepts to confidence >= 0.8 in a single edit is not allowed. Mastery scores must be updated incrementally based on demonstrated understanding, not in bulk. Update concepts one at a time after each interaction.`,
-        },
-      };
     }
 
     return {};
@@ -732,6 +489,11 @@ async function runQuery(
     : '';
   const systemAppend = dateTimeHeader + memoryContext + (globalClaudeMd || '');
 
+  // Every credential the host handed over is unset for the commands Bash runs; the SDK itself needs them in its environment.
+  const secretNames = secretEnvNames(containerInput.secrets, sdkEnv);
+  // What the guards count per answer (WebFetch calls); reset when the model has answered.
+  const counters = newTurnCounters();
+
   for await (const message of query({
     prompt: stream,
     options: {
@@ -761,21 +523,24 @@ async function runQuery(
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook()] }],
         PreToolUse: [
-          { matcher: 'Bash', hooks: [createSanitizeBashHook(containerInput.isMain)] },
+          { matcher: 'Bash', hooks: [createSanitizeBashHook(containerInput.isMain, secretNames)] },
           { matcher: 'Read', hooks: [createSensitiveFileReadHook()] },
+          { matcher: 'Grep', hooks: [createSensitiveFileReadHook()] },
           { matcher: 'Edit', hooks: [createCompetencyGuardHook(containerInput.isMain)] },
           { matcher: 'Write', hooks: [createCompetencyGuardHook(containerInput.isMain)] },
-          // Non-main: guard WebFetch (rate limit + block private/internal URLs)
-          ...(!containerInput.isMain ? [{ matcher: 'WebFetch', hooks: [createWebFetchGuardHook(15)] }] : []),
+          { matcher: 'MultiEdit', hooks: [createCompetencyGuardHook(containerInput.isMain)] },
+          // Non-main: guard WebFetch (rate limit per answer + block private/internal URLs)
+          ...(!containerInput.isMain ? [{ matcher: 'WebFetch', hooks: [createWebFetchGuardHook(counters, 15)] }] : []),
           // Non-main: limit file write size to 5MB
           ...(!containerInput.isMain ? [
             { matcher: 'Write', hooks: [createFileSizeGuardHook(5 * 1024 * 1024)] },
             { matcher: 'Edit', hooks: [createFileSizeGuardHook(5 * 1024 * 1024)] },
           ] : []),
-          // Non-main: block writes if workspace exceeds 500MB total
+          // Non-main: block writes (a shell command that only deletes or measures excepted) if the workspace exceeds 500MB total
           ...(!containerInput.isMain ? [
             { matcher: 'Write', hooks: [createWorkspaceSizeGuardHook(500)] },
             { matcher: 'Edit', hooks: [createWorkspaceSizeGuardHook(500)] },
+            { matcher: 'Bash', hooks: [createWorkspaceSizeGuardHook(500, undefined, isCleanupCommand)] },
           ] : []),
         ],
       },
@@ -801,6 +566,7 @@ async function runQuery(
 
     if (message.type === 'result') {
       resultCount++;
+      counters.webFetch = 0;
       let textResult = 'result' in message ? (message as { result?: string }).result : null;
       // Detect Bedrock 500 errors (context overflow) — abort the query immediately
       // and signal caller to reset session. User gets a friendly retry message instead.

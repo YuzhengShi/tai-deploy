@@ -11,6 +11,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { CronExpressionParser } from 'cron-parser';
+import { checkGithubParams } from './github-access.js';
 
 const IPC_DIR = '/workspace/ipc';
 const MESSAGES_DIR = path.join(IPC_DIR, 'messages');
@@ -626,22 +627,9 @@ This tool does NOT count against the 3-tool-call search limit.`,
     // --- Identity-based access control ---
     // Student containers can only access their own repos + allowed course orgs.
     if (!hasFullAccess) {
-      const ownerParam = args.params?.owner || args.params?.org || args.params?.user;
-      if (ownerParam) {
-        const isOwnRepo = boundGithubUsername && ownerParam.toLowerCase() === boundGithubUsername.toLowerCase();
-        const isAllowedOrg = githubAllowedOrgs.some(org => org.toLowerCase() === ownerParam.toLowerCase());
-        if (!isOwnRepo && !isAllowedOrg) {
-          if (!boundGithubUsername) {
-            return {
-              content: [{ type: 'text' as const, text: 'Your GitHub identity has not been linked yet. Please share your GitHub username so I can look up your repositories.' }],
-              isError: true,
-            };
-          }
-          return {
-            content: [{ type: 'text' as const, text: `You can only access your own repositories (${boundGithubUsername}). I cannot browse other students' code.` }],
-            isError: true,
-          };
-        }
+      const verdict = checkGithubParams(args.params, { username: boundGithubUsername, allowedOrgs: githubAllowedOrgs });
+      if (!verdict.ok) {
+        return { content: [{ type: 'text' as const, text: verdict.message }], isError: true };
       }
     }
 

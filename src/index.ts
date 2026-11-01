@@ -38,7 +38,7 @@ import {
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
-import { findChannel, formatMessages, formatOutbound, stripInternalTags } from './router.js';
+import { findChannel, formatMessages, formatOutbound } from './router.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { hasBootstrapRun, seedCompetencyBootstrap } from './competency-bootstrap.js';
 import { seedCourseSync } from './course-sync.js';
@@ -250,8 +250,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     // Streaming output callback — called for each agent result
     if (result.result) {
       const raw = typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
-      // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
-      const text = stripInternalTags(raw);
+      // Strip <internal>...</internal> blocks (the agent's internal reasoning) and redact system-prompt fingerprints: the same
+      // filter as the send_message tool, so a reply that quotes the prompt does not reach the student by this path
+      const text = formatOutbound(raw);
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
       // Check if agent JUST sent via IPC tool (fresh per result — flag is created
       // each time an IPC tool fires, so only suppress the immediately following output).

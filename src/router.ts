@@ -31,8 +31,16 @@ export function formatMessages(messages: NewMessage[]): string {
 
 export function stripInternalTags(text: string): string {
   return text
-    .replace(/<internal>[\s\S]*?<\/internal>/g, '')  // closed tags
-    .replace(/<internal>[\s\S]*$/g, '')               // unclosed tag → strip to end
+    // A model that is not Claude sometimes writes a tool call as text, ending in a stray closing tag, ahead of the reply:
+    //   <internal to=TodoWrite{ "todos": [...] }></commentary}hey! I'm TAi ...
+    .replace(/<internal\b(?:(?!<internal\b|<\/internal)[\s\S])*?<\/commentary[}>]?/gi, '')
+    .replace(/<internal\b[^>]*>[\s\S]*?<\/internal\s*>/gi, '')  // closed tags (attributes tolerated)
+    .replace(/<internal\b[\s\S]*$/gi, '')                        // unclosed tag → strip to end
+    .replace(/<\/?(?:commentary|analysis)\b(?:\s[^>\n]*)?[}>]?/gi, '')     // stray reasoning-channel tags
+    .replace(/^[\s\S]*?assistantfinal/i, '')                     // reasoning-channel text ahead of the final answer
+    .replace(/^.*\bto=functions\.[^\n]*$/gim, '')                // a tool call written as a line of text
+    // A planning sentence run into the reply without a space: "We need to introduce ourselves as TAi.hey! i'm TAi ..."
+    .replace(/^\s*(?:We|I)\s+(?:need|should|must|will|have to)\s[^\n]*?[.!?](?=[A-Za-z])/, '')
     .replace(/Human:\s*<messages>[\s\S]*/g, '')                // hallucinated Human turn → strip everything after
     .replace(/<messages>[\s\S]*?<\/messages>/g, '')           // bare message XML (closed)
     .replace(/<messages>[\s\S]*$/g, '')                       // bare message XML (unclosed)

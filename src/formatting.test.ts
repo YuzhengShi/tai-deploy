@@ -223,6 +223,44 @@ describe('stripInternalTags', () => {
   });
 });
 
+// Real replies of gpt-oss through Cerebras + LiteLLM (eval/RESULTS.md): reasoning and tool-call text run into the answer.
+describe('stripInternalTags: reasoning and tool-call text of another model', () => {
+  const reply = "hey! I'm TAi, the AI teaching assistant for CS6650. what do you need to know?";
+
+  it('strips a tool call written as text that ends in a stray closing tag', () => {
+    const leaked =
+      '<internal to=TodoWrite{\n  "todos": [\n    {\n      "content": "Ask student for HW3 requirements",\n      "status": "pending"\n    }\n  ]\n}></commentary}' +
+      reply;
+    expect(stripInternalTags(leaked)).toBe(reply);
+  });
+
+  it('strips a planning sentence that is run into the reply', () => {
+    expect(
+      stripInternalTags('We need to introduce ourselves as TAi and then ask for clarification about the repo location (owner username).' + reply),
+    ).toBe(reply);
+    expect(stripInternalTags('I should answer briefly.hey there')).toBe('hey there');
+  });
+
+  it('leaves a sentence that starts like a plan but is written normally', () => {
+    expect(stripInternalTags('We need to think about what happens when two nodes disagree. Then we can pick a protocol.')).toBe(
+      'We need to think about what happens when two nodes disagree. Then we can pick a protocol.',
+    );
+    expect(stripInternalTags('I need to see your code first.')).toBe('I need to see your code first.');
+  });
+
+  it('strips internal tags that carry attributes', () => {
+    expect(stripInternalTags('<internal x="1">plan</internal>answer')).toBe('answer');
+    expect(stripInternalTags('answer<internal to=Tool{}>plan, never closed')).toBe('answer');
+    expect(stripInternalTags('<internal to=Tool{}></commentary}first<internal>second</internal> then more')).toBe('first then more');
+  });
+
+  it('strips stray channel tags, text before assistantfinal, and tool calls written as a line', () => {
+    expect(stripInternalTags('<commentary>hello</commentary> there')).toBe('hello there');
+    expect(stripInternalTags('analysis: the student is new. assistantfinalWelcome!')).toBe('Welcome!');
+    expect(stripInternalTags('commentary to=functions.send_message json{"text":"x"}\nreal answer')).toBe('real answer');
+  });
+});
+
 describe('formatOutbound', () => {
   it('returns text with internal tags stripped', () => {
     expect(formatOutbound('hello world')).toBe('hello world');

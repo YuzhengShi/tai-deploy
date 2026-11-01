@@ -21,7 +21,7 @@ object (`sdk.d.ts` 0.2.34, `PreToolUseHookSpecificOutput`) has `permissionDecisi
 container; `Read` returned `/proc/self/environ` (1,654 characters; checked by name in the transcript: it holds `ANTHROPIC_AUTH_TOKEN`, `CANVAS_API_TOKEN`, `GITHUB_TOKEN`, `GITHUB_TOKEN_PUBLIC`, `MS_PASSWORD`, `PIAZZA_PASSWORD`, `YOUTUBE_API_KEY`, `VOICE_INTERVIEW_SECRET`, values included; with the fix the same read returns the 62-character block message), `.env`, `.env.production`; three
 concepts could be set to 0.9 in one write; a 5.1 MB file was written; WebFetch took 17 calls (limit 15) and `127.0.0.1`; the
 workspace guard let a write through at 520 MB (limit 500). The `unset` prefix on Bash commands (`updatedInput`) does work: that
-part of the same return shape is valid. Eight places changed, two lines each (`container/agent-runner/src/index.ts`, variants in `variants/`).
+part of the same return shape is valid. Eight places changed, two lines each (`container/agent-runner/src/index.ts`; the upstream file is kept in `variants/` as the "before", and these two numbers were measured with the eight-line version, commit `0d52b11`).
 
 Still open after the fix (13 rows; the first three are design gaps, not bugs of shape):
 

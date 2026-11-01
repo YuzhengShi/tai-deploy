@@ -21,11 +21,11 @@ stand-ins, and no real token or repository is used. The course material the know
 | `litellm/` | The gateway config (aliases `qwen` = reasoning off, `gpt-oss` = reasoning low) and a callback that strips replayed thinking blocks and logs the upstream status of every call. |
 | `harness/tai.py` | The client the tests share: register a chat, send, long-poll the web channel's outbox, read transcripts/logs/SQLite/`docker ps`. |
 | `harness/smoke.py` | One scripted message through the real orchestrator and an agent container, end to end. |
-| `harness/guards.py` | Item 2a, hooks and access control, with `--variant as-shipped` / `fixed` (see `variants/`). |
+| `harness/guards.py` | Item 2a, hooks and access control, with `--variant as-shipped` (the upstream runner, see `variants/`) / `current` (the repository's source as synced). |
 | `harness/resume.py` | Item 2b, resume across turns, containers, restarts, the "10-query cap", and what the student sees when the model API fails. |
 | `harness/sched.py` | Item 3, scheduling. |
 | `harness/scenarios.py` | Item 1, `qwen` against `gpt-oss`: scripted student turns, automatable checks taken from the persona, a 30-turn session. |
-| `variants/` | `index.ts.as-shipped` (the agent runner's hooks as the repository has them) and `index.ts.fixed` (what `container/agent-runner/src/index.ts` now contains). |
+| `variants/` | `index.ts.as-shipped`: the agent runner exactly as upstream has it (the before of every guard measurement). The "after" is the repository's own `container/agent-runner/src/`, never a copy. |
 | `host/` | Scripts that run from Git Bash and drive the box over ssh (`run.sh` syncs this tree and runs one script from `host/remote/`). |
 
 ## Running it (from Git Bash, in `eval/host`)
@@ -39,7 +39,7 @@ stand-ins, and no real token or repository is used. The course material the know
     ./run.sh stack.sh litellm         # the Cerebras gateway (reads the key from the world's .env on the box, never prints it)
     ./run.sh stack.sh orch start
     ./run.sh harness/smoke.py
-    ./run.sh harness/guards.py --variant as-shipped ; ./run.sh harness/guards.py --variant fixed
+    ./run.sh harness/guards.py --variant as-shipped ; ./run.sh harness/guards.py --variant current
     ./run.sh harness/resume.py ; ./run.sh harness/sched.py
     ./run.sh harness/scenarios.py qwen --runs 3 ; ./run.sh harness/scenarios.py gpt-oss --runs 3
     ./run.sh harness/scenarios.py qwen --long

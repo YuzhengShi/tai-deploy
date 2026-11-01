@@ -372,16 +372,35 @@ GROUPS = {   # name -> [(kind, fn)]: "main" jobs all use the one chat web:main (
 }
 
 
+RUNNER = "%s/container/agent-runner/src/index.ts" % tai.T
+SNAPSHOT = "%s/eval/variants/index.ts.as-shipped" % tai.T   # the upstream runner, before any change made in this fork
+
+
+def use_variant(name):
+    """Which agent-runner source the containers compile (they mount container/agent-runner/src and run tsc at start).
+    as-shipped: the upstream runner replaces the synced one for this run; the next sync (eval/host/run.sh does one first) puts the
+    repository's source back. current: the source the sync put there, i.e. the hooks as the repository has them now. It refuses to run
+    on the snapshot, so a current run after an as-shipped one cannot silently measure the old hooks."""
+    if name == "as-shipped":
+        print(tai.sh("cp %s %s && echo 'agent runner: as-shipped snapshot'" % (SNAPSHOT, RUNNER)))
+    elif name == "current":
+        if tai.sh("cmp -s %s %s && echo snapshot" % (SNAPSHOT, RUNNER)):
+            sys.exit("the agent runner on the box is still the as-shipped snapshot: sync first (eval/host/run.sh does)")
+        print("agent runner: current source (sha256 %s)" % tai.sh("sha256sum %s | cut -c1-12" % RUNNER))
+    else:
+        sys.exit("--variant takes as-shipped or current (fixed was the eight-line snapshot of the first fix; it is in git history)")
+
+
 def main():
     args = sys.argv[1:]
     tag = ""
-    if "--variant" in args:                  # --variant as-shipped | fixed: which agent-runner hooks the containers compile and run
+    if "--variant" in args:                  # --variant as-shipped | current
         i = args.index("--variant")
         variant = args[i + 1]
         del args[i:i + 2]
-        print(tai.sh("cp %s/eval/variants/index.ts.%s %s/container/agent-runner/src/index.ts && echo 'agent runner variant: %s'" % (tai.T, variant, tai.T, variant)))
+        use_variant(variant)
         tag = "-" + variant
-    if "--tag" in args:                      # --tag fixed  ->  results saved as guards-fixed-<time>.json (show.py guards-fixed)
+    if "--tag" in args:                      # --tag after  ->  results saved as guards-after-<time>.json (show.py guards-after)
         i = args.index("--tag")
         tag = "-" + args[i + 1]
         del args[i:i + 2]

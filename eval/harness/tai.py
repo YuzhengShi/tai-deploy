@@ -250,12 +250,14 @@ def backend(name):
     return sh("bash %s/eval/host/remote/stack.sh backend %s" % (T, name))
 
 
-SECRET = re.compile(r"(sk-|csk-)[A-Za-z0-9_-]{16,}")
+# What a result file must never hold: the gateway key (sk-/csk-), GitHub tokens (ghp_/gho_/ghs_/github_pat_), a Canvas token
+# (<id>~<64 chars>) and an Authorization header value.
+SECRET = re.compile(r"(?:sk-|csk-|ghp_|gho_|ghs_|ghu_|github_pat_)[A-Za-z0-9_-]{16,}|\b\d{1,6}~[A-Za-z0-9]{32,}|(?<=Bearer )[A-Za-z0-9._~+/-]{16,}")
 
 
 def mask(text):
-    """Keys that could appear in a tool result when a guard fails (the gateway key lives in the container's environment)."""
-    return SECRET.sub(lambda m: m.group(1) + "REDACTED", text or "")
+    """Credentials that could appear in a tool result when a guard fails (they live in the container's environment)."""
+    return SECRET.sub("REDACTED", text or "")
 
 
 def save(name, obj):

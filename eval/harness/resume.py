@@ -5,9 +5,10 @@ persona is in the system prompt), so "the student's earlier turn is replayed" is
 reply. Cases:
   RS1  a follow-up while the container is warm            (same container, next query: resume=<session>, resumeAt=<last uuid>)
   RS2  a message after the container has exited           (new container, resume=<session from the DB>)
-  RS3  twelve messages in one warm container              (TAi starts a fresh session on its 11th query: MAX_QUERIES_PER_SESSION)
+  RS3  eight messages in one warm container, cap of 4    (the runner retires the session after TAI_MAX_TURNS_PER_SESSION answers: the next message
+                                                           starts a fresh session; as shipped, MAX_QUERIES_PER_SESSION = 10 never fired)
   RS4  a message after the orchestrator restarted         (state comes back from SQLite)
-  RS5  what the student sees when the model API fails     (400 prompt too long, 500, 529, 429), and how long the container is stuck
+  RS5  what the student sees when the model API fails     (400 prompt too long, 500, 529, 429): plain words, soon, and whether the session survives
 """
 import re
 import sys
@@ -68,16 +69,29 @@ def rs1_rs2_rs3_rs4(which):
         rec("RS4", "message after the orchestrator restarted", "alpha, beta, gamma replayed (needs rs1+rs2 first)", p4,
             bool(p4) and all(k in p4[2] for k in ("MARK-alpha", "MARK-beta", "MARK-gamma")))
     if "rs3" in which:
+        cap = 4
+        tai.env_set("TAI_MAX_TURNS_PER_SESSION", cap)
         c3 = Chat("rs3", name="rs3")
-        seen = []
-        for k in range(1, 13):
+        seen, ids = [], []
+        for k in range(1, cap + 5):
             r = c3.ask("m%d MARK-m%d %s" % (k, k, probe), timeout=180, quiet=1.5)
             p = parse(r)
             seen.append((k, p[0] if p else None, len(p[2].split(",")) if p and p[2] != "none" else 0))
+            time.sleep(1)
+            ids.append(tai.sessions().get("rs3"))
+        tai.env_set("TAI_MAX_TURNS_PER_SESSION", None)
         print("      (message number, n_messages, earlier markers) per message:", seen)
+        print("      session id after each message:", [i[:8] if i else None for i in ids])
         reset_at = next((k for k, n, _m in seen if k > 1 and n == 1), None)
-        rec("RS3", "twelve messages in one warm container", "history grows until TAi's 10-query cap, then a fresh session at message 11",
-            "fresh session at message %s" % reset_at, reset_at == 11)
+        rec("RS3", "%d messages in one warm container, TAI_MAX_TURNS_PER_SESSION=%d" % (cap + 4, cap),
+            "history grows until the cap, a fresh session at message %d (n_messages 1, a new id in the database) and that message is answered" % (cap + 1),
+            "fresh session at message %s; ids: first %d messages one id: %s, message %d a new one: %s, then stable: %s" % (
+                reset_at, cap, len(set(ids[:cap])) == 1, cap + 1, ids[cap] != ids[0], len(set(ids[cap:])) == 1),
+            reset_at == cap + 1 and len(set(ids[:cap])) == 1 and ids[cap] != ids[0] and len(set(ids[cap:])) == 1)
+        summary = tai.get("rs3", "competency/interaction-summary.md") or ""
+        ours = [l for l in summary.splitlines() if l.startswith("- ")]
+        rec("RS3b", "the runner's interaction summary after %d answers" % (cap + 4), "one line per answer, in competency/interaction-summary.md, with what the student said",
+            "%d lines; first: %r" % (len(ours), (ours[0] if ours else "")[:110]), len(ours) == cap + 4 and "MARK-m1" in (ours[0] if ours else ""))
 
 
 def rs5(budget=420):
@@ -88,10 +102,14 @@ def rs5(budget=420):
              ("err429", {"status": 429, "type": "rate_limit_error", "message": "Tokens per minute limit exceeded"})]
     for name, err in cases:
         write_script(name, [{"error": err}])
-    out = {}
+    probe = write_script("probe", [], {"history": True})
+    out, session = {}, {}
 
     def one(name):
-        ch = Chat("rs5" + name[3:], name=name)
+        folder = "rs5" + name[3:]
+        ch = Chat(folder, name=name)
+        ch.ask("hello %s" % probe, timeout=180)           # a first answer, so the chat has a session to keep or to clear
+        session[name] = tai.sessions().get(folder)
         ch.send("please MOCK:%s" % name)
         out[name] = ch.wait(timeout=budget, quiet=2)
 
@@ -100,16 +118,21 @@ def rs5(budget=420):
     [t.join() for t in ts]
     for name, _e in cases:
         r = out[name]
-        stuck = [c for c in tai.containers() if "nanoclaw-rs5%s-" % name[3:] in c]
-        rec("RS5", "model API answers %s" % name, "a human-readable apology, soon, and the slot freed",
-            "after %.0f s: %r; container still running: %s" % (r.seconds, (r.text or "(nothing)")[:140], bool(stuck)),
-            bool(r.text) and r.seconds < 60 and "API Error" not in r.text and "Prompt is too long" not in r.text and not stuck)
+        folder = "rs5" + name[3:]
+        after = tai.sessions().get(folder)
+        overflow = name == "err400"
+        words = "cleared my context" if overflow else "give me a minute"
+        rec("RS5", "model API answers %s" % name,
+            "a plain-words answer within 60 s (%r), the session %s" % (words, "cleared (the context overflowed)" if overflow else "kept"),
+            "after %.0f s: %r; session before %s, after %s" % (r.seconds, (r.text or "(nothing)")[:140], (session[name] or "-")[:8], (after or "-")[:8]),
+            bool(r.text) and r.seconds < 60 and words in r.text and "API Error" not in r.text and "Prompt is too long" not in r.text
+            and ((after is None) if overflow else (after == session[name] and after is not None)))
     tai.sh("docker ps -aq --filter name=nanoclaw-rs5 | xargs -r docker rm -f")
 
 
 def main():
     which = [a.lower() for a in sys.argv[1:]] or ["rs1", "rs2", "rs3", "rs4", "rs5"]
-    print(tai.orch_env(IDLE_TIMEOUT=15000, LOG_LEVEL="debug", MAX_CONCURRENT_CONTAINERS=5))
+    print(tai.orch_env(IDLE_TIMEOUT=15000, LOG_LEVEL="debug", MAX_CONCURRENT_CONTAINERS=5, **tai.EVAL_IMAGE))
     tai.backend("mock")
     rs1_rs2_rs3_rs4(which)
     if "rs5" in which:

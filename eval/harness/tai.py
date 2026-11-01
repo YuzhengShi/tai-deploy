@@ -32,6 +32,18 @@ def http(method, path, body=None, timeout=90):
         raise RuntimeError("%s %s -> %d %s" % (method, path, e.code, e.read().decode()[:200]))
 
 
+def http_patient(method, path, body=None, timeout=90, tries=3):
+    """http() for requests that can be repeated (register, outbox): the orchestrator's disk is sometimes busy (a docker build runs on
+    the same box) and a stalled read must not end a harness run that has minutes of budget left."""
+    for attempt in range(tries):
+        try:
+            return http(method, path, body, timeout=timeout)
+        except (TimeoutError, ConnectionError, urllib.error.URLError):
+            if attempt == tries - 1:
+                raise
+            time.sleep(2)
+
+
 class Reply:
     def __init__(self, entries, seconds, timed_out):
         self.entries = entries
@@ -52,19 +64,22 @@ class Chat:
         self.jid = "web:" + folder
         self.name = name or folder
         if register:
-            http("POST", "/api/register", {"jid": self.jid, "name": self.name, "folder": folder,
-                                           "canvasUserId": canvas, "githubUsername": github})
-        self.seq = http("GET", "/api/outbox?after=0")["last"]
+            http_patient("POST", "/api/register", {"jid": self.jid, "name": self.name, "folder": folder,
+                                                   "canvasUserId": canvas, "githubUsername": github})
+        self.seq = http_patient("GET", "/api/outbox?after=0")["last"]
 
     def send(self, text):
-        return http("POST", "/api/message", {"jid": self.jid, "sender": self.folder, "name": self.name, "text": text})
+        return http("POST", "/api/message", {"jid": self.jid, "sender": self.folder, "name": self.name, "text": text}, timeout=180)
 
     def wait(self, timeout=120, quiet=2.5):
         """Collect the outbox of this chat until something was said and it has been quiet for `quiet` seconds."""
         t0 = time.time()
         got, last_activity, said = [], None, False
         while time.time() - t0 < timeout:
-            res = http("GET", "/api/outbox?jid=%s&after=%d&wait=3" % (self.jid, self.seq), timeout=20)
+            try:
+                res = http("GET", "/api/outbox?jid=%s&after=%d&wait=3" % (self.jid, self.seq), timeout=60)
+            except (TimeoutError, ConnectionError, urllib.error.URLError):
+                continue                      # the orchestrator was busy: ask again until the overall budget is spent
             if res["last"] < self.seq:        # the orchestrator restarted: its outbox numbering began again at 1
                 self.seq = 0
                 continue
@@ -231,6 +246,11 @@ def sessions():
         con.close()
 
 
+# What the first orch_env call of a harness script passes unless it measures the image built from the Dockerfile (sched.py --precompiled):
+# containers compile the mounted agent-runner source at start, so a variant swap or a hook change is what runs.
+EVAL_IMAGE = dict(TAI_COMPILE_ON_START=1, CONTAINER_IMAGE="tai-agent:eval")
+
+
 def orch_env(**kv):
     """Set values in orch.env (read when the orchestrator starts) and restart the orchestrator."""
     path = E + "/orch.env"
@@ -248,6 +268,18 @@ def orch_env(**kv):
 
 def backend(name):
     return sh("bash %s/eval/host/remote/stack.sh backend %s" % (T, name))
+
+
+def env_set(key, value=None):
+    """Set (or, with value None, remove) one line of TAi's .env, which the orchestrator reads at every container spawn
+    (call it after backend(), which writes the whole file)."""
+    path = T + "/.env"
+    with open(path) as f:
+        lines = [l for l in f.read().splitlines() if not l.startswith(key + "=")]
+    if value is not None:
+        lines.append("%s=%s" % (key, value))
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
 
 
 # What a result file must never hold: the gateway key (sk-/csk-), GitHub tokens (ghp_/gho_/ghs_/github_pat_), a Canvas token

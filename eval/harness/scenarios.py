@@ -344,7 +344,7 @@ def main():
     model = args[0]
     runs_n = int(args[args.index("--runs") + 1]) if "--runs" in args else 3
     only = args[args.index("--only") + 1].split(",") if "--only" in args else None
-    print(tai.orch_env(IDLE_TIMEOUT=60000, LOG_LEVEL="info", MAX_CONCURRENT_CONTAINERS=5))
+    print(tai.orch_env(IDLE_TIMEOUT=60000, LOG_LEVEL="info", MAX_CONCURRENT_CONTAINERS=5, **tai.EVAL_IMAGE))
     print(tai.backend(model))
     done = []
     if "--long" not in args:

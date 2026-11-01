@@ -217,8 +217,12 @@ def sc6():
 
 
 def main():
-    which = sys.argv[1:] or ["sc1", "sc2", "sc3", "sc4", "sc5", "sc6"]
-    print(tai.orch_env(IDLE_TIMEOUT=10000, LOG_LEVEL="debug", MAX_CONCURRENT_CONTAINERS=5))
+    which = [a for a in sys.argv[1:] if not a.startswith("--")] or ["sc1", "sc2", "sc3", "sc4", "sc5", "sc6"]
+    # --precompiled: the image built from the repository's Dockerfile without a cache (tai-agent:clean), running the dist baked into it
+    # (no tsc at container start). Without it: the evaluation image, which compiles the mounted agent-runner source at every start.
+    precompiled = "--precompiled" in sys.argv
+    image = dict(TAI_COMPILE_ON_START=0, CONTAINER_IMAGE="tai-agent:clean") if precompiled else tai.EVAL_IMAGE
+    print(tai.orch_env(IDLE_TIMEOUT=10000, LOG_LEVEL="debug", MAX_CONCURRENT_CONTAINERS=5, **image))
     tai.backend("mock")
     if "sc1" in which:
         sc1()
@@ -234,7 +238,7 @@ def main():
         sc5()
     if "sc6" in which:
         sc6()
-    print("saved:", tai.save("sched", results))
+    print("saved:", tai.save("sched-precompiled" if precompiled else "sched", results))
 
 
 if __name__ == "__main__":

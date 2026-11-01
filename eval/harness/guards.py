@@ -11,6 +11,7 @@ import base64
 import sys
 import threading
 import time
+import traceback
 
 import tai
 from tai import Chat, bash, write_script
@@ -416,33 +417,35 @@ def main():
         tag = "-" + args[i + 1]
         del args[i:i + 2]
     wanted = args or list(GROUPS)
-    print(tai.orch_env(IDLE_TIMEOUT=8000, LOG_LEVEL="debug", MAX_CONCURRENT_CONTAINERS=5))
+    print(tai.orch_env(IDLE_TIMEOUT=8000, LOG_LEVEL="debug", MAX_CONCURRENT_CONTAINERS=5, **tai.EVAL_IMAGE))
     tai.backend("mock")
     t0 = time.time()
     jobs = []
     for spec in wanted:
         name, _, only = spec.partition(":")
-        jobs += [(kind, fn) for kind, fn in GROUPS[name] if not only or kind == only]
+        jobs += [(kind, fn, name) for kind, fn in GROUPS[name] if not only or kind == only]
     # at most 4 containers at a time: they are heavy to start and TAi's own cap is 5
     sem = threading.Semaphore(4)
     threads = []
 
-    def runner(fn):
+    def runner(fn, name):
         with sem:
             try:
                 fn()
             except Exception as exc:  # a crashed group is a harness problem, not a guard result
-                note("harness", getattr(fn, "__name__", "group"), "group ran", "no exception", repr(exc)[:200], "HARNESS PROBLEM")
+                where = traceback.format_exc().strip().splitlines()
+                print("group %s crashed: %s" % (name, " / ".join(l.strip() for l in where[-6:])), flush=True)
+                note("harness", name, "group ran", "no exception", ("%r | %s" % (exc, " / ".join(l.strip() for l in where[-4:-1])))[:260], "HARNESS PROBLEM")
 
-    for _kind, fn in [j for j in jobs if j[0] == "student"]:
-        t = threading.Thread(target=runner, args=(fn,))
+    for _kind, fn, name in [j for j in jobs if j[0] == "student"]:
+        t = threading.Thread(target=runner, args=(fn, name))
         t.start()
         threads.append(t)
         time.sleep(2)
     for t in threads:
         t.join()
-    for _kind, fn in [j for j in jobs if j[0] == "main"]:
-        runner(fn)
+    for _kind, fn, name in [j for j in jobs if j[0] == "main"]:
+        runner(fn, name)
     print("\n%-28s %-34s %-12s %s" % ("group", "case", "verdict", "expected -> observed"))
     for r in sorted(rows, key=lambda r: (r["group"], r["case"])):
         print("%-28s %-34s %-12s %s -> %s" % (r["group"][:28], r["case"][:34], r["verdict"][:12], r["expected"], r["observed"]))

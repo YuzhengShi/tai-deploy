@@ -9,9 +9,11 @@ import tai
 
 folder = sys.argv[1]
 limit = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 12
+last = int(sys.argv[2][1:]) if len(sys.argv) > 2 and sys.argv[2].startswith("-") and sys.argv[2][1:].isdigit() else 0   # -N: the last N events
 events = tai.tool_events(folder)
 print("%d tool events for %s" % (len(events), folder))
-for i, e in enumerate(events[:limit]):
+first = max(0, len(events) - last) if last else 0
+for i, e in enumerate(events[first:first + (last or limit)], first):
     inp = tai.mask(str(e["input"]))[:170].replace("\n", " ")
     res = tai.mask(e["result"] or "")[:170].replace("\n", " ")
     print("[%2d] %s %s\n     in : %s\n     out: %s" % (i, e["name"], "ERROR" if e["error"] else "", inp, res))

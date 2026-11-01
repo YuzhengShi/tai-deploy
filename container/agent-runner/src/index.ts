@@ -431,10 +431,10 @@ async function runQuery(
   const stream = new MessageStream();
   stream.push(prompt);
 
-  // Bookkeeping per session: what the student has said since the last answer (for the interaction summary), how many pushed messages
-  // still wait for their answer, and the cap that retires a session.
-  const studentTexts = (text: string) => messageTexts(text).filter((t) => !t.startsWith('[SYSTEM]'));
-  let turnTexts = studentTexts(prompt);
+  // Bookkeeping per session: what the student said in each message that still waits for its answer, oldest first (for the interaction
+  // summary; one entry per pushed message, so inFlight is its length), and the cap that retires a session.
+  const studentTexts = (text: string) => messageTexts(text).filter((t) => !t.startsWith('[SYSTEM]')).join(' / ');
+  const pendingTurns: string[] = [studentTexts(prompt)];
   let inFlight = 1;
   const maxTurns = parseInt(sdkEnv['TAI_MAX_TURNS_PER_SESSION'] || '', 10) || DEFAULT_MAX_TURNS_PER_SESSION;
   const maxContextTokens = parseInt(sdkEnv['TAI_MAX_CONTEXT_TOKENS'] || '', 10) || DEFAULT_MAX_CONTEXT_TOKENS;
@@ -466,7 +466,7 @@ async function runQuery(
             log(`Piping stdin message into active query (${msg.text.length} chars)`);
             stream.push(msg.text);
             inFlight++;
-            turnTexts.push(...studentTexts(msg.text));
+            pendingTurns.push(studentTexts(msg.text));
           }
         }
       } catch (err) {
@@ -537,8 +537,7 @@ async function runQuery(
 
   // The runner records every exchange itself, because the model does not (see session-log.ts). Not for the admin chat or scheduled tasks.
   const recordExchange = (reply: string | null | undefined) => {
-    const student = turnTexts.join(' / ');
-    turnTexts = [];
+    const student = pendingTurns.shift() || '';
     if (containerInput.isMain || containerInput.isScheduledTask || !reply || !student) return;
     const shown = visibleText(reply);
     if (!shown) return;

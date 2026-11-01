@@ -248,7 +248,7 @@ def sessions():
 
 # What the first orch_env call of a harness script passes unless it measures the image built from the Dockerfile (sched.py --precompiled):
 # containers compile the mounted agent-runner source at start, so a variant swap or a hook change is what runs.
-EVAL_IMAGE = dict(TAI_COMPILE_ON_START=1, CONTAINER_IMAGE="tai-agent:eval")
+EVAL_IMAGE = dict(TAI_COMPILE_ON_START=1, CONTAINER_IMAGE="tai-agent:eval", CONTAINER_TIMEOUT=900000)   # the timeout resets what sched.py SC4/SC6 left (10 s)
 
 
 def orch_env(**kv):
@@ -263,7 +263,16 @@ def orch_env(**kv):
     cur.update({k: str(v) for k, v in kv.items()})
     with open(path, "w") as f:
         f.write("".join("%s=%s\n" % kv for kv in cur.items()))
-    return sh("bash %s/eval/host/remote/stack.sh orch restart" % T, timeout=90)
+    out = sh("bash %s/eval/host/remote/stack.sh orch restart" % T, timeout=150)
+    # stack.sh waits 20 s for the web channel; on a busy box (a docker build runs here) the orchestrator can take longer to listen
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        try:
+            http("GET", "/api/health", timeout=5)
+            return out
+        except (OSError, RuntimeError, TimeoutError):
+            time.sleep(2)
+    raise RuntimeError("the orchestrator did not answer on %s within two minutes after the restart:\n%s" % (API, out))
 
 
 def backend(name):

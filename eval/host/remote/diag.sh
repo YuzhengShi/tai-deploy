@@ -5,6 +5,7 @@
 #   diag.sh around PATTERN   the orchestrator log lines around the first match of PATTERN (30 before, 30 after)
 #   diag.sh load             load, memory, docker containers and the biggest processes
 #   diag.sh runner FOLDER    the last lines the agent runner logged for a group
+#   diag.sh build [N] [clean]  the last N lines of the image build log (default 30; clean = the no-cache build)
 set -u
 E="$HOME/tai-eval"
 LOG="$E/logs/orchestrator.log"
@@ -24,5 +25,8 @@ case "${1:-errors}" in
   runner)
     f=$(ls -t "$HOME/tai-eval/tai/groups/${2:?folder}/logs/"container-*.log 2>/dev/null | head -1)
     [ -n "$f" ] && { echo "$f"; tail -n 40 "$f" | cut -c1-240; } || echo "no container log for $2" ;;
+  build)   # the image build logs: diag.sh build [N lines] [eval|clean]
+    tail -n "${2:-30}" "$E/logs/build_image${3:+_}${3#eval}.log" 2>&1 | cut -c1-200
+    pgrep -af "docker build" | cut -c1-120 ;;
   *) sed -n 2,9p "$0" ;;
 esac

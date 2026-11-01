@@ -221,7 +221,7 @@ def main():
     # --precompiled: the image built from the repository's Dockerfile without a cache (tai-agent:clean), running the dist baked into it
     # (no tsc at container start). Without it: the evaluation image, which compiles the mounted agent-runner source at every start.
     precompiled = "--precompiled" in sys.argv
-    image = dict(TAI_COMPILE_ON_START=0, CONTAINER_IMAGE="tai-agent:clean") if precompiled else tai.EVAL_IMAGE
+    image = dict(tai.EVAL_IMAGE, TAI_COMPILE_ON_START=0, CONTAINER_IMAGE="tai-agent:clean") if precompiled else tai.EVAL_IMAGE
     print(tai.orch_env(IDLE_TIMEOUT=10000, LOG_LEVEL="debug", MAX_CONCURRENT_CONTAINERS=5, **image))
     tai.backend("mock")
     if "sc1" in which:

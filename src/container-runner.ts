@@ -267,12 +267,27 @@ async function readSecrets(useLight = false): Promise<Record<string, string>> {
     'AWS_DEFAULT_REGION',
     'ANTHROPIC_MODEL',
     'ANTHROPIC_MODEL_LIGHT',
+    // A gateway in front of another provider (LiteLLM -> Cerebras): where Claude Code sends its requests, the key it
+    // presents, and the name every model slot resolves to. Without the slots Claude Code's background calls ask for
+    // its own default model names and fail at the gateway.
+    'ANTHROPIC_BASE_URL',
+    'ANTHROPIC_AUTH_TOKEN',
+    'ANTHROPIC_DEFAULT_SONNET_MODEL',
+    'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+    'ANTHROPIC_DEFAULT_OPUS_MODEL',
+    'ANTHROPIC_SMALL_FAST_MODEL',
+    'CLAUDE_CODE_MAX_OUTPUT_TOKENS',
+    'CLAUDE_AUTOCOMPACT_PCT_OVERRIDE',
+    'DISABLE_TELEMETRY',
+    'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
+    'DISABLE_AUTOUPDATER',
     'CANVAS_API_TOKEN',
     'CANVAS_BASE_URL',
     'CANVAS_COURSE_ID',
     'GITHUB_TOKEN',
     'GITHUB_TOKEN_PUBLIC',
     'GITHUB_BASE_URL',
+    'GITHUB_BASE_URL_PUBLIC',
     'YOUTUBE_API_KEY',
     'YT_TRANSCRIPT_URL',
     'YT_TRANSCRIPT_TOKEN',
@@ -306,7 +321,7 @@ async function readSecrets(useLight = false): Promise<Record<string, string>> {
   }
 
   // Auto-enable Bedrock mode when AWS credentials are present but no Anthropic key
-  const hasAnthropicKey = !!(secrets.ANTHROPIC_API_KEY || secrets.CLAUDE_CODE_OAUTH_TOKEN);
+  const hasAnthropicKey = !!(secrets.ANTHROPIC_API_KEY || secrets.ANTHROPIC_AUTH_TOKEN || secrets.CLAUDE_CODE_OAUTH_TOKEN);
   const hasAwsCreds = !!(secrets.AWS_ACCESS_KEY_ID);
   if (hasAwsCreds && !hasAnthropicKey) {
     secrets['CLAUDE_CODE_USE_BEDROCK'] = '1';

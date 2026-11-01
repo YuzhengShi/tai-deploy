@@ -13,6 +13,7 @@ import {
   POLL_INTERVAL,
   TRIGGER_PATTERN,
 } from './config.js';
+import { WebChannel } from './channels/web.js';
 import { WhatsAppChannel } from './channels/whatsapp.js';
 import {
   ContainerOutput,
@@ -91,7 +92,16 @@ function isAdminSender(sender: string): boolean {
   return ADMIN_PHONE_NUMBERS.includes(phone);
 }
 
-let whatsapp: WhatsAppChannel;
+// Which channels to start: TAI_CHANNELS=whatsapp (default), web, or whatsapp,web.
+const CHANNEL_NAMES = (process.env.TAI_CHANNELS || 'whatsapp')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+// TAI_NO_SEEDS=1 skips the background seeding (competency bootstrap, teaching patrol, course sync, LeanRAG sync): they spawn
+// containers on their own and have filled every slot before; evaluation runs decide per run whether they are on.
+const NO_SEEDS = process.env.TAI_NO_SEEDS === '1';
+
+let whatsapp: WhatsAppChannel | undefined;
 const channels: Channel[] = [];
 const queue = new GroupQueue();
 
@@ -129,7 +139,7 @@ function registerGroup(jid: string, group: RegisteredGroup): void {
   fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
 
   // Bootstrap COMPETENCY.md from Canvas grades for student groups
-  if (group.folder !== MAIN_GROUP_FOLDER) {
+  if (!NO_SEEDS && group.folder !== MAIN_GROUP_FOLDER) {
     const allTasks = getAllTasks();
     if (!hasBootstrapRun(group.folder, allTasks)) {
       seedCompetencyBootstrap(group.folder, jid);
@@ -623,9 +633,19 @@ async function main(): Promise<void> {
   };
 
   // Create and connect channels
-  whatsapp = new WhatsAppChannel(channelOpts);
-  channels.push(whatsapp);
-  await whatsapp.connect();
+  if (CHANNEL_NAMES.includes('whatsapp')) {
+    whatsapp = new WhatsAppChannel(channelOpts);
+    channels.push(whatsapp);
+    await whatsapp.connect();
+  }
+  if (CHANNEL_NAMES.includes('web')) {
+    const web = new WebChannel({ ...channelOpts, registerGroup });
+    channels.push(web);
+    await web.connect();
+  }
+  if (channels.length === 0) {
+    throw new Error(`No channel started: TAI_CHANNELS=${process.env.TAI_CHANNELS || ''} names none of whatsapp, web`);
+  }
 
   // Start subsystems (independently of connection handler)
   startSchedulerLoop({
@@ -642,9 +662,15 @@ async function main(): Promise<void> {
       if (!text) return Promise.resolve();
       return channel.sendMessage(jid, text);
     },
-    sendReaction: (jid, messageId, emoji) => whatsapp.sendReaction(jid, messageId, emoji),
-    sendAudioMessage: (jid, buffer) => whatsapp.sendAudioMessage(jid, buffer),
-    sendImageMessage: (jid, buffer, caption) => whatsapp.sendImageMessage(jid, buffer, caption),
+    sendReaction: async (jid, messageId, emoji) => {
+      await findChannel(channels, jid)?.sendReaction?.(jid, messageId, emoji);
+    },
+    sendAudioMessage: async (jid, buffer) => {
+      await findChannel(channels, jid)?.sendAudioMessage?.(jid, buffer);
+    },
+    sendImageMessage: async (jid, buffer, caption) => {
+      await findChannel(channels, jid)?.sendImageMessage?.(jid, buffer, caption);
+    },
     registeredGroups: () => registeredGroups,
     registerGroup,
     syncGroupMetadata: (force) => whatsapp?.syncGroupMetadata(force) ?? Promise.resolve(),
@@ -652,15 +678,19 @@ async function main(): Promise<void> {
     writeGroupsSnapshot: (gf, im, ag, rj) => writeGroupsSnapshot(gf, im, ag, rj),
   });
   queue.setProcessMessagesFn(processGroupMessages);
-  seedTeachingPatrol(registeredGroups);
-  seedCourseSync(registeredGroups);
-  startLeanRAGSync();
+  if (NO_SEEDS) {
+    logger.warn('TAI_NO_SEEDS=1: teaching patrol, course sync, LeanRAG sync and competency bootstrap are not seeded');
+  } else {
+    seedTeachingPatrol(registeredGroups);
+    seedCourseSync(registeredGroups);
+    startLeanRAGSync();
 
-  // Bootstrap COMPETENCY.md for any existing student groups that haven't been bootstrapped
-  const allTasks = getAllTasks();
-  for (const [jid, group] of Object.entries(registeredGroups)) {
-    if (group.folder !== MAIN_GROUP_FOLDER && !hasBootstrapRun(group.folder, allTasks)) {
-      seedCompetencyBootstrap(group.folder, jid);
+    // Bootstrap COMPETENCY.md for any existing student groups that haven't been bootstrapped
+    const allTasks = getAllTasks();
+    for (const [jid, group] of Object.entries(registeredGroups)) {
+      if (group.folder !== MAIN_GROUP_FOLDER && !hasBootstrapRun(group.folder, allTasks)) {
+        seedCompetencyBootstrap(group.folder, jid);
+      }
     }
   }
   recoverPendingMessages();

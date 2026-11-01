@@ -91,6 +91,10 @@ export interface Channel {
   disconnect(): Promise<void>;
   // Optional: typing indicator. Channels that support it implement it.
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
+  // Optional: richer outbound kinds the agent can ask for through the IPC tools (reactions, voice notes, images).
+  sendReaction?(jid: string, messageId: string, emoji: string): Promise<void>;
+  sendAudioMessage?(jid: string, audioBuffer: Buffer): Promise<void>;
+  sendImageMessage?(jid: string, imageBuffer: Buffer, caption?: string): Promise<void>;
 }
 
 // Callback type that channels use to deliver inbound messages

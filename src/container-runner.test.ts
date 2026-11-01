@@ -16,6 +16,7 @@ vi.mock('./config.js', () => ({
   CONTAINER_TIMEOUT: 1800000, // 30min
   DATA_DIR: '/tmp/nanoclaw-test-data',
   GROUPS_DIR: '/tmp/nanoclaw-test-groups',
+  STORE_DIR: '/tmp/nanoclaw-test-store',
   IDLE_TIMEOUT: 1800000, // 30min
   TIMEZONE: 'UTC',
 }));
@@ -52,6 +53,9 @@ vi.mock('fs', async () => {
 vi.mock('./mount-security.js', () => ({
   validateAdditionalMounts: vi.fn(() => []),
 }));
+
+// With no AWS keys readSecrets asks the EC2 metadata service for a role. There is none here, and a real request would hang under fake timers.
+vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('no metadata service in the tests'))));
 
 // Create a controllable fake ChildProcess
 function createFakeProcess() {

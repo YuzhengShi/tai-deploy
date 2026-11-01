@@ -6,6 +6,7 @@ import { EventEmitter } from 'events';
 // Mock config
 vi.mock('../config.js', () => ({
   STORE_DIR: '/tmp/nanoclaw-test-store',
+  DATA_DIR: '/tmp/nanoclaw-test-data',
   ASSISTANT_NAME: 'Andy',
   ASSISTANT_HAS_OWN_NUMBER: false,
 }));
@@ -60,6 +61,8 @@ function createFakeSocket() {
     },
     sendMessage: vi.fn().mockResolvedValue(undefined),
     sendPresenceUpdate: vi.fn().mockResolvedValue(undefined),
+    presenceSubscribe: vi.fn().mockResolvedValue(undefined), // setTyping subscribes before it sends
+    readMessages: vi.fn().mockResolvedValue(undefined), // an inbound message is marked read at once
     groupFetchAllParticipating: vi.fn().mockResolvedValue({}),
     end: vi.fn(),
     // Expose the event emitter for triggering events in tests
@@ -74,7 +77,10 @@ let fakeSocket: ReturnType<typeof createFakeSocket>;
 vi.mock('@whiskeysockets/baileys', () => {
   return {
     default: vi.fn(() => fakeSocket),
-    Browsers: { macOS: vi.fn(() => ['macOS', 'Chrome', '']) },
+    Browsers: {
+      macOS: vi.fn(() => ['macOS', 'Chrome', '']),
+      ubuntu: vi.fn(() => ['Ubuntu', 'Chrome', '']), // what whatsapp.ts asks for
+    },
     DisconnectReason: {
       loggedOut: 401,
       badSession: 500,
@@ -85,6 +91,8 @@ vi.mock('@whiskeysockets/baileys', () => {
       restartRequired: 515,
     },
     makeCacheableSignalKeyStore: vi.fn((keys: unknown) => keys),
+    extractMessageContent: vi.fn((m: unknown) => m), // unwraps ephemeral / view-once wrappers: a plain message is its own content
+    downloadMediaMessage: vi.fn().mockResolvedValue(Buffer.from('')),
     useMultiFileAuthState: vi.fn().mockResolvedValue({
       state: {
         creds: {},
@@ -460,7 +468,8 @@ describe('WhatsAppChannel', () => {
 
       expect(opts.onMessage).toHaveBeenCalledWith(
         'registered@g.us',
-        expect.objectContaining({ content: 'Check this photo' }),
+        // the caption, and a line about the image itself (the file for the agent to read, or that it could not be downloaded)
+        expect.objectContaining({ content: expect.stringContaining('Check this photo') }),
       );
     });
 
@@ -488,7 +497,8 @@ describe('WhatsAppChannel', () => {
 
       expect(opts.onMessage).toHaveBeenCalledWith(
         'registered@g.us',
-        expect.objectContaining({ content: 'Watch this' }),
+        // the caption, and a line saying that video is not supported
+        expect.objectContaining({ content: expect.stringContaining('Watch this') }),
       );
     });
 
@@ -514,10 +524,11 @@ describe('WhatsAppChannel', () => {
         },
       ]);
 
-      // Still delivered but with empty content
+      // Still delivered: the content tells the agent what became of the voice note. Here the media directory is not created (fs.mkdirSync
+      // is mocked), so the download fails and the agent is told it could not get the file.
       expect(opts.onMessage).toHaveBeenCalledWith(
         'registered@g.us',
-        expect.objectContaining({ content: '' }),
+        expect.objectContaining({ content: expect.stringContaining('could not be downloaded') }),
       );
     });
 

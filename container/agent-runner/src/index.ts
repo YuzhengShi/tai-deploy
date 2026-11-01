@@ -239,11 +239,15 @@ function createPreCompactHook(): HookCallback {
   };
 }
 
+// NOTE on the shape of a blocking hook result: the Agent SDK reads a PreToolUse decision from
+// hookSpecificOutput.permissionDecision ('deny') and permissionDecisionReason. These hooks used to return
+// `decision: 'block'` and `reason` inside hookSpecificOutput, which the SDK ignores: the tool ran anyway (see eval/ in the fork).
 // Secrets to strip from Bash tool subprocess environments.
 // These are needed by claude-code for API auth but should never
 // be visible to commands the agent runs.
 const SECRET_ENV_VARS = [
   'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
   'CLAUDE_CODE_OAUTH_TOKEN',
   'AWS_ACCESS_KEY_ID',
   'AWS_SECRET_ACCESS_KEY',
@@ -287,8 +291,8 @@ function createSanitizeBashHook(isMain: boolean): HookCallback {
       return {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
-          decision: 'block' as const,
-          reason: 'Access to sensitive files (.env, .db, /proc) is blocked.',
+          permissionDecision: 'deny' as const,
+          permissionDecisionReason: 'Access to sensitive files (.env, .db, /proc) is blocked.',
         },
       };
     }
@@ -300,8 +304,8 @@ function createSanitizeBashHook(isMain: boolean): HookCallback {
           return {
             hookSpecificOutput: {
               hookEventName: 'PreToolUse',
-              decision: 'block' as const,
-              reason: `Command blocked for security: matches restricted pattern. If you need network access, use the provided MCP tools (canvas_query, github_query, youtube_transcript, etc.) instead.`,
+              permissionDecision: 'deny' as const,
+              permissionDecisionReason: `Command blocked for security: matches restricted pattern. If you need network access, use the provided MCP tools (canvas_query, github_query, youtube_transcript, etc.) instead.`,
             },
           };
         }
@@ -342,8 +346,8 @@ function createSensitiveFileReadHook(): HookCallback {
         return {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
-            decision: 'block' as const,
-            reason: 'This file contains sensitive data and cannot be read directly.',
+            permissionDecision: 'deny' as const,
+            permissionDecisionReason: 'This file contains sensitive data and cannot be read directly.',
           },
         };
       }
@@ -377,8 +381,8 @@ function createWebFetchGuardHook(maxCalls: number): HookCallback {
       return {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
-          decision: 'block' as const,
-          reason: `WebFetch rate limit exceeded: max ${maxCalls} calls per session.`,
+          permissionDecision: 'deny' as const,
+          permissionDecisionReason: `WebFetch rate limit exceeded: max ${maxCalls} calls per session.`,
         },
       };
     }
@@ -389,8 +393,8 @@ function createWebFetchGuardHook(maxCalls: number): HookCallback {
         return {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
-            decision: 'block' as const,
-            reason: 'Cannot fetch internal/private URLs. Only public web pages are accessible.',
+            permissionDecision: 'deny' as const,
+            permissionDecisionReason: 'Cannot fetch internal/private URLs. Only public web pages are accessible.',
           },
         };
       }
@@ -410,8 +414,8 @@ function createFileSizeGuardHook(maxBytes: number): HookCallback {
       return {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
-          decision: 'block' as const,
-          reason: `File content too large (${(content.length / 1024 / 1024).toFixed(1)}MB). Maximum allowed: ${(maxBytes / 1024 / 1024).toFixed(0)}MB.`,
+          permissionDecision: 'deny' as const,
+          permissionDecisionReason: `File content too large (${(content.length / 1024 / 1024).toFixed(1)}MB). Maximum allowed: ${(maxBytes / 1024 / 1024).toFixed(0)}MB.`,
         },
       };
     }
@@ -429,8 +433,8 @@ function createWorkspaceSizeGuardHook(maxMB: number): HookCallback {
         return {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
-            decision: 'block' as const,
-            reason: `Workspace is full (${sizeMB}MB / ${maxMB}MB limit). Remove unnecessary files before writing new ones.`,
+            permissionDecision: 'deny' as const,
+            permissionDecisionReason: `Workspace is full (${sizeMB}MB / ${maxMB}MB limit). Remove unnecessary files before writing new ones.`,
           },
         };
       }
@@ -478,8 +482,8 @@ function createCompetencyGuardHook(isMain: boolean): HookCallback {
       return {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
-          decision: 'block' as const,
-          reason: `Blocked: setting ${highConfCount} concepts to confidence >= 0.8 in a single edit is not allowed. Mastery scores must be updated incrementally based on demonstrated understanding, not in bulk. Update concepts one at a time after each interaction.`,
+          permissionDecision: 'deny' as const,
+          permissionDecisionReason: `Blocked: setting ${highConfCount} concepts to confidence >= 0.8 in a single edit is not allowed. Mastery scores must be updated incrementally based on demonstrated understanding, not in bulk. Update concepts one at a time after each interaction.`,
         },
       };
     }

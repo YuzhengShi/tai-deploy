@@ -57,6 +57,8 @@ export interface ContainerOutput {
   status: 'success' | 'error';
   result: string | null;
   newSessionId?: string;
+  // The runner retired the session (context overflow, or it had its turns): forget it, the next container starts a new one
+  resetSession?: boolean;
   error?: string;
 }
 
@@ -278,6 +280,12 @@ async function readSecrets(useLight = false): Promise<Record<string, string>> {
     'ANTHROPIC_SMALL_FAST_MODEL',
     'CLAUDE_CODE_MAX_OUTPUT_TOKENS',
     'CLAUDE_AUTOCOMPACT_PCT_OVERRIDE',
+    // How long the CLI keeps retrying a failed model request and waits for one response (the runner defaults them to 3 and 120000),
+    // and when the runner retires a session (answers, context tokens; defaults 25 and 90000)
+    'CLAUDE_CODE_MAX_RETRIES',
+    'API_TIMEOUT_MS',
+    'TAI_MAX_TURNS_PER_SESSION',
+    'TAI_MAX_CONTEXT_TOKENS',
     'DISABLE_TELEMETRY',
     'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
     'DISABLE_AUTOUPDATER',
@@ -524,6 +532,9 @@ export async function runContainerAgent(
 
           try {
             const parsed: ContainerOutput = JSON.parse(jsonStr);
+            if (parsed.resetSession) {
+              newSessionId = undefined;
+            }
             if (parsed.newSessionId) {
               newSessionId = parsed.newSessionId;
             }

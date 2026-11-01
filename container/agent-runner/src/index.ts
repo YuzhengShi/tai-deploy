@@ -17,17 +17,9 @@ import fs from 'fs';
 import path from 'path';
 import { query, HookCallback, PreCompactHookInput } from '@anthropic-ai/claude-agent-sdk';
 import { fileURLToPath } from 'url';
-import {
-  createCompetencyGuardHook,
-  createFileSizeGuardHook,
-  createSanitizeBashHook,
-  createSensitiveFileReadHook,
-  createWebFetchGuardHook,
-  createWorkspaceSizeGuardHook,
-  isCleanupCommand,
-  newTurnCounters,
-  secretEnvNames,
-} from './guards.js';
+import { newTurnCounters, preToolUseHooks, secretEnvNames } from './guards.js';
+import { ApiFailure, classifyApiError, friendlyMessage } from './api-errors.js';
+import { appendInteraction, messageTexts, visibleText } from './session-log.js';
 
 interface ContainerInput {
   prompt: string;
@@ -45,8 +37,23 @@ interface ContainerOutput {
   status: 'success' | 'error';
   result: string | null;
   newSessionId?: string;
+  resetSession?: boolean; // the session was retired: the host forgets it
   error?: string;
 }
+
+/**
+ * What one conversation session has been through, across the queries of the main loop. A session is retired when it has had
+ * DEFAULT_MAX_TURNS_PER_SESSION answers or its context has grown to DEFAULT_MAX_CONTEXT_TOKENS (TAI_MAX_TURNS_PER_SESSION and
+ * TAI_MAX_CONTEXT_TOKENS override them): the next message then starts a fresh session. The competency files carry what matters over.
+ * Upstream counted queries of the main loop instead, but a warm container takes follow-ups into the one running query, so that cap
+ * never fired.
+ */
+interface SessionState {
+  turns: number;
+  contextTokens: number;
+}
+const DEFAULT_MAX_TURNS_PER_SESSION = 25;
+const DEFAULT_MAX_CONTEXT_TOKENS = 90_000;
 
 interface SessionEntry {
   sessionId: string;
@@ -410,10 +417,30 @@ async function runQuery(
   containerInput: ContainerInput,
   sdkEnv: Record<string, string | undefined>,
   stdinReader: StdinReader,
+  state: SessionState,
   resumeAt?: string,
-): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean; had500Error: boolean; messageCount: number }> {
+): Promise<{
+  newSessionId?: string;
+  lastAssistantUuid?: string;
+  closedDuringQuery: boolean;
+  apiFailure: ApiFailure | null;
+  sessionCapped: boolean;
+  carryOver: string[];
+  messageCount: number;
+}> {
   const stream = new MessageStream();
   stream.push(prompt);
+
+  // Bookkeeping per session: what the student has said since the last answer (for the interaction summary), how many pushed messages
+  // still wait for their answer, and the cap that retires a session.
+  const studentTexts = (text: string) => messageTexts(text).filter((t) => !t.startsWith('[SYSTEM]'));
+  let turnTexts = studentTexts(prompt);
+  let inFlight = 1;
+  const maxTurns = parseInt(sdkEnv['TAI_MAX_TURNS_PER_SESSION'] || '', 10) || DEFAULT_MAX_TURNS_PER_SESSION;
+  const maxContextTokens = parseInt(sdkEnv['TAI_MAX_CONTEXT_TOKENS'] || '', 10) || DEFAULT_MAX_CONTEXT_TOKENS;
+  const sessionFull = () => state.turns >= maxTurns || state.contextTokens >= maxContextTokens;
+  let sessionCapped = false;
+  const carryOver: string[] = [];
 
   // Poll stdin buffer for follow-up messages and EOF during the query
   let stdinPumping = true;
@@ -431,12 +458,26 @@ async function runQuery(
       try {
         const msg = JSON.parse(line);
         if (msg.type === 'message' && msg.text) {
-          log(`Piping stdin message into active query (${msg.text.length} chars)`);
-          stream.push(msg.text);
+          if (sessionCapped || (inFlight === 0 && sessionFull())) {
+            // The session has had its turns and nothing is being answered: this message opens the next session.
+            sessionCapped = true;
+            carryOver.push(msg.text);
+          } else {
+            log(`Piping stdin message into active query (${msg.text.length} chars)`);
+            stream.push(msg.text);
+            inFlight++;
+            turnTexts.push(...studentTexts(msg.text));
+          }
         }
       } catch (err) {
         log(`Failed to parse stdin line: ${err instanceof Error ? err.message : String(err)}`);
       }
+    }
+    if (sessionCapped) {
+      log(`Session cap reached (${state.turns} answers, ${state.contextTokens} context tokens): ending the stream, the next message starts a new session`);
+      stream.end();
+      stdinPumping = false;
+      return;
     }
     setTimeout(pollStdinDuringQuery, 100);
   };
@@ -446,7 +487,7 @@ async function runQuery(
   let lastAssistantUuid: string | undefined;
   let messageCount = 0;
   let resultCount = 0;
-  let had500Error = false;
+  let apiFailure: ApiFailure | null = null;
 
   // Load global CLAUDE.md as additional system context (shared across all groups).
   // Main also loads it so admin can test the teaching persona in the same DM.
@@ -494,6 +535,20 @@ async function runQuery(
   // What the guards count per answer (WebFetch calls); reset when the model has answered.
   const counters = newTurnCounters();
 
+  // The runner records every exchange itself, because the model does not (see session-log.ts). Not for the admin chat or scheduled tasks.
+  const recordExchange = (reply: string | null | undefined) => {
+    const student = turnTexts.join(' / ');
+    turnTexts = [];
+    if (containerInput.isMain || containerInput.isScheduledTask || !reply || !student) return;
+    const shown = visibleText(reply);
+    if (!shown) return;
+    try {
+      appendInteraction('/workspace/group', new Date(), student, shown);
+    } catch (err) {
+      log(`Could not record the exchange: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   for await (const message of query({
     prompt: stream,
     options: {
@@ -522,27 +577,7 @@ async function runQuery(
       mcpServers: buildMcpServers(mcpServerPath, containerInput, sdkEnv),
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook()] }],
-        PreToolUse: [
-          { matcher: 'Bash', hooks: [createSanitizeBashHook(containerInput.isMain, secretNames)] },
-          { matcher: 'Read', hooks: [createSensitiveFileReadHook()] },
-          { matcher: 'Grep', hooks: [createSensitiveFileReadHook()] },
-          { matcher: 'Edit', hooks: [createCompetencyGuardHook(containerInput.isMain)] },
-          { matcher: 'Write', hooks: [createCompetencyGuardHook(containerInput.isMain)] },
-          { matcher: 'MultiEdit', hooks: [createCompetencyGuardHook(containerInput.isMain)] },
-          // Non-main: guard WebFetch (rate limit per answer + block private/internal URLs)
-          ...(!containerInput.isMain ? [{ matcher: 'WebFetch', hooks: [createWebFetchGuardHook(counters, 15)] }] : []),
-          // Non-main: limit file write size to 5MB
-          ...(!containerInput.isMain ? [
-            { matcher: 'Write', hooks: [createFileSizeGuardHook(5 * 1024 * 1024)] },
-            { matcher: 'Edit', hooks: [createFileSizeGuardHook(5 * 1024 * 1024)] },
-          ] : []),
-          // Non-main: block writes (a shell command that only deletes or measures excepted) if the workspace exceeds 500MB total
-          ...(!containerInput.isMain ? [
-            { matcher: 'Write', hooks: [createWorkspaceSizeGuardHook(500)] },
-            { matcher: 'Edit', hooks: [createWorkspaceSizeGuardHook(500)] },
-            { matcher: 'Bash', hooks: [createWorkspaceSizeGuardHook(500, undefined, isCleanupCommand)] },
-          ] : []),
-        ],
+        PreToolUse: preToolUseHooks(containerInput.isMain, secretNames, counters),
       },
     }
   })) {
@@ -552,6 +587,9 @@ async function runQuery(
 
     if (message.type === 'assistant' && 'uuid' in message) {
       lastAssistantUuid = (message as { uuid: string }).uuid;
+      // the size of the context at this model call: what the session cap watches
+      const usage = (message as { message?: { usage?: { input_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } } }).message?.usage;
+      if (usage) state.contextTokens = (usage.input_tokens || 0) + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
     }
 
     if (message.type === 'system' && message.subtype === 'init') {
@@ -568,11 +606,12 @@ async function runQuery(
       resultCount++;
       counters.webFetch = 0;
       let textResult = 'result' in message ? (message as { result?: string }).result : null;
-      // Detect Bedrock 500 errors (context overflow) — abort the query immediately
-      // and signal caller to reset session. User gets a friendly retry message instead.
-      if (textResult && /^API Error:\s*500\b/.test(textResult)) {
-        log(`Result #${resultCount}: Bedrock 500 error detected, aborting query`);
-        had500Error = true;
+      // A failed model request (after the CLI's own retries): abort the query and let the caller tell the student something human.
+      // Only an overflow clears the session; a busy provider or a 500 does not (upstream called every 500 "memory too full").
+      const failure = classifyApiError(textResult);
+      if (failure) {
+        log(`Result #${resultCount}: model API failure (${failure.kind}${failure.status ? ' ' + failure.status : ''}), aborting query: ${String(textResult).slice(0, 200)}`);
+        apiFailure = failure;
         stream.end();
         break;
       }
@@ -584,6 +623,9 @@ async function runQuery(
         textResult = textResult.replace(/Human:\s*<messages>[\s\S]*/g, '').trim() || null;
       }
       log(`Result #${resultCount}: subtype=${message.subtype}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}`);
+      state.turns++;
+      inFlight = Math.max(0, inFlight - 1);
+      recordExchange(textResult);
       writeOutput({
         status: 'success',
         result: textResult || null,
@@ -594,7 +636,7 @@ async function runQuery(
 
   stdinPumping = false;
   log(`Query done. Messages: ${messageCount}, results: ${resultCount}, lastAssistantUuid: ${lastAssistantUuid || 'none'}, closedDuringQuery: ${closedDuringQuery}`);
-  return { newSessionId, lastAssistantUuid, closedDuringQuery, had500Error, messageCount };
+  return { newSessionId, lastAssistantUuid, closedDuringQuery, apiFailure, sessionCapped, carryOver, messageCount };
 }
 
 async function main(): Promise<void> {
@@ -624,6 +666,10 @@ async function main(): Promise<void> {
   for (const [key, value] of Object.entries(containerInput.secrets || {})) {
     sdkEnv[key] = value;
   }
+  // The CLI retries a failed model request 10 times (about 216 s) and waits up to 10 minutes for one response before the student
+  // hears anything. For a chat a quick, friendly "busy" (and the gateway's fallback model) serves better; .env can override both.
+  sdkEnv['CLAUDE_CODE_MAX_RETRIES'] ??= '3';
+  sdkEnv['API_TIMEOUT_MS'] ??= '120000';
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
@@ -652,25 +698,20 @@ async function main(): Promise<void> {
 
   // Query loop: run query → wait for stdin message → run new query → repeat
   let resumeAt: string | undefined;
-  let queriesOnSession = 0;
-  const MAX_QUERIES_PER_SESSION = 10;
+  const state: SessionState = { turns: 0, contextTokens: 0 };
+  const startOver = () => {
+    sessionId = undefined;
+    resumeAt = undefined;
+    state.turns = 0;
+    state.contextTokens = 0;
+  };
 
   while (true) {
-    // Proactive session cap — force fresh session after N query iterations
-    // to prevent unbounded context growth that leads to Bedrock 500 errors.
-    queriesOnSession++;
-    if (queriesOnSession > MAX_QUERIES_PER_SESSION && sessionId) {
-      log(`Session query cap reached (${queriesOnSession - 1} queries), starting fresh session`);
-      sessionId = undefined;
-      resumeAt = undefined;
-      queriesOnSession = 1;
-    }
-
-    log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'}, queryNum: ${queriesOnSession})...`);
+    log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'}, answers so far: ${state.turns})...`);
 
     let queryResult: Awaited<ReturnType<typeof runQuery>> | null = null;
     try {
-      queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, stdinReader, resumeAt);
+      queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, stdinReader, state, resumeAt);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
 
@@ -683,14 +724,8 @@ async function main(): Promise<void> {
       // Crash with active session — likely context overflow. Reset and continue.
       if (sessionId) {
         log(`Query crashed with active session, resetting: ${errorMessage}`);
-        writeOutput({
-          status: 'success',
-          result: "sorry, my memory got too full — I've cleared my context and I'm ready to go. could you send that last message again?",
-          newSessionId: sessionId,
-        });
-        sessionId = undefined;
-        resumeAt = undefined;
-        queriesOnSession = 0;
+        writeOutput({ status: 'success', result: friendlyMessage('overflow'), resetSession: true });
+        startOver();
         // Fall through to wait for next stdin message
       } else {
         // Fresh session crashed — real error, bail out
@@ -708,17 +743,16 @@ async function main(): Promise<void> {
         resumeAt = queryResult.lastAssistantUuid;
       }
 
-      // Bedrock 500 detected in results — reset session and notify user
-      if (queryResult.had500Error) {
-        log('Bedrock 500 errors detected in results, resetting session');
-        writeOutput({
-          status: 'success',
-          result: "sorry, my memory got too full — I've cleared my context and I'm ready to go. could you send that last message again?",
-          newSessionId: sessionId,
-        });
-        sessionId = undefined;
-        resumeAt = undefined;
-        queriesOnSession = 0;
+      // The model request failed: tell the student what is going on, in words, and clear the session only when the context overflowed
+      if (queryResult.apiFailure) {
+        const { kind, status } = queryResult.apiFailure;
+        log(`Model API failure (${kind}${status ? ' ' + status : ''}): telling the student, ${kind === 'overflow' ? 'clearing' : 'keeping'} the session`);
+        writeOutput(
+          kind === 'overflow'
+            ? { status: 'success', result: friendlyMessage(kind), resetSession: true }
+            : { status: 'success', result: friendlyMessage(kind), newSessionId: sessionId },
+        );
+        if (kind === 'overflow') startOver();
       }
 
       // If EOF was detected during the query, exit immediately.
@@ -727,6 +761,15 @@ async function main(): Promise<void> {
       if (queryResult.closedDuringQuery) {
         log('EOF consumed during query, exiting');
         break;
+      }
+
+      // The session has had its turns: the message that arrived while it was idle starts the next one, right away
+      if (queryResult.sessionCapped) {
+        log(`Session retired after ${state.turns} answers and ${state.contextTokens} context tokens; ${queryResult.carryOver.length} message(s) open the next one`);
+        writeOutput({ status: 'success', result: null, resetSession: true });
+        startOver();
+        prompt = queryResult.carryOver.join('\n');
+        continue;
       }
 
       // Emit session update so host can track it

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { HookCallback } from '@anthropic-ai/claude-agent-sdk';
 
 import {
+  composeHooks,
   createCompetencyGuardHook,
   createFileSizeGuardHook,
   createSanitizeBashHook,
@@ -17,6 +18,7 @@ import {
   isPrivateAddress,
   masteryScores,
   newTurnCounters,
+  preToolUseHooks,
   privateUrlReason,
   raisedToHigh,
   secretEnvNames,
@@ -353,5 +355,58 @@ describe('competency guard', () => {
   it('leaves the admin and other files alone', async () => {
     expect(await denied(createCompetencyGuardHook(true, () => ''), { file_path: file, content: lines(9, '1.0', 'template') })).toBeNull();
     expect(await denied(student, { file_path: '/workspace/group/notes.md', content: lines(9, '1.0', 'template') })).toBeNull();
+  });
+});
+
+describe('composeHooks', () => {
+  const allow: HookCallback = async () => ({});
+  const rewrite: HookCallback = async () => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: { command: 'X' } } });
+  const refuse = (why: string): HookCallback => async () => deny(why);
+
+  it('lets the first denial win and keeps its reason', async () => {
+    expect(await denied(composeHooks(allow, refuse('first'), refuse('second')), {})).toBe('first');
+    expect(await denied(composeHooks(rewrite, refuse('late')), {})).toBe('late');
+  });
+
+  it('returns the rewrite of the input when nothing denies', async () => {
+    const out = (await run(composeHooks(allow, rewrite, allow), {})) as { hookSpecificOutput: { updatedInput: { command: string } } };
+    expect(out.hookSpecificOutput.updatedInput.command).toBe('X');
+    expect(await run(composeHooks(allow, allow), {})).toEqual({});
+    expect(await run(composeHooks(), {})).toEqual({});
+  });
+});
+
+describe('preToolUseHooks', () => {
+  const hooksOf = (isMain: boolean) => preToolUseHooks(isMain, ['ANTHROPIC_AUTH_TOKEN'], newTurnCounters());
+  const hook = (isMain: boolean, tool: string) => hooksOf(isMain).find((m) => m.matcher === tool)?.hooks[0];
+
+  it('registers one hook per tool: with several the CLI drops the reason and the model cannot explain the refusal', () => {
+    for (const isMain of [true, false]) {
+      const matchers = hooksOf(isMain).map((m) => m.matcher);
+      expect(new Set(matchers).size).toBe(matchers.length);
+      for (const m of hooksOf(isMain)) expect(m.hooks).toHaveLength(1);
+    }
+  });
+
+  it('guards a student more than the admin: WebFetch, and the shell commands', async () => {
+    expect(hook(true, 'WebFetch')).toBeUndefined();
+    expect(hook(false, 'WebFetch')).toBeDefined();
+    expect(await denied(hook(false, 'Bash')!, { command: 'curl http://x' })).toMatch(/restricted pattern/);
+    expect(await denied(hook(true, 'Bash')!, { command: 'curl http://x' })).toBeNull();
+  });
+
+  it('keeps the reason of the guard that refused, for every tool', async () => {
+    expect(await denied(hook(false, 'Bash')!, { command: 'cat /proc/self/environ' })).toMatch(/sensitive/);
+    expect(await denied(hook(false, 'Read')!, { file_path: '/proc/self/environ' })).toMatch(/sensitive/);
+    expect(await denied(hook(false, 'Grep')!, { path: '/workspace/group/.env', pattern: 'x' })).toMatch(/sensitive/);
+    const bulk = Array.from({ length: 3 }, (_, i) => `Concept ${i}: 0.9 | 0.5 | [] | [] | today`).join('\n');
+    for (const tool of ['Write', 'Edit', 'MultiEdit']) {
+      const input = tool === 'Write' ? { file_path: '/workspace/group/COMPETENCY.md', content: bulk } : tool === 'Edit'
+        ? { file_path: '/workspace/group/COMPETENCY.md', old_string: 'x', new_string: bulk }
+        : { file_path: '/workspace/group/COMPETENCY.md', edits: [{ old_string: 'x', new_string: bulk }] };
+      expect(await denied(hook(false, tool)!, input)).toMatch(/3 concepts/);
+      expect(await denied(hook(true, tool)!, input)).toBeNull();
+    }
+    expect(await denied(hook(false, 'Write')!, { file_path: '/workspace/group/big.txt', content: 'x'.repeat(5 * 1024 * 1024 + 1) })).toMatch(/too large/);
   });
 });

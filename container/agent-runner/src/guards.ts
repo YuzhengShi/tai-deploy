@@ -39,6 +39,23 @@ function toolInput(input: unknown): Record<string, unknown> {
   return ((input as PreToolUseHookInput).tool_input as Record<string, unknown>) || {};
 }
 
+/**
+ * Several guards of one tool as ONE hook. With more than one hook matching a tool the CLI tells the model only "Hook PreToolUse:Bash
+ * denied this tool" and drops the reason, so the model cannot say anything useful to the student; one hook keeps its reason. The first
+ * denial wins. A hook that rewrites the input (Bash's unset prefix) goes last: the ones before it see the command as written.
+ */
+export function composeHooks(...hooks: HookCallback[]): HookCallback {
+  return async (input, toolUseId, options) => {
+    let rewritten: HookResult = {};
+    for (const hook of hooks) {
+      const result = await hook(input, toolUseId, options);
+      if (denial(result) !== null) return result;
+      if ((result as { hookSpecificOutput?: { updatedInput?: unknown } }).hookSpecificOutput?.updatedInput) rewritten = result;
+    }
+    return rewritten;
+  };
+}
+
 // --- Bash: secrets, dangerous commands ---------------------------------------------------------------------------------------
 
 // Credentials the SDK needs in its own environment (API access) and that no command the agent runs may see.
@@ -441,4 +458,26 @@ function readFileOrEmpty(file: string): string {
   } catch {
     return '';
   }
+}
+
+/**
+ * The PreToolUse hooks of a container, one hook per tool (see composeHooks). Main is the admin's chat: it gets the guards that protect
+ * the host's secrets and files; every other group also gets the ones against abuse.
+ */
+export function preToolUseHooks(isMain: boolean, secretNames: string[], counters: TurnCounters) {
+  const studentOnly = (hooks: HookCallback[]) => (isMain ? [] : hooks);
+  const writeGuards = () =>
+    composeHooks(createCompetencyGuardHook(isMain), ...studentOnly([createFileSizeGuardHook(5 * 1024 * 1024), createWorkspaceSizeGuardHook(500)]));
+  return [
+    {
+      matcher: 'Bash',
+      hooks: [composeHooks(...studentOnly([createWorkspaceSizeGuardHook(500, undefined, isCleanupCommand)]), createSanitizeBashHook(isMain, secretNames))],
+    },
+    { matcher: 'Read', hooks: [createSensitiveFileReadHook()] },
+    { matcher: 'Grep', hooks: [createSensitiveFileReadHook()] },
+    { matcher: 'Write', hooks: [writeGuards()] },
+    { matcher: 'Edit', hooks: [writeGuards()] },
+    { matcher: 'MultiEdit', hooks: [writeGuards()] },
+    ...(isMain ? [] : [{ matcher: 'WebFetch', hooks: [createWebFetchGuardHook(counters, 15)] }]),
+  ];
 }

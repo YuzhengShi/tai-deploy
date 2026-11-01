@@ -5,6 +5,7 @@
 # the Cerebras key is read from the world's .env straight into the gateway container; neither is ever printed.
 #
 #   stack.sh build            npm ci + tsc for the orchestrator (detached; read with: stack.sh logs build)
+#   stack.sh rebuild          tsc only, after a change to src/
 #   stack.sh backend NAME     write TAi's .env for the model under test: mock | qwen | gpt-oss (read at every container spawn)
 #   stack.sh mocks            start the scripted model and the Canvas/GitHub stand-ins
 #   stack.sh litellm          start the Cerebras gateway
@@ -143,6 +144,11 @@ case "${1:-status}" in
     setsid nohup bash -c "cd '$T' && npm ci --no-audit --no-fund && npm run build && echo BUILD-OK && node -e \"const D=require('better-sqlite3');new D(':memory:');console.log('better-sqlite3 loads')\"; echo EXIT=\$?" \
       > "$E/logs/build.log" 2>&1 < /dev/null &
     sleep 1; echo "orchestrator build started detached (log: stack.sh logs build)" ;;
+  rebuild)
+    # after a change to src/ only: tsc without the npm ci
+    : > "$E/logs/build.log"
+    setsid nohup bash -c "cd '$T' && npm run build && echo BUILD-OK; echo EXIT=\$?" > "$E/logs/build.log" 2>&1 < /dev/null &
+    sleep 1; echo "orchestrator rebuild (tsc) started detached (log: stack.sh logs build)" ;;
   backend) write_env "${2:-mock}" ;;
   mocks) start_mocks ;;
   litellm) start_litellm ;;

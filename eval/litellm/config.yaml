@@ -1,0 +1,27 @@
+# The gateway between Claude Code (Anthropic Messages API) and Cerebras (OpenAI chat completions) for the evaluation.
+# Two aliases, one per model under test. Every model slot Claude Code has (sonnet, haiku, opus, small-fast) is pointed at the alias
+# in TAi's .env, so no request carries a name this file does not know.
+model_list:
+  - model_name: qwen                       # Nora's model, reasoning off (Nora's setting)
+    litellm_params:
+      model: cerebras/qwen-3.8-27b         # the cerebras/ provider: openai/ would call /v1/responses, which Cerebras does not have
+      api_key: os.environ/CEREBRAS_API_KEY
+      extra_body:
+        reasoning_effort: "none"
+        parallel_tool_calls: false             # LiteLLM's streaming /v1/messages translation merges parallel tool calls into ONE block with
+                                               # the arguments concatenated (invalid JSON, so Claude Code sees {}); one call per turn avoids it
+  - model_name: gpt-oss                    # gpt-oss-120b has no "none": low is the nearest, so the two are not symmetric
+    litellm_params:
+      model: cerebras/gpt-oss-120b
+      api_key: os.environ/CEREBRAS_API_KEY
+      extra_body:
+        reasoning_effort: "low"
+        parallel_tool_calls: false
+
+litellm_settings:
+  drop_params: true
+  request_timeout: 300
+  callbacks: tai_callbacks.proxy_handler_instance   # strips replayed thinking blocks; logs the upstream status of every call
+
+router_settings:
+  num_retries: 0        # a 429 from Cerebras must reach Claude Code and the log, not be retried out of sight here

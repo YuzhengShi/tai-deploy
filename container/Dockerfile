@@ -45,7 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -m venv /opt/leanrag \
     && /opt/leanrag/bin/pip install --no-cache-dir \
-        boto3 networkx numpy python-dotenv "mcp[cli]" requests python-docx pymupdf openpyxl python-pptx piazza-api
+        boto3 networkx numpy python-dotenv "mcp[cli]<2" requests python-docx pymupdf openpyxl python-pptx piazza-api
 
 # Install LeanRAG build_graph dependencies (copy of leanrag/requirements.txt)
 COPY leanrag-requirements.txt /tmp/leanrag-requirements.txt

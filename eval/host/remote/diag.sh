@@ -12,7 +12,7 @@ LOG="$E/logs/orchestrator.log"
 strip() { sed 's/\x1b\[[0-9;]*m//g' | cut -c1-260; }
 case "${1:-errors}" in
   errors) strip < "$LOG" | grep -iE "\bwarn|\berror|fail|timed out|timeout|exited with|code [1-9]|killed" | tail -n "${2:-40}" ;;
-  events) strip < "$LOG" | grep -E "Spawning container|Agent output|Container (completed|exited|timed)|Starting container|Session initialized|closing container|Processing messages|piping|Piping" | tail -n "${2:-60}" ;;
+  events) strip < "$LOG" | grep -E "New messages|Spawning container|Agent output|Container (completed|exited|timed)|Starting container|Session initialized|closing container|Processing messages|piping|Piping" | tail -n "${2:-60}" ;;
   around)
     n=$(strip < "$LOG" | grep -n -m1 -E "${2:?pattern}" | cut -d: -f1)
     [ -n "$n" ] || { echo "no match"; exit 0; }

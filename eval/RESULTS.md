@@ -134,3 +134,87 @@ TAi runs one agent container per *active student*, not per message: the containe
 * **A model call that never returns**: the hard timeout is `max(CONTAINER_TIMEOUT, IDLE_TIMEOUT + 30 s)` (30 min by default; 35 s in the test). The kill took 13.7 s (`docker stop` grace); the student got the apology at 52 s, then again at 107 s and 167 s (retries re-run the same message, up to 5 with backoff); 4 containers started in 200 s.
 * **Unit tests of the orchestrator** (`npm test` in `src/`, on the box): 123 of 165 pass. `db`, `ipc-auth`, `routing`, `teaching-patrol` pass entirely. Failing: 32 in the WhatsApp channel tests (their Baileys mock defines `Browsers.macOS` only while the code calls `Browsers.ubuntu`: a stale mock; the dependency itself is pinned to a commit in `package-lock.json`), 6 in `formatting` (they expect the trigger `@Andy`), 3 in `container-runner` (timeout behaviour; not diagnosed: its config mock predates `STORE_DIR` and the call to the cloud metadata endpoint is not mocked), 1 in `group-queue` (asserts tasks drain before messages; the code deliberately drains messages first).
 * Not exercised end to end: scheduled tasks (patrol, bootstrap) competing with student messages for slots. Read from the code: `drainGroup` runs messages before tasks, a student message arriving during a task of the same group closes the task's stdin, but tasks of *other* groups hold slots like any container.
+
+## After the fixes (2026-11-01, second pass)
+
+What ran: the fork at `a10263b` (`git log 02dd2d5..` lists the commits; one per fix, each with its tests), the same box, the same harness,
+the scripted model for everything but the gateway checks. The user's instruction behind it: commit the fork, fix what the tests found,
+commit that too. Synthetic students only; no real token was used.
+
+### Guards (`harness/guards.py`, 86 checks)
+
+| Run | Checks not as designed |
+| --- | --- |
+| Upstream runner (`--variant as-shipped`) | **42** of 86 |
+| Upstream plus only the shape of the block result (first pass, 78 checks) | 13 of 78 |
+| The repository's source (`--variant current`) | **0** of 86 (619 s) |
+
+All fixes are in `container/agent-runner/src/guards.ts` and `github-access.ts`, with 148 unit tests on the box (147 where symlinks cannot be made); the harness checks them end to end:
+
+* Secrets: every variable the host passes as a secret (and any credential-named one) is unset for Bash: `env` shows none of the canaries (before: 8 names), the lengths of the four tokens it names are 0.
+* Bash: `c''url`, `/dev/tcp`, `cd /proc/self && cat environ` are blocked; a student's commands are capped at 50 MB a file (`ulimit -f`: a 60 MB write stops at 52,428,800 bytes, the admin's does not); a full workspace refuses a Bash write.
+* Read/Grep: the symlink to `.env`, `Grep` on `.env`, and `/proc/self/root/...` are refused (R6, R7, R8).
+* WebFetch: loopback in its decimal and IPv4-mapped spellings (W8, W9), the metadata address (W4), a docker alias that resolves to an internal address (W5) are refused; the limit of 15 is per answer (W6: calls 16 and 17 blocked; W7: the next answer in the same warm container is not limited).
+* Competency guard: the template's own `name: 0.9 | 0.9 | ...` format, a printf through Bash, exactly 0.8 (C4-C6) are blocked for a student and allowed for the admin; two concepts stay allowed.
+* github_query: `{owner: self, user: classmate}` (T7) and an owner-looking repo name (T12) are refused; the own repository and the course organisation work (T9, T10).
+* Output: both reply paths strip `<internal>` and redact the prompt's fingerprints (L1, L2).
+
+What was found while fixing, and is fixed:
+
+* With more than one PreToolUse hook on a tool, Claude Code tells the model only "Hook PreToolUse:Bash denied this tool" and drops the reason (seen when the workspace guard was added next to the sanitiser): the model cannot explain a refusal to the student. The guards of a tool are now one composed hook and the reason comes through (`Command blocked for security: ...`, `This file contains sensitive data ...`).
+* A session the runner retired (overflow, or the cap) stayed in the host's database: the next container resumed the oversized session. `ContainerOutput.resetSession` and `db.clearSession` clear it.
+* gpt-oss writes into its answers, as served through the gateway: `<internal to=TodoWrite{...}></commentary}` ahead of the reply, and a planning sentence run into the reply (`...(owner username).hey! i'm TAi`). `stripInternalTags` handles both, written against the real samples (`harness/leak_samples.py`).
+
+What the guards do not do (also in `docs/SECURITY.md`): a directory-wide search can still read a `.env` inside that directory; the credentials stay in the
+agent process's environment, so a determined same-user process can read `/proc/<pid>/environ` by a route the patterns do not name; a host name can change
+its address between the check and the fetch.
+
+### Unit tests
+
+`stack.sh unit` on the box: **318 of 318** pass (before: 123 of 165). The 42 failures were tests that had not followed the code (the WhatsApp channel's Baileys mock, the `@Andy` trigger, `drainGroup` running messages first, the container-runner config mock); none was a defect. The fork's own tests: guards, GitHub access, API-failure classification, interaction log (all in `container/agent-runner/test/`), the outbound filter (`src/formatting.test.ts`), the gateway budget (`eval/litellm/test_budget.py`).
+
+### Gateway: qwen backed up by gpt-oss (`harness/fallback.py`, 6 cases, the route Claude Code uses: `/v1/messages`)
+
+| Case | Result |
+| --- | --- |
+| qwen and gpt-oss aliases, plain | answered, served by `qwen-3.8-27b` and `gpt-oss-120b` |
+| alias whose deployment always fails (Cerebras 401), fallback gpt-oss, **plain** | HTTP 200, answered by gpt-oss; the failure of the bad deployment is in the gateway log |
+| the same, **streaming** | HTTP 200, answered by gpt-oss; failure logged |
+| unknown alias (control) | HTTP 400, nothing served |
+| `TAI_QWEN_TPM_BUDGET=100` (production default 90,000), six requests | the first four on qwen, the fifth and sixth sent to gpt-oss and answered (event `spill` in the log) |
+
+So the fallback LiteLLM documents for `/chat/completions` works on `/v1/messages`, plain and streaming, and the budget keeps TAi out of the part of the
+shared bucket Nora needs. A real 429 from Cerebras was not provoked (it would have taken the account's bucket from Nora); a 401 stands in. Both
+mechanisms send traffic to gpt-oss, which in the model comparison lectures, writes markdown and showed planning text in 2 of 54 replies: the
+persona's no-markdown rule was written for WhatsApp; a web UI that renders markdown may relax it, and the output filter above covers the markup leaks.
+
+### Resume, the session cap and API failures (`harness/resume.py`, scripted model)
+
+| Case | Before | After |
+| --- | --- | --- |
+| RS1, RS2, RS4: follow-up in a warm container, in a new container, after an orchestrator restart | history replayed | **unchanged, OK** (fresh folders: n_messages 1, 3, 5, 7; markers alpha, beta, gamma replayed) |
+| RS3: eight messages in one warm container, `TAI_MAX_TURNS_PER_SESSION=4` | the 10-query cap never fired (follow-ups run in one query) | message 5 starts a fresh session (n_messages 1, a new session id in the database), 6-8 continue it; **OK** |
+| RS3b: `competency/interaction-summary.md` after eight answers | never written by either model | 8 lines, one per answer, with what the student said; **OK** |
+| RS5: prompt too long (400) | "Prompt is too long", session kept | "my memory got too full, I've cleared my context" after **13 s**, session cleared in the database |
+| RS5: 500 | after 216 s: "my memory got too full" and the session cleared | "give me a minute" after **14 s**, session kept |
+| RS5: 529 and 429 | after about 217 s the raw `API Error: 529 {...}` | "give me a minute" after **13 s** and **15 s**, session kept |
+
+The first run of RS1/RS2 after the fixes said DIFFERS: the harness had reused the folder `rs1` and the session carried the markers of the runs before (n_messages 17);
+resume.py now stamps its folders, and the rerun is OK. The same trap as in the model comparison, caught the same way.
+Not a fix, a limit: the 3 retries and 120 s are `CLAUDE_CODE_MAX_RETRIES` and `API_TIMEOUT_MS`; a real 429 reaches the gateway first, where the fallback answers it.
+
+### The image from the Dockerfile as it is, and the precompiled start (`harness/sched.py --precompiled`)
+
+* **`docker build --no-cache` of `container/Dockerfile`** (the proof the repository's own Dockerfile builds, not a thin layer on the earlier image): succeeded, 1 h 50 min on this box while the other runs were going (it takes about 75 minutes on a quiet one). Inside the image: `mcp 1.30.0` (the `<2` pin), `entrypoint.sh` running `/app/dist/index.js` (and compiling the mounted source only with `TAI_COMPILE_ON_START=1`), the same SDK 0.2.34 / Claude Code 2.1.34. A change to the agent runner then costs a cached rebuild of the last layers (`30_build_image.sh rebuild`, about 4 minutes here); the heavy layers stay.
+* **Cold start without tsc** (two runs of three on `tai-agent:clean`): send to first reply 16.9, 15.8, 17.9 s and 19.7, 15.6, 18.2 s (was 16.6-20.8 s); the runner starts 4.7-7.4 s after the spawn (was 8.3-9.7 s); warm follow-up 4.8-7.0 s (was 4.9-6.2 s). The gain is **2-4 s, not the 8-10 s** the tsc step cost on its own: about 6 s remain between the spawn and the runner starting (docker run of this image and node), 2-4 s are the orchestrator's poll and queue before the spawn, and Claude Code adds 2 s. The compile is a cost under load (several containers starting at once compile at the same time), which this measurement does not show.
+* **Eight students at once** (cap 5, 25 s task, IDLE_TIMEOUT 20 s): never more than 5 containers; the first five answered at 64-86 s, the 6th-8th at 136-160 s (before: 58-72 s and 134-156 s): the cap behaves as before. Memory per container: median 299 MiB, max 335 MiB over 111 samples (before: 238 and 273); not explained, the sampling differs.
+* The defaults changed (idle 2 min, hard timeout 15 min) were not run through SC5/SC6 again: those scenarios set their own timeouts.
+
+### Still open after this pass
+
+* **Step 6 of the persona is still the model's job.** The runner now writes the interaction summary itself (so "is this student new?" has an answer after the first exchange), but the strategy log, the mastery scores in `COMPETENCY.md` and `memory_store` are still written only if the model chooses to; neither model did in the evaluation. Two ways to move it into code, neither tried: a host-side line added after the student's messages on every turn (cheap; to be measured at n = 3 per condition against the current baseline before it counts as a fix), or a reflection call after the answer that fills the logs (a feature: one more model call per turn against the same token bucket).
+* **Student sign-in with Gmail** (decided; nothing built): needs a Google OAuth client the operator creates and a check of the signed-in address against the Canvas roster. The web channel has no authentication yet and listens on 127.0.0.1 only.
+* **Real tokens** (the owner's own Canvas and GitHub tokens): not used in any run above. The harness masks Canvas, GitHub and Bearer tokens in what it saves (`tai.mask`), but `guards.py` writes the container's environment and `/proc/self/environ` to disk by design: it must never run with a real token in `.env`. A real-token check is a separate read-only smoke against the owner's own account.
+* **Capacity** is still the qwen bucket: a persona prompt of 28-49k tokens per call is admitted at full size; the budget (90,000 tokens a minute by default) means that more than about two such calls a minute go to gpt-oss. How many students that serves, and whether the account's limits can be raised, is the owner's call.
+* A directory-wide search can still read a `.env` inside that directory; credentials stay in the agent process's environment (`docs/SECURITY.md`).
+* The knowledge tool answers from a BM25 stand-in over the released material; the LeanRAG graph with a replaced embedder and extractor is not built.

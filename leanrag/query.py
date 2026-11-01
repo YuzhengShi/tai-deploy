@@ -285,4 +285,8 @@ def query_knowledge(
     top_k: int = 10,
 ) -> dict:
     """Top-level query function.  Loads the index on first call."""
+    stub = _LEANRAG_DIR / "stub_corpus.json"
+    if stub.exists():  # evaluation off AWS: BM25 over a JSON corpus, same result shape (see stub_query.py)
+        from .stub_query import query_stub
+        return query_stub(stub, question, difficulty=difficulty, top_k=top_k)
     return get_index().query(question, difficulty=difficulty, top_k=top_k)

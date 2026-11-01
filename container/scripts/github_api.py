@@ -15,7 +15,7 @@ TOKEN = os.environ.get('GITHUB_TOKEN', '')
 BASE_URL = os.environ.get('GITHUB_BASE_URL', 'https://github.khoury.northeastern.edu/api/v3')
 # Public github.com (used when host="github.com" in request params)
 TOKEN_PUBLIC = os.environ.get('GITHUB_TOKEN_PUBLIC', '')
-BASE_URL_PUBLIC = 'https://api.github.com'
+BASE_URL_PUBLIC = os.environ.get('GITHUB_BASE_URL_PUBLIC', 'https://api.github.com')
 MAX_PAGES = 3
 TIMEOUT = 15
 

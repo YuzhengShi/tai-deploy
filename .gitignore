@@ -73,3 +73,6 @@ terraform/.terraform/
 terraform/*.tfstate*
 terraform/*.tfvars
 terraform/.terraform.lock.hcl
+
+# Evaluation off AWS: the stand-in corpus is course material and stays on the box
+leanrag/stub_corpus.json

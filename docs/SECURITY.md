@@ -78,6 +78,27 @@ const allowedVars = ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'];
 
 > **Note:** Anthropic credentials are mounted so that Claude Code can authenticate when the agent runs. However, this means the agent itself can discover these credentials via Bash or file operations. Ideally, Claude Code would authenticate without exposing credentials to the agent's execution environment, but I couldn't figure this out. **PRs welcome** if you have ideas for credential isolation.
 
+### 6. Tool Guards (PreToolUse hooks)
+
+`container/agent-runner/src/guards.ts` runs before the agent's tools. They are depth, not a wall: the container has network access by
+design and the agent runs as the same user as the process that holds the API credentials. What they do for a non-main group:
+
+| Tool | Guard |
+|------|-------|
+| Bash | Every credential the host handed over (and any credential-named variable) is unset for the command. No network tools, `eval`, base64-into-shell, `/dev/tcp`; quote-split spellings (`c''url`) are folded first. No mention of `/proc` except the plain system summaries. A shell may only read `COMPETENCY.md`. Files a command writes are capped (`ulimit -f`); a full workspace refuses every command but a deletion or a measurement. |
+| Read, Grep | Paths are resolved and symlinks followed before the sensitive-file patterns (`.env*`, the database, every `/proc/<pid>/` entry) apply. |
+| WebFetch | http(s) only; the host is resolved and refused when it is loopback, private, link-local (the cloud metadata address), a docker address or an internal name. 15 calls per answer. |
+| Write, Edit | 5 MB per write; workspace size; `COMPETENCY.md` may not have three or more concepts newly raised to 0.8 or more in one write (both line formats). |
+| github_query (MCP) | owner, org and user must each be the student's own account or a course organisation; repository and path parameters cannot change the API path. |
+
+A blocking hook must return `hookSpecificOutput.permissionDecision: 'deny'`; the shape upstream used (`decision: 'block'`) is ignored by
+the SDK, so no guard stopped anything before this fork (see `eval/RESULTS.md`). The guards have unit tests in
+`container/agent-runner/test/` and are exercised end to end by `eval/harness/guards.py`.
+
+Known gaps: a directory-wide search (`Grep` over a folder, `grep -r`) can still read a `.env` file inside it; the credentials stay in the
+agent process's environment, so a determined same-user process can read `/proc/<pid>/environ` by a route the patterns do not name; a host
+name can change its address between the check and the fetch.
+
 ## Privilege Comparison
 
 | Capability | Main Group | Non-Main Group |

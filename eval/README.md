@@ -18,15 +18,17 @@ stand-ins, and no real token or repository is used. The course material the know
 | --- | --- |
 | `mock_llm.py` | A scripted Anthropic Messages API. A directive `MOCK:<name>` in a student's message picks a JSON script of fixed tool calls, sleeps, errors and answers, so a guard/resume/scheduling test has a ground truth that does not depend on a model's mood. It also reports what it was shown (message count, markers from earlier turns). |
 | `mock_services.py` | Canvas (`/api/v1`) and GitHub (`/ghe/api/v3`) stand-ins with canaries in Bob's and Cy's data; every request is logged. |
-| `litellm/` | The gateway config (aliases `qwen` = reasoning off, `gpt-oss` = reasoning low) and a callback that strips replayed thinking blocks and logs the upstream status of every call. |
+| `litellm/` | The gateway config (aliases `qwen` = reasoning off, `gpt-oss` = reasoning low; qwen falls back to gpt-oss) and a callback that strips replayed thinking blocks, logs the upstream status of every call and keeps qwen inside TAi's share of the tokens per minute (`test_budget.py` checks its arithmetic). |
 | `harness/tai.py` | The client the tests share: register a chat, send, long-poll the web channel's outbox, read transcripts/logs/SQLite/`docker ps`. |
 | `harness/smoke.py` | One scripted message through the real orchestrator and an agent container, end to end. |
 | `harness/guards.py` | Item 2a, hooks and access control, with `--variant as-shipped` (the upstream runner, see `variants/`) / `current` (the repository's source as synced). |
-| `harness/resume.py` | Item 2b, resume across turns, containers, restarts, the "10-query cap", and what the student sees when the model API fails. |
-| `harness/sched.py` | Item 3, scheduling. |
+| `harness/resume.py` | Item 2b, resume across turns, containers, restarts, the session cap (RS3, with `TAI_MAX_TURNS_PER_SESSION=4`), and what the student sees when the model API fails (RS5). |
+| `harness/sched.py` | Item 3, scheduling; `--precompiled` runs it on `tai-agent:clean`, the image built from the Dockerfile without a cache, with no tsc at container start. |
+| `harness/fallback.py` | Does gpt-oss answer when qwen cannot (a failing deployment, plain and streaming) and does the qwen budget spill to gpt-oss, on the `/v1/messages` route Claude Code uses; read off the gateway's log. `stack.sh fallbacktest [budget]`. |
+| `harness/leak_samples.py`, `harness/peek.py` | The student-visible text of the turns that leaked reasoning or tool markup (the samples `src/router.ts` is written against); a group's last tool calls. |
 | `harness/scenarios.py` | Item 1, `qwen` against `gpt-oss`: scripted student turns, automatable checks taken from the persona, a 30-turn session. |
 | `variants/` | `index.ts.as-shipped`: the agent runner exactly as upstream has it (the before of every guard measurement). The "after" is the repository's own `container/agent-runner/src/`, never a copy. |
-| `host/` | Scripts that run from Git Bash and drive the box over ssh (`run.sh` syncs this tree and runs one script from `host/remote/`). |
+| `host/` | Scripts that run from Git Bash and drive the box over ssh (`run.sh` syncs this tree and runs one script from `host/remote/`; `rund.sh` runs a harness script detached and `rund.sh look NAME` reads it; `remote/diag.sh` is read-only: orchestrator errors and events, load, a group's runner log, the image build log). |
 
 ## Running it (from Git Bash, in `eval/host`)
 
@@ -64,3 +66,18 @@ on), and a qwen bucket is shared with anything else on the same account, so the 
   (0.2.34) ignores, so no guard ever stopped a tool.
 * `container/scripts/github_api.py`: the public-GitHub base URL can be set (`GITHUB_BASE_URL_PUBLIC`).
 * `leanrag/query.py` + `leanrag/stub_query.py`: BM25 over a JSON corpus behind the same tool, when `leanrag/stub_corpus.json` exists.
+
+## Fixes made for what the tests found (see RESULTS.md, "After the fixes")
+
+* `container/agent-runner/src/guards.ts`, `github-access.ts`: the tool guards, importable and unit tested (`container/agent-runner/test/`).
+  Every guard of a tool is one hook, so the model is told the reason for a refusal.
+* `container/agent-runner/src/api-errors.ts`, `session-log.ts`, `index.ts`: plain-words answers to a failed model request, bounded retries
+  and timeouts, a session cap that fires (and is cleared on the host: `ContainerOutput.resetSession`), the runner's own
+  `competency/interaction-summary.md`.
+* `src/router.ts`, `src/index.ts`: a normal reply goes through `formatOutbound` too, and `stripInternalTags` removes the reasoning and
+  tool-call text gpt-oss writes into its answers.
+* `container/entrypoint.sh`, `Dockerfile`: the dist built into the image runs; `TAI_COMPILE_ON_START=1` compiles the mounted source.
+* `litellm/config.yaml`, `tai_callbacks.py`: qwen falls back to gpt-oss, and stays inside `TAI_QWEN_TPM_BUDGET`.
+* `src/config.ts`: `IDLE_TIMEOUT` 2 min, `CONTAINER_TIMEOUT` 15 min.
+
+The settings are in `docs/SETTINGS.md`, the guards in `docs/SECURITY.md`.

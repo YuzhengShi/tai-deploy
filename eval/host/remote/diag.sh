@@ -25,6 +25,8 @@ case "${1:-errors}" in
   runner)
     f=$(ls -t "$HOME/tai-eval/tai/groups/${2:?folder}/logs/"container-*.log 2>/dev/null | head -1)
     [ -n "$f" ] && { echo "$f"; tail -n 40 "$f" | cut -c1-240; } || echo "no container log for $2" ;;
+  latest)  # the newest group folder that starts with a prefix (scenario runs stamp theirs): diag.sh latest s6_code_review_qwen
+    basename "$(ls -td "$HOME/tai-eval/tai/groups/${2:?prefix}"* 2>/dev/null | head -1)" ;;
   build)   # the image build logs: diag.sh build [N lines] [eval|clean]
     tail -n "${2:-30}" "$E/logs/build_image${3:+_}${3#eval}.log" 2>&1 | cut -c1-200
     pgrep -af "docker build" | cut -c1-120 ;;

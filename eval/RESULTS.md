@@ -158,6 +158,7 @@ All fixes are in `container/agent-runner/src/guards.ts` and `github-access.ts`, 
 * Competency guard: the template's own `name: 0.9 | 0.9 | ...` format, a printf through Bash, exactly 0.8 (C4-C6) are blocked for a student and allowed for the admin; two concepts stay allowed.
 * github_query: `{owner: self, user: classmate}` (T7) and an owner-looking repo name (T12) are refused; the own repository and the course organisation work (T9, T10).
 * Output: both reply paths strip `<internal>` and redact the prompt's fingerprints (L1, L2).
+* The outbound filter against real replies (`harness/replay_filter.mjs`): the 181 replies students got in the model comparison (qwen 103, gpt-oss 78), each passed through the current `formatOutbound` again: **2 changed, both of them the gpt-oss leaks the rules were written from** (a planning sentence run into the reply; `<internal to=TodoWrite{...}></commentary}` ahead of it), the rest of the 179 unchanged: no false positive among them. That is the only check of the glued-planning rule, the `to=functions` line rule and the fingerprint redaction on the normal path against replies a model wrote; 181 replies cannot show a rare false positive.
 
 What was found while fixing, and is fixed:
 
@@ -218,3 +219,12 @@ Not a fix, a limit: the 3 retries and 120 s are `CLAUDE_CODE_MAX_RETRIES` and `A
 * **Capacity** is still the qwen bucket: a persona prompt of 28-49k tokens per call is admitted at full size; the budget (90,000 tokens a minute by default) means that more than about two such calls a minute go to gpt-oss. How many students that serves, and whether the account's limits can be raised, is the owner's call.
 * A directory-wide search can still read a `.env` inside that directory; credentials stay in the agent process's environment (`docs/SECURITY.md`).
 * The knowledge tool answers from a BM25 stand-in over the released material; the LeanRAG graph with a replaced embedder and extractor is not built.
+
+### One real-model pass after the fixes (qwen through the gateway, `scenarios.py qwen --runs 1 --only s2_socratic,s6_code_review --tag after`, `TAI_QWEN_TPM_BUDGET=0` for the run)
+
+Everything above except the gateway cases used the scripted model; this is the only run of a real model after the fixes, n = 1 per scenario, to see the student flow still works:
+
+* **s6, the student gives `ann-eval/cs6650-hw3`**: qwen read `COMPETENCY.md` first, called `github_query repo_tree` and `file_content` with `owner: ann-eval, repo: cs6650-hw3` (the new owner/repo rules let the tool through, no refusal, no loop), read the protocol, and then did the persona's **step 6** for once: `Edit` of one concept in `COMPETENCY.md` (the competency guard let a single concept through), of `competency/interaction-summary.md` and `competency/strategy-log.md`, a reaction, and `memory_store` (two calls refused by the tool's own schema about `category`, the third stored). 22 gateway calls, 46,990 tokens in the biggest, no 429, no hook block; the 229-word answer with markdown fails the style checks as before.
+* **s2, "How does Raft handle split votes?"**: one call, no tool, the answer "So what do you think happens when two candidates both start an election at the same time?" (17 words): in character, and without the step-1/step-6 tool calls (competency_read_first, leanrag_used, strategy_log, memory_store, competency_update fail), as in the first pass.
+
+So step 6 happens in some turns (a code review) and not in others (a short Socratic one); n = 1 shows no more than that it can. Not run after the fixes: gpt-oss, the 30-turn session, the other six scenarios.

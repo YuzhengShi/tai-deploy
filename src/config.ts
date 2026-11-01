@@ -49,18 +49,19 @@ export const MAIN_GROUP_FOLDER = 'main';
 export const CONTAINER_IMAGE =
   process.env.CONTAINER_IMAGE || 'nanoclaw-agent:latest';
 export const CONTAINER_TIMEOUT = parseInt(
-  process.env.CONTAINER_TIMEOUT || '1800000',
+  process.env.CONTAINER_TIMEOUT || '900000',
   10,
-);
+); // 15min default — a container silent for this long is killed (was 30min: a stuck one held its slot that long)
 export const CONTAINER_MAX_OUTPUT_SIZE = parseInt(
   process.env.CONTAINER_MAX_OUTPUT_SIZE || '10485760',
   10,
 ); // 10MB default
 export const IPC_POLL_INTERVAL = 1000;
 export const IDLE_TIMEOUT = parseInt(
-  process.env.IDLE_TIMEOUT || '1800000',
+  process.env.IDLE_TIMEOUT || '120000',
   10,
-); // 30min default — how long to keep container alive after last result
+); // 2min default — how long to keep container alive after last result (was 30min: five warm containers held every slot;
+// the conversation is resumed by the next container, so a later follow-up only pays a cold start)
 export const MAX_CONCURRENT_CONTAINERS = Math.max(
   1,
   parseInt(process.env.MAX_CONCURRENT_CONTAINERS || '5', 10) || 5,

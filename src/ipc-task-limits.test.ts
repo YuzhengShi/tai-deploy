@@ -17,7 +17,7 @@ vi.mock('./logger.js', () => ({ logger: { debug: vi.fn(), info: vi.fn(), warn: v
 
 import { _initTestDatabase, countOpenContainerTasks, countTaskCreationsSince, createTask, getAllTasks, getDb, getTaskById, setRegisteredGroup } from './db.js';
 import { answer, processTaskIpc, IpcDeps } from './ipc.js';
-import { TASK_TOO_OFTEN } from './task-limits.js';
+import { MAX_CREATED_PER_DAY, MAX_OPEN_TASKS, MIN_RECURRING_GAP_MS, TASK_TOO_OFTEN } from './task-limits.js';
 import { RegisteredGroup } from './types.js';
 
 // A student's agent schedules tasks for its own group, with a prompt it chose, and may stop them again. The host decides, whatever wrote the request file: how often a
@@ -76,25 +76,27 @@ async function ask(data: Record<string, unknown>, source = 'ada', isMain = false
 const tasksOf = (folder: string) => getAllTasks().filter((t) => t.group_folder === folder);
 
 describe('how often a repeating task may run', () => {
-  it('refuses a cron schedule that runs more than once an hour anywhere in it, makes no task, and says so', async () => {
-    for (const cron of ['* * * * *', '*/5 * * * *', '0,30 * * * *', '*/5 * * * 1']) {
+  it('refuses a cron schedule that runs more than once every 6 hours anywhere in it, makes no task, and says so', async () => {
+    for (const cron of ['* * * * *', '*/5 * * * *', '0,30 * * * *', '*/5 * * * 1', '0 * * * *', '0 */4 * * *', '0 9,14 * * *']) {
       const got = await ask(request({ schedule_type: 'cron', schedule_value: cron }));
       expect(got, cron).toEqual({ ok: false, message: TASK_TOO_OFTEN });
     }
     expect(tasksOf('ada')).toHaveLength(0);
   });
 
-  it('takes a schedule with an hour or more between runs', async () => {
-    for (const cron of ['0 * * * *', '0 9 * * 1-5', '30 8,17 * * *']) {
+  it('takes a schedule with six hours or more between runs', async () => {
+    for (const cron of ['0 */6 * * *', '0 9 * * 1-5', '30 8,17,23 * * *']) {
       expect((await ask(request({ schedule_type: 'cron', schedule_value: cron }))).ok, cron).toBe(true);
     }
     expect(tasksOf('ada')).toHaveLength(3);
   });
 
-  it('refuses an interval under 60 minutes and takes 60', async () => {
-    expect(await ask(request({ schedule_type: 'interval', schedule_value: '3599999' }))).toEqual({ ok: false, message: TASK_TOO_OFTEN });
+  it('refuses an interval under 6 hours and takes 6', async () => {
+    expect(MIN_RECURRING_GAP_MS).toBe(6 * 60 * 60 * 1000);
+    expect(await ask(request({ schedule_type: 'interval', schedule_value: '21599999' }))).toEqual({ ok: false, message: TASK_TOO_OFTEN });
+    expect(await ask(request({ schedule_type: 'interval', schedule_value: '3600000' }))).toEqual({ ok: false, message: TASK_TOO_OFTEN });   // the old floor: an hour
     expect(await ask(request({ schedule_type: 'interval', schedule_value: '1000' }))).toEqual({ ok: false, message: TASK_TOO_OFTEN });
-    expect((await ask(request({ schedule_type: 'interval', schedule_value: '3600000' }))).ok).toBe(true);
+    expect((await ask(request({ schedule_type: 'interval', schedule_value: '21600000' }))).ok).toBe(true);
     expect(tasksOf('ada')).toHaveLength(1);
   });
 
@@ -136,48 +138,50 @@ describe('how far ahead, how long, and what the instructions begin with', () => 
 });
 
 describe('how many', () => {
-  it('ten open tasks at most: the eleventh is refused, a paused one is still open, and cancelling one gives its place back', async () => {
+  it('six open tasks at most: the seventh is refused, a paused one is still open, and cancelling one gives its place back', async () => {
+    expect(MAX_OPEN_TASKS).toBe(6);
     const ids: string[] = [];
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < MAX_OPEN_TASKS; i++) {
       const got = await ask(request());
       expect(got.ok, `task ${i + 1}`).toBe(true);
       ids.push(got.taskId!);
     }
-    expect(countOpenContainerTasks('ada')).toBe(10);
+    expect(countOpenContainerTasks('ada')).toBe(MAX_OPEN_TASKS);
     const refused = await ask(request());
-    expect(refused).toEqual({ ok: false, message: 'Not scheduled: 10 reminders or routines are already set up here (running or paused). Cancel one first; list_tasks shows them.' });
+    expect(refused).toEqual({ ok: false, message: 'Not scheduled: 6 reminders or routines are already set up here (running or paused). Cancel one first; list_tasks shows them.' });
     await ask({ type: 'pause_task', taskId: ids[0] });
     expect((await ask(request())).ok).toBe(false);                                                         // a paused one is one resume away from running
     await ask({ type: 'cancel_task', taskId: ids[0] });
-    expect(countOpenContainerTasks('ada')).toBe(9);
+    expect(countOpenContainerTasks('ada')).toBe(MAX_OPEN_TASKS - 1);
     expect((await ask(request())).ok).toBe(true);
   });
 
   it('counts the tasks agents made, not the host\'s own, and not another group\'s', async () => {
     createTask({ id: 'patrol-ada-1730000000000', group_folder: 'ada', chat_jid: 'web:ada', prompt: '[TEACHING_PATROL]\nDo it', schedule_type: 'cron', schedule_value: '0 9 * * 1-5', context_mode: 'group', next_run: null, status: 'active', created_at: '2026-10-01T00:00:00.000Z', origin: 'system' });
-    for (let i = 0; i < 10; i++) expect((await ask(request({ targetJid: 'web:bob' }), 'bob')).ok).toBe(true);
-    for (let i = 0; i < 10; i++) expect((await ask(request())).ok, `ada ${i + 1}`).toBe(true);
-    expect(countOpenContainerTasks('ada')).toBe(10);
-    expect(countOpenContainerTasks('bob')).toBe(10);
+    for (let i = 0; i < MAX_OPEN_TASKS; i++) expect((await ask(request({ targetJid: 'web:bob' }), 'bob')).ok).toBe(true);
+    for (let i = 0; i < MAX_OPEN_TASKS; i++) expect((await ask(request())).ok, `ada ${i + 1}`).toBe(true);
+    expect(countOpenContainerTasks('ada')).toBe(MAX_OPEN_TASKS);
+    expect(countOpenContainerTasks('bob')).toBe(MAX_OPEN_TASKS);
   });
 
-  it('twenty tasks made in a day at most, counted when they are made: cancelling does not give the count back, and a creation older than a day does not count', async () => {
-    for (let i = 0; i < 20; i++) {
+  it('twelve tasks made in a day at most, counted when they are made: cancelling does not give the count back, and a creation older than a day does not count', async () => {
+    expect(MAX_CREATED_PER_DAY).toBe(12);
+    for (let i = 0; i < MAX_CREATED_PER_DAY; i++) {
       const got = await ask(request());
       expect(got.ok, `task ${i + 1}`).toBe(true);
       await ask({ type: 'cancel_task', taskId: got.taskId });                                              // stays under the open limit; the row is gone, the creation is not
     }
     expect(countOpenContainerTasks('ada')).toBe(0);
-    expect(countTaskCreationsSince('ada', new Date(Date.now() - DAY).toISOString())).toBe(20);
-    expect(await ask(request())).toEqual({ ok: false, message: 'Not scheduled: at most 20 can be set up in a day, and that many were. Try again tomorrow.' });
+    expect(countTaskCreationsSince('ada', new Date(Date.now() - DAY).toISOString())).toBe(MAX_CREATED_PER_DAY);
+    expect(await ask(request())).toEqual({ ok: false, message: 'Not scheduled: at most 12 can be set up in a day, and that many were. Try again tomorrow.' });
     // five of them were made 25 hours ago
     getDb().prepare(`UPDATE task_creations SET created_at = ? WHERE rowid IN (SELECT rowid FROM task_creations WHERE group_folder = 'ada' LIMIT 5)`).run(new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString());
-    expect(countTaskCreationsSince('ada', new Date(Date.now() - DAY).toISOString())).toBe(15);
+    expect(countTaskCreationsSince('ada', new Date(Date.now() - DAY).toISOString())).toBe(MAX_CREATED_PER_DAY - 5);
     expect((await ask(request())).ok).toBe(true);
   });
 
   it('keeps one group\'s count from another\'s', async () => {
-    for (let i = 0; i < 20; i++) await ask({ type: 'cancel_task', taskId: (await ask(request())).taskId });
+    for (let i = 0; i < MAX_CREATED_PER_DAY; i++) await ask({ type: 'cancel_task', taskId: (await ask(request())).taskId });
     expect((await ask(request())).ok).toBe(false);
     expect((await ask(request({ targetJid: 'web:bob' }), 'bob')).ok).toBe(true);
   });

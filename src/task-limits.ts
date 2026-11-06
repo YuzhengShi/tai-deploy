@@ -8,16 +8,23 @@
  * Why a student's task needs limits at all: every task runs a container, with the model, on the owner's budget, at a time and as often as the student's agent says,
  * and a task survives the conversation that made it. Without a floor on the gap, a count and a horizon, one student's "remind me every minute" is a container every
  * minute for good.
+ *
+ * The numbers (the owner asked for them tightened on 2026-11-06, and left the choice to the lead). The first version allowed a gap of one hour and 10 open tasks: 240
+ * containers a day from one student (and 20 new tasks a day on top), each one the model on the owner's budget. A reminder or a routine for a student of this course is a
+ * morning and an evening at most, so: a gap of 6 hours (a morning, an afternoon and an evening all fit: 0 9,15,21 * * *), 6 open tasks (a week's reminders for one
+ * deadline and a couple of routines), 12 made in a day. Worst case for one student now: 6 repeating tasks x 4 runs + 12 one-time runs = 36 containers a day, about a
+ * seventh of before. Changing a number here means changing the same text in container/agent-runner/src/task-limits.ts (a test fails when the two differ) and the
+ * numbers in docs/SECURITY.md.
  */
 
 import { CronExpressionParser } from 'cron-parser';
 
-/** A repeating task may not run more often than once an hour (the gap between ANY two runs of a cron schedule, not only the first two). */
-export const MIN_RECURRING_GAP_MS = 60 * 60 * 1000;
+/** A repeating task may not run more often than once every 6 hours (the gap between ANY two runs of a cron schedule, not only the first two). */
+export const MIN_RECURRING_GAP_MS = 6 * 60 * 60 * 1000;
 /** Tasks that agents scheduled and are still there (active or paused: a paused one is one resume away from running), per group. */
-export const MAX_OPEN_TASKS = 10;
+export const MAX_OPEN_TASKS = 6;
 /** Tasks created, per group, in a rolling 24 hours: counted when they are made, so that cancelling one does not give the count back. */
-export const MAX_CREATED_PER_DAY = 20;
+export const MAX_CREATED_PER_DAY = 12;
 /** A one-time task may be set at most this far ahead (the voice side says 60 days too). */
 export const MAX_ONCE_AHEAD_MS = 60 * 24 * 60 * 60 * 1000;
 /** Characters of the instructions a task carries. */
@@ -25,7 +32,7 @@ export const MAX_PROMPT_CHARS = 4000;
 /** The heads of the host's own tasks' prompts (src/task-origin.ts SYSTEM_TASK_KINDS has them with the ids): a student's task may not start like one. */
 export const SYSTEM_PROMPT_MARKERS: readonly string[] = ['[TEACHING_PATROL]', '[COMPETENCY_BOOTSTRAP]', '[COURSE_SYNC]'];
 
-export const TASK_TOO_OFTEN = 'Not scheduled: a repeating reminder may not run more often than once an hour.';
+export const TASK_TOO_OFTEN = 'Not scheduled: a repeating reminder may not run more often than once every 6 hours.';
 
 export interface TaskRequest {
   prompt: string;

@@ -135,7 +135,7 @@ function createSchema(database: Database.Database): void {
   }
   classifyTaskOrigins(database);
 
-  // How many tasks each group's agent has made lately (src/task-limits.ts: at most 20 in a rolling 24 hours). A row per creation, kept apart from scheduled_tasks so that
+  // How many tasks each group's agent has made lately (src/task-limits.ts: MAX_CREATED_PER_DAY in a rolling 24 hours). A row per creation, kept apart from scheduled_tasks so that
   // cancelling a task, which deletes it, does not give the count back.
   database.exec(`
     CREATE TABLE IF NOT EXISTS task_creations (group_folder TEXT NOT NULL, created_at TEXT NOT NULL);

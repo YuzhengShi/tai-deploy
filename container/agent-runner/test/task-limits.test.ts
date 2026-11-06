@@ -35,14 +35,15 @@ describe.each([
   const soon = (ms: number) => new Date(NOW.getTime() + ms).toISOString();
 
   it('says what the limits are', () => {
-    expect([limits.MIN_RECURRING_GAP_MS, limits.MAX_OPEN_TASKS, limits.MAX_CREATED_PER_DAY, limits.MAX_ONCE_AHEAD_MS, limits.MAX_PROMPT_CHARS]).toEqual([3_600_000, 10, 20, 60 * DAY, 4000]);
+    expect([limits.MIN_RECURRING_GAP_MS, limits.MAX_OPEN_TASKS, limits.MAX_CREATED_PER_DAY, limits.MAX_ONCE_AHEAD_MS, limits.MAX_PROMPT_CHARS]).toEqual([6 * 3_600_000, 6, 12, 60 * DAY, 4000]);
   });
 
-  describe('a repeating task: no two runs less than an hour apart', () => {
-    it('refuses an interval under 60 minutes, and takes 60 exactly', () => {
-      expect(refusal(check('remind me', 'interval', '3599999'))).toBe(limits.TASK_TOO_OFTEN);
+  describe('a repeating task: no two runs less than 6 hours apart', () => {
+    it('refuses an interval under 6 hours, and takes 6 exactly', () => {
+      expect(refusal(check('remind me', 'interval', '21599999'))).toBe(limits.TASK_TOO_OFTEN);
+      expect(refusal(check('remind me', 'interval', '3600000'))).toBe(limits.TASK_TOO_OFTEN);         // the old floor, an hour
       expect(refusal(check('remind me', 'interval', '60000'))).toBe(limits.TASK_TOO_OFTEN);
-      expect(check('remind me', 'interval', '3600000').ok).toBe(true);
+      expect(check('remind me', 'interval', '21600000').ok).toBe(true);
       expect(check('remind me', 'interval', String(DAY)).ok).toBe(true);
     });
 
@@ -50,11 +51,11 @@ describe.each([
       for (const bad of ['0', '-3600000', 'abc', '']) expect(refusal(check('remind me', 'interval', bad)), bad).toMatch(/is not a number of milliseconds above zero/);
     });
 
-    it('refuses a cron schedule with a gap under an hour anywhere in it, and takes one with hourly or longer gaps', () => {
-      for (const cron of ['* * * * *', '*/5 * * * *', '*/59 * * * *', '0,30 * * * *', '0,5 * * * *', '*/5 * * * 1', '0,5 9 1 1 *', '* * * * * *', '*/10 * * * * *']) {
+    it('refuses a cron schedule with a gap under 6 hours anywhere in it, and takes one with gaps of 6 hours or more', () => {
+      for (const cron of ['* * * * *', '*/5 * * * *', '*/59 * * * *', '0,30 * * * *', '0,5 * * * *', '*/5 * * * 1', '0,5 9 1 1 *', '* * * * * *', '*/10 * * * * *', '0 * * * *', '15 * * * *', '0 */2 * * *', '0 */4 * * *', '0 9,14 * * *']) {
         expect(refusal(check('remind me', 'cron', cron)), cron).toBe(limits.TASK_TOO_OFTEN);
       }
-      for (const cron of ['0 * * * *', '15 * * * *', '0 */2 * * *', '0 9 * * *', '0 9 * * 1-5', '30 8,17 * * 1-5', '0 0 1 * *', '0 9 1 1 *', '0 0 29 2 *']) {
+      for (const cron of ['0 */6 * * *', '0 9,15,21 * * *', '0 9 * * *', '0 9 * * 1-5', '30 8,17,23 * * 1-5', '0 0 1 * *', '0 9 1 1 *', '0 0 29 2 *']) {
         expect(check('remind me', 'cron', cron).ok, cron).toBe(true);
       }
     });
@@ -120,22 +121,22 @@ describe.each([
   });
 
   describe('the counts', () => {
-    it('refuse the tenth task beyond nine open ones, however it is scheduled', () => {
-      expect(check('remind me', 'once', soon(DAY), { open: 9, createdLastDay: 0 }).ok).toBe(true);
-      expect(refusal(check('remind me', 'once', soon(DAY), { open: 10, createdLastDay: 0 }))).toBe('Not scheduled: 10 reminders or routines are already set up here (running or paused). Cancel one first; list_tasks shows them.');
-      expect(check('remind me', 'once', soon(DAY), { open: 11, createdLastDay: 0 }).ok).toBe(false);
+    it('refuse the seventh task beyond six open ones, however it is scheduled', () => {
+      expect(check('remind me', 'once', soon(DAY), { open: 5, createdLastDay: 0 }).ok).toBe(true);
+      expect(refusal(check('remind me', 'once', soon(DAY), { open: 6, createdLastDay: 0 }))).toBe('Not scheduled: 6 reminders or routines are already set up here (running or paused). Cancel one first; list_tasks shows them.');
+      expect(check('remind me', 'once', soon(DAY), { open: 7, createdLastDay: 0 }).ok).toBe(false);
     });
 
-    it('refuse the twenty-first task made in a day', () => {
-      expect(check('remind me', 'once', soon(DAY), { open: 0, createdLastDay: 19 }).ok).toBe(true);
-      expect(refusal(check('remind me', 'once', soon(DAY), { open: 0, createdLastDay: 20 }))).toBe('Not scheduled: at most 20 can be set up in a day, and that many were. Try again tomorrow.');
+    it('refuse the thirteenth task made in a day', () => {
+      expect(check('remind me', 'once', soon(DAY), { open: 0, createdLastDay: 11 }).ok).toBe(true);
+      expect(refusal(check('remind me', 'once', soon(DAY), { open: 0, createdLastDay: 12 }))).toBe('Not scheduled: at most 12 can be set up in a day, and that many were. Try again tomorrow.');
     });
 
     it('say what is wrong with the task before what is wrong with the count', () => {
-      const full = { open: 10, createdLastDay: 20 };
+      const full = { open: 6, createdLastDay: 12 };
       expect(refusal(check('x'.repeat(4001), 'once', soon(DAY), full))).toMatch(/the instructions are 4,001 characters/);
       expect(refusal(check('remind me', 'interval', '1000', full))).toBe(limits.TASK_TOO_OFTEN);
-      expect(refusal(check('remind me', 'once', soon(DAY), full))).toMatch(/10 reminders or routines/);
+      expect(refusal(check('remind me', 'once', soon(DAY), full))).toMatch(/6 reminders or routines/);
     });
   });
 });

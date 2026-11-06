@@ -104,12 +104,12 @@ TAs ask students about homework code AND weekly concepts. Students must:
   - `context_scope` (theoretical / implementation / debugging / verbal)
   - `demonstrated_via` (socratic_dialogue / code_review / mock_interview / homework)
 - [x] Agent instruction in global CLAUDE.md: after every substantive interaction, update COMPETENCY.md with all four dimensions
-- [ ] Verbal vs written gap detection: flag concepts where student has theoretical/implementation scope but NOT verbal scope → mock interview risk
+- [x] Verbal vs written gap detection: flag concepts where student has theoretical/implementation scope but NOT verbal scope → mock interview risk (`src/competency-writer.ts` `verbalGaps`, written to `competency/interviews.md` after each exchange; `docs/STUDENT_MODEL.md`)
 
 #### 1B. Emergent Misconception Discovery
 - [x] Add misconception tracking section to COMPETENCY.md (starts empty, never pre-loaded)
 - [x] Agent instruction: when student says something contradicting a concept, record it as candidate misconception
-- [ ] Distinguish HOLDING vs IDENTIFYING misconception (student discussing it correctly vs believing it)
+- [x] Distinguish HOLDING vs IDENTIFYING misconception (student discussing it correctly vs believing it) (the host's extractor tells them apart: only `holding` at confidence 0.8 or more is recorded, `identifying` writes nothing)
 - [x] Track remediation attempts and effectiveness
 - [x] When same misconception frequency >= 3, mark as confirmed → agent proactively addresses in future
 
@@ -121,7 +121,7 @@ TAs ask students about homework code AND weekly concepts. Students must:
   - confidence HIGH + scope missing "implementation" → DEMONSTRATE (code walkthrough)
   - Active misconception detected → CORRECT (targeted remediation)
   - confidence HIGH + stability HIGH → CHALLENGE (push to edge cases)
-- [ ] Log strategy used and outcome in COMPETENCY.md Teaching Strategy Log
+- [x] Log strategy used and outcome in COMPETENCY.md Teaching Strategy Log (the host writes `competency/strategy-log.md`: one `CHAT on CONCEPT | before→after | strategy | outcome | note` line per judged approach)
 
 #### 1D. Proactive Teaching Patrol
 - [x] Schedule daily task (cron 9am weekdays): agent reads COMPETENCY.md, decides who needs intervention
@@ -131,7 +131,8 @@ TAs ask students about homework code AND weekly concepts. Students must:
   - Concept with high confidence but low stability + 14+ days since last evidence → spaced review
   - Misconception confirmed but not yet remediated → targeted correction
 - [x] 90% of patrols should result in "no action needed" — agent value is judgment, not volume
-- [ ] Log all proactive decisions (including "decided NOT to intervene") in Proactive Intervention Log
+- [x] Gate (`src/patrol-gate.ts`, `docs/PATROL.md`): code decides before any container whether a student's patrol needs the model today (a new signal, or the weekly full check); every skip is a row in `task_run_logs`
+- [x] Log all proactive decisions (including "decided NOT to intervene") in Proactive Intervention Log (`src/task-scheduler.ts` + `src/intervention-log.ts`: one line per patrol run in `competency/intervention-log.md`, gate skips included)
 
 #### 1E. Mock Interview Practice (Text-Based)
 - [x] Agent can conduct text-based mock interviews based on homework Learning Outcomes

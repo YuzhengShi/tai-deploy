@@ -1,4 +1,5 @@
 import { execSync } from 'child_process';
+import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -6,18 +7,26 @@ import { fileURLToPath } from 'url';
 import {
   ADMIN_PHONE_NUMBERS,
   ASSISTANT_NAME,
+  CONTAINER_PREFIX,
   DATA_DIR,
   DEBOUNCE_MS,
+  GROUPS_DIR,
   IDLE_TIMEOUT,
   MAIN_GROUP_FOLDER,
   POLL_INTERVAL,
+  REPLY_RULE,
+  STORE_DIR,
   TRIGGER_PATTERN,
 } from './config.js';
 import { WebChannel } from './channels/web.js';
+import { seedCompetencyFile } from './competency-seed.js';
+import type { Portal } from './portal/server.js';
+import { mediaStore, startPortal } from './portal/start.js';
 import { WhatsAppChannel } from './channels/whatsapp.js';
 import {
   ContainerOutput,
   runContainerAgent,
+  spawnToolHost,
   writeGroupsSnapshot,
   writeTasksSnapshot,
 } from './container-runner.js';
@@ -36,15 +45,28 @@ import {
   clearSession,
   storeChatMetadata,
   storeMessage,
+  storeMessageDirect,
 } from './db.js';
+import { readEnvFile } from './env.js';
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
+import { masterySnapshot, progressSteps } from './progress.js';
+import { trimClosingFormula, withReplyRule } from './reply-shape.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { hasBootstrapRun, seedCompetencyBootstrap } from './competency-bootstrap.js';
+import { createCompetencyWriter } from './competency-writer.js';
+import { takeSendFlag } from './intervention-log.js';
 import { seedCourseSync } from './course-sync.js';
+import { chatFromPortal, createVoiceHub } from './voice/hub.js';
+import { DockerToolHost } from './voice/tool-host.js';
+import { startCourseStatusJob } from './course-status.js';
+import { courseUpdates, type CourseUpdate } from './course-updates.js';
+import { startStudentCourseJob } from './student-course.js';
 import { startLeanRAGSync } from './leanrag-sync.js';
 import { seedTeachingPatrol } from './teaching-patrol.js';
+import { anySeed, seedSwitches } from './seeds.js';
+import { TurnStatus, progressForwarder, type MessageExtras, type ProgressEvent } from './turn-status.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
 
@@ -84,6 +106,23 @@ function stopTypingIndicator(channel: Channel, chatJid: string): void {
     delete typingIntervals[chatJid];
   }
   channel.setTyping?.(chatJid, false);
+  channel.turn?.setStatus(chatJid, null);          // nothing is being worked on: nothing is said about it
+}
+
+/**
+ * A turn begins (a container starts for a message, or a message is piped into one that was idle): the chips collected for the last answer are not this
+ * one's, and the page may say TAi is working (the runner adds what it is doing, src/turn-status.ts). Web channel only.
+ */
+function beginTurnView(channel: Channel, chatJid: string): void {
+  channel.turn?.resetSources(chatJid);
+  channel.turn?.beginTurn?.(chatJid);              // (streaming: the last turn's preview state; nothing without the flag)
+  channel.turn?.setStatus(chatJid, { state: 'working' });
+}
+
+/** What goes with TAi's answer to the channel: what its tools returned for this turn ("Looked at"), taken once; nothing for a notice that is not an answer. */
+function answerExtras(channel: Channel, chatJid: string): MessageExtras | undefined {
+  const sources = channel.turn?.takeSources(chatJid);
+  return sources ? { sources } : undefined;
 }
 
 /** Check if a WhatsApp sender is on the admin allowlist. */
@@ -98,13 +137,25 @@ const CHANNEL_NAMES = (process.env.TAI_CHANNELS || 'whatsapp')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
-// TAI_NO_SEEDS=1 skips the background seeding (competency bootstrap, teaching patrol, course sync, LeanRAG sync): they spawn
-// containers on their own and have filled every slot before; evaluation runs decide per run whether they are on.
-const NO_SEEDS = process.env.TAI_NO_SEEDS === '1';
+// Which background jobs run (competency bootstrap, teaching patrol, the course status page, the original's course sync and LeanRAG sync):
+// they spawn containers on their own and have filled every slot before; see seeds.ts for the switches.
+const SEEDS = seedSwitches(process.env);
 
 let whatsapp: WhatsAppChannel | undefined;
+let portal: Portal | null = null;
+let stopCourseStatus: () => void = () => undefined;
+let stopStudentCourse: () => void = () => undefined;
+let voiceHub: { close(): Promise<void> } | null = null;
 const channels: Channel[] = [];
 const queue = new GroupQueue();
+// The student model: after each answered exchange of a student's chat the host records what it showed in COMPETENCY.md and the logs, because the text
+// models do not (src/competency-writer.ts, docs/STUDENT_MODEL.md). TAI_COMPETENCY_WRITER=on|shadow|off.
+const competencyWriter = createCompetencyWriter({
+  groupsDir: GROUPS_DIR,
+  templateFile: path.join(GROUPS_DIR, 'global', 'COMPETENCY_TEMPLATE.md'),
+  log: logger,
+  readEnv: readEnvFile,
+});
 
 function loadState(): void {
   lastTimestamp = getRouterState('last_timestamp') || '';
@@ -131,6 +182,29 @@ function saveState(): void {
   );
 }
 
+/**
+ * COMPETENCY.md from the template, with the name and accounts the registry knows (see competency-seed.ts). Every student turn begins by
+ * reading that file; with nobody to create it, the model went looking for it with every tool it had. Never fails a registration.
+ */
+function seedCompetency(group: RegisteredGroup): void {
+  if (group.folder === MAIN_GROUP_FOLDER) return;
+  try {
+    const result = seedCompetencyFile(path.join(GROUPS_DIR, group.folder), path.join(GROUPS_DIR, 'global', 'COMPETENCY_TEMPLATE.md'), {
+      name: group.name,
+      githubUsername: group.githubUsername,
+      canvasUserId: group.canvasUserId,
+    });
+    if (result === 'created' || result === 'completed') logger.info({ folder: group.folder, result }, 'COMPETENCY.md seeded');
+  } catch (err) {
+    logger.warn({ err, folder: group.folder }, 'COMPETENCY.md could not be seeded');
+  }
+}
+
+/** The one-time grade bootstrap is for a student's chat: not the admin group, and not the smoke tests' chats (each would hold a container slot for nothing). */
+function wantsBootstrap(folder: string): boolean {
+  return folder !== MAIN_GROUP_FOLDER && !folder.startsWith('smoke-');
+}
+
 function registerGroup(jid: string, group: RegisteredGroup): void {
   registeredGroups[jid] = group;
   setRegisteredGroup(jid, group);
@@ -138,9 +212,10 @@ function registerGroup(jid: string, group: RegisteredGroup): void {
   // Create group folder
   const groupDir = path.join(DATA_DIR, '..', 'groups', group.folder);
   fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
+  seedCompetency(group);
 
   // Bootstrap COMPETENCY.md from Canvas grades for student groups
-  if (!NO_SEEDS && group.folder !== MAIN_GROUP_FOLDER) {
+  if (SEEDS.bootstrap && wantsBootstrap(group.folder)) {
     const allTasks = getAllTasks();
     if (!hasBootstrapRun(group.folder, allTasks)) {
       seedCompetencyBootstrap(group.folder, jid);
@@ -211,7 +286,10 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     if (!hasTrigger) return true;
   }
 
-  const prompt = formatMessages(missedMessages);
+  // A student's reply gets a length rule after their messages (the teaching-team chat answers at its own length)
+  const prompt = isMainGroup || !REPLY_RULE
+    ? formatMessages(missedMessages)
+    : withReplyRule(formatMessages(missedMessages), missedMessages.map((m) => m.content));
 
   // Advance cursor so the piping path in startMessageLoop won't re-fetch
   // these messages. Save the old cursor so we can roll back on error.
@@ -237,6 +315,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   };
 
   startTypingIndicator(channel, chatJid);
+  beginTurnView(channel, chatJid);
 
   let hadError = false;
   let outputSentToUser = false;
@@ -247,13 +326,16 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   let outputAfterPipe = false;
   const sendMessageFlagPath = path.join(DATA_DIR, 'ipc', group.folder, 'messages', '.send_message_used');
 
+  // the student model: these messages begin a turn, and the file as it is now is that turn's "before" (a turn the container answers later begins at the pipe, below)
+  if (!isMainGroup) competencyWriter.turnStarted(group.folder, missedMessages);
+
   const output = await runAgent(group, prompt, chatJid, async (result) => {
     // Streaming output callback — called for each agent result
     if (result.result) {
       const raw = typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
       // Strip <internal>...</internal> blocks (the agent's internal reasoning) and redact system-prompt fingerprints: the same
       // filter as the send_message tool, so a reply that quotes the prompt does not reach the student by this path
-      const text = formatOutbound(raw);
+      const text = isMainGroup || !REPLY_RULE ? formatOutbound(raw) : trimClosingFormula(formatOutbound(raw));
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
       // Check if agent JUST sent via IPC tool (fresh per result — flag is created
       // each time an IPC tool fires, so only suppress the immediately following output).
@@ -269,15 +351,18 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         if (ipcToolUsed) {
           logger.info({ group: group.name }, 'Suppressing text output (agent used send_message)');
         } else {
-          await channel.sendMessage(chatJid, text);
+          await channel.sendMessage(chatJid, text, answerExtras(channel, chatJid));
         }
         stopTypingIndicator(channel, chatJid);
         emptyOutputRetried = false;
+        // answered and sent: the student model is updated after it, in the background (never before the reply, never waited for)
+        if (!isMainGroup) competencyWriter.turnFinished(group.folder, { reply: ipcToolUsed ? '' : text, apiFailure: result.apiFailure });
       } else if (ipcToolUsed) {
         // Agent sent via IPC tool and output was all <internal> — no retry needed.
         logger.info({ group: group.name }, 'Agent output was internal-only but sent via IPC tool, skipping retry');
         stopTypingIndicator(channel, chatJid);
         emptyOutputRetried = false;
+        if (!isMainGroup) competencyWriter.turnFinished(group.folder, { reply: '', apiFailure: result.apiFailure });
       } else if (!emptyOutputRetried) {
         // Agent output was entirely <internal> reasoning — student gets nothing.
         // Nudge the agent to produce a visible response (one retry only).
@@ -302,12 +387,32 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       resetIdleTimer();
     }
 
+    // The runner has answered everything it was sent and waits (what "everything" is: GroupQueue.markIdle). A turn that ended with no text (the answer
+    // went out through send_message) started no timer above, so its container lived until CONTAINER_TIMEOUT (15 minutes) and its dots on the page
+    // stayed on; now the idle timer starts here, the dots stop, and a student who waits for a slot may be given this one (docs/PROGRESS.md).
+    if (result.idle && queue.markIdle(chatJid, result.received)) {
+      stopTypingIndicator(channel, chatJid);
+      resetIdleTimer();
+    }
+    // The runner is idle: no turn is in progress, so a send_message mark that is still here belongs to a turn that ended with no text at all (a null
+    // result: the branch above reads the mark only when a text comes) and would hold back the NEXT turn's reply as "already sent by the tool". A turn
+    // that had a text consumed its mark above; the message itself reaches the page through the IPC directory either way.
+    if (result.idle) takeSendFlag(group.folder);
+
     if (result.status === 'error') {
       hadError = true;
     }
-  });
+  }, progressForwarder({
+    jid: chatJid,
+    turn: new TurnStatus(),
+    view: channel.turn,
+    // streaming: once a tool has said the answer itself (the send tool, a diagram), the turn's own closing words are not sent, so they are not previewed either
+    muted: () => fs.existsSync(sendMessageFlagPath),
+  }));
 
   stopTypingIndicator(channel, chatJid);
+  // (The chips of the turn are not cleared here: with a student waiting the container is closed within milliseconds of going idle, and a send_message
+  // answer reaches the host up to a poll of the IPC directory, about a second, later. The next turn's start and the two minutes of SourceNotes clear them.)
   if (idleTimer) clearTimeout(idleTimer);
 
   if (output === 'error' || hadError) {
@@ -354,6 +459,7 @@ async function runAgent(
   prompt: string,
   chatJid: string,
   onOutput?: (output: ContainerOutput) => Promise<void>,
+  onProgress?: (event: ProgressEvent) => void,
 ): Promise<'success' | 'error'> {
   const isMain = group.folder === MAIN_GROUP_FOLDER;
   const sessionId = sessions[group.folder];
@@ -371,6 +477,7 @@ async function runAgent(
       schedule_value: t.schedule_value,
       status: t.status,
       next_run: t.next_run,
+      origin: t.origin ?? null,
     })),
   );
 
@@ -398,6 +505,9 @@ async function runAgent(
       }
     : undefined;
 
+  // what the student's COMPETENCY.md says before the container starts: what it says after is the run's progress (the activity list)
+  const masteryBefore = isMain ? null : masterySnapshot(GROUPS_DIR, group.folder);
+
   try {
     const output = await runContainerAgent(
       group,
@@ -412,6 +522,7 @@ async function runAgent(
       },
       (proc, containerName) => queue.registerProcess(chatJid, proc, containerName, group.folder),
       wrappedOnOutput,
+      onProgress,
     );
 
     if (output.newSessionId) {
@@ -431,6 +542,31 @@ async function runAgent(
   } catch (err) {
     logger.error({ group: group.name, err }, 'Agent error');
     return 'error';
+  } finally {
+    if (masteryBefore) recordProgress(group.folder, masteryBefore);
+  }
+}
+
+/** What changed in the course since the last sync (a new announcement, file or assignment, a deadline that moved or is near) goes to each student's activity list. */
+function deliverCourseUpdates(previous: string, current: string): void {
+  const updates = courseUpdates(previous, current);
+  for (const update of updates) portal?.recordCourseUpdate({ type: 'course', ...update });
+  if (updates.length > 0) logger.info({ count: updates.length, titles: updates.map((u) => u.title) }, 'Course updates put in the students\' activity lists');
+}
+
+/** A grade posted, an assignment marked missing, one due soon and not turned in: a line in the activity list of the student it is about, and nobody else's. */
+function deliverStudentUpdates(canvasUserId: string, updates: CourseUpdate[]): void {
+  for (const update of updates) portal?.recordForCanvasUser(canvasUserId, { type: 'course', ...update });
+}
+
+/** A concept the run moved up to "getting there" or "solid" is a line in the student's activity list (best-effort: it never fails the run). */
+function recordProgress(folder: string, before: Map<string, number>): void {
+  try {
+    for (const step of progressSteps(before, masterySnapshot(GROUPS_DIR, folder))) {
+      portal?.recordActivity(folder, { type: 'progress', title: 'Progress updated', text: `${step.concept}: ${step.was} → ${step.now}` });
+    }
+  } catch (err) {
+    logger.warn({ folder, err }, 'Could not record a student\'s progress in the activity list');
   }
 }
 
@@ -514,8 +650,12 @@ async function startMessageLoop(): Promise<void> {
           const unpiped = messagesToSend.filter(m => m.timestamp > pipedTs);
           if (unpiped.length === 0) continue;
 
-          const formatted = formatMessages(unpiped);
+          const formatted = isMainGroup || !REPLY_RULE
+            ? formatMessages(unpiped)
+            : withReplyRule(formatMessages(unpiped), unpiped.map((m) => m.content));
 
+          // a message piped to a container that has answered everything begins a new turn (read before the pipe: it makes the container busy)
+          const beginsTurn = queue.isIdle(chatJid);
           if (queue.sendMessage(chatJid, formatted)) {
             logger.debug(
               { chatJid, count: unpiped.length },
@@ -526,8 +666,12 @@ async function startMessageLoop(): Promise<void> {
             // confirmed processing. Ensures piped-but-unprocessed messages
             // are re-discovered if the container crashes.
             pipedUpTo[chatJid] = unpiped[unpiped.length - 1].timestamp;
+            // the student model: a warm container answers these as a turn of its own (the first batch was noted in processGroupMessages)
+            if (!isMainGroup) competencyWriter.turnStarted(group.folder, unpiped);
             // Restart typing indicator while the container processes the piped message
             startTypingIndicator(channel, chatJid);
+            // after the dots: starting them clears the status, and this turn begins with "working" (the runner adds what it is doing)
+            if (beginsTurn) beginTurnView(channel, chatJid);
           } else {
             // No active container — debounce before spawning a new one.
             // Students often send fragmented WhatsApp messages ("hey" → "about raft"
@@ -592,14 +736,14 @@ function ensureDockerRunning(): void {
 }
 
 /**
- * Kill any leftover nanoclaw containers from previous sessions.
+ * Kill any leftover containers of THIS orchestrator (names that start with CONTAINER_PREFIX) from previous sessions.
  * Orphaned containers share the same IPC directory and steal messages
- * meant for the current session's containers.
+ * meant for the current session's containers. Another orchestrator's containers (another prefix) are not touched.
  */
 function killStaleContainers(): void {
   try {
     const result = execSync(
-      'docker ps -q --filter "name=nanoclaw-"',
+      `docker ps -q --filter "name=^${CONTAINER_PREFIX}-"`,
       { stdio: 'pipe', timeout: 10000 },
     ).toString().trim();
 
@@ -619,11 +763,18 @@ async function main(): Promise<void> {
   initDatabase();
   logger.info('Database initialized');
   loadState();
+  // chats registered before this existed get their file at the first start after
+  for (const group of Object.values(registeredGroups)) seedCompetency(group);
 
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
     await queue.shutdown(10000);
+    await competencyWriter.flush(4000);          // the exchange answered a moment ago is still being recorded
+    stopCourseStatus();
+    stopStudentCourse();
+    await voiceHub?.close();          // before the page: the notes a call still has to write (summary, competency) must not be lost
+    await portal?.close();
     for (const ch of channels) await ch.disconnect();
     process.exit(0);
   };
@@ -645,9 +796,55 @@ async function main(): Promise<void> {
     await whatsapp.connect();
   }
   if (CHANNEL_NAMES.includes('web')) {
-    const web = new WebChannel({ ...channelOpts, registerGroup });
+    const web = new WebChannel({ ...channelOpts, registerGroup, media: mediaStore, queuePosition: (jid) => queue.queuePosition(jid) });
     channels.push(web);
     await web.connect();
+    // The student page (src/portal): only when TAI_PORTAL_SOCKET or TAI_PORTAL_PORT is set, and then only with its allowlist and secret.
+    portal = await startPortal(web, {
+      registeredGroups: () => registeredGroups,
+      registerGroup,
+      // voice calls and the mock interview (src/voice, docs/VOICE.md): none unless TAI_VOICE=1 and a Deepgram key is stored
+      createVoice: (ctx) =>
+        (voiceHub = createVoiceHub({
+          groupsDir: GROUPS_DIR,
+          dataDir: DATA_DIR,
+          storeDir: STORE_DIR,
+          publicBase: ctx.publicBase,
+          publicOrigin: ctx.publicOrigin,
+          secretFile: ctx.secretFile,
+          ...chatFromPortal(ctx.history, ctx.wakeStudent),
+          // a row for the text agent's next start; a bot message, so it is read as context but starts nothing
+          recordVoiceSummary: (jid, text) =>
+            storeMessageDirect({
+              id: `voice-${randomUUID()}`,
+              chat_jid: jid,
+              sender: 'voice_session',
+              sender_name: ASSISTANT_NAME,
+              content: text,
+              timestamp: new Date().toISOString(),
+              is_from_me: true,
+              is_bot_message: true,
+            }),
+          preemptTextAgent: (jid) => queue.closeStdin(jid),
+          // a tool host started ahead of a call never takes the last container slot: a student's chat reply needs it
+          spareContainer: () => queue.hasSpareSlot(),
+          spawnToolHost: (folder) =>
+            new DockerToolHost({
+              log: logger,
+              spawn: async () => {
+                const entry = Object.entries(registeredGroups).find(([, g]) => g.folder === folder);
+                if (!entry) throw new Error(`no registered group for ${folder}`);
+                return spawnToolHost(entry[1], entry[0]);
+              },
+            }),
+          registeredGroup: (folder) => {
+            const entry = Object.entries(registeredGroups).find(([, g]) => g.folder === folder);
+            return entry ? { jid: entry[0], canvasUserId: entry[1].canvasUserId, githubUsername: entry[1].githubUsername } : undefined;
+          },
+          readEnv: readEnvFile,
+          log: logger,
+        })),
+    });
   }
   if (channels.length === 0) {
     throw new Error(`No channel started: TAI_CHANNELS=${process.env.TAI_CHANNELS || ''} names none of whatsapp, web`);
@@ -661,12 +858,15 @@ async function main(): Promise<void> {
     onProcess: (groupJid, proc, containerName, groupFolder) => queue.registerProcess(groupJid, proc, containerName, groupFolder),
   });
   startIpcWatcher({
+    // the student page's activity list: a note TAi kept, a reminder it set
+    recordActivity: (folder, entry) => portal?.recordActivity(folder, entry),
     sendMessage: (jid, rawText) => {
       const channel = findChannel(channels, jid);
       if (!channel) throw new Error(`No channel for JID: ${jid}`);
       const text = formatOutbound(rawText);
       if (!text) return Promise.resolve();
-      return channel.sendMessage(jid, text);
+      // the answer TAi wrote with its send_message tool: what its lookups returned in this turn goes with it, as with an answer in the result
+      return channel.sendMessage(jid, text, answerExtras(channel, jid));
     },
     sendReaction: async (jid, messageId, emoji) => {
       await findChannel(channels, jid)?.sendReaction?.(jid, messageId, emoji);
@@ -684,18 +884,29 @@ async function main(): Promise<void> {
     writeGroupsSnapshot: (gf, im, ag, rj) => writeGroupsSnapshot(gf, im, ag, rj),
   });
   queue.setProcessMessagesFn(processGroupMessages);
-  if (NO_SEEDS) {
-    logger.warn('TAI_NO_SEEDS=1: teaching patrol, course sync, LeanRAG sync and competency bootstrap are not seeded');
+  // the line of students who wait for a container moved: each page that is showing "waiting" reads its place again (the status itself is read from the queue)
+  let waitingBefore: string[] = [];
+  queue.setWaitingListener((waiting) => {
+    for (const jid of new Set([...waitingBefore, ...waiting])) findChannel(channels, jid)?.turn?.refreshStatus(jid);
+    waitingBefore = waiting;
+  });
+  if (!anySeed(SEEDS)) {
+    logger.warn('TAI_NO_SEEDS=1: no background job (competency bootstrap, teaching patrol, course status) is started');
   } else {
-    seedTeachingPatrol(registeredGroups);
-    seedCourseSync(registeredGroups);
-    startLeanRAGSync();
+    logger.info(SEEDS, 'Background jobs');
+    if (SEEDS.patrol) seedTeachingPatrol(registeredGroups);
+    if (SEEDS.courseStatus) stopCourseStatus = startCourseStatusJob(process.env, { onChange: deliverCourseUpdates });
+    if (SEEDS.studentCourse) stopStudentCourse = startStudentCourseJob(process.env, { deliver: deliverStudentUpdates });
+    if (SEEDS.courseSyncAgent) seedCourseSync(registeredGroups);
+    if (SEEDS.leanragSync) startLeanRAGSync();
 
     // Bootstrap COMPETENCY.md for any existing student groups that haven't been bootstrapped
-    const allTasks = getAllTasks();
-    for (const [jid, group] of Object.entries(registeredGroups)) {
-      if (group.folder !== MAIN_GROUP_FOLDER && !hasBootstrapRun(group.folder, allTasks)) {
-        seedCompetencyBootstrap(group.folder, jid);
+    if (SEEDS.bootstrap) {
+      const allTasks = getAllTasks();
+      for (const [jid, group] of Object.entries(registeredGroups)) {
+        if (wantsBootstrap(group.folder) && !hasBootstrapRun(group.folder, allTasks)) {
+          seedCompetencyBootstrap(group.folder, jid);
+        }
       }
     }
   }

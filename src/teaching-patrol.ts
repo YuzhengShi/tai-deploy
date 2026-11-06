@@ -6,19 +6,28 @@
 import { CronExpressionParser } from 'cron-parser';
 
 import { MAIN_GROUP_FOLDER, TIMEZONE } from './config.js';
-import { createTask, getAllTasks } from './db.js';
+import { createTask, getAllTasks, updateTask } from './db.js';
 import { logger } from './logger.js';
+import { isSystemTaskOfKind } from './task-origin.js';
 import { RegisteredGroup } from './types.js';
 
-const PATROL_TAG = '[TEACHING_PATROL]';
+export const PATROL_TAG = '[TEACHING_PATROL]';
+
+/**
+ * A scheduled task that is a student's teaching patrol (the scheduler asks src/patrol-gate.ts before it starts a model for one): one the host seeded, by its stored
+ * origin and its `patrol-` id. Never by PATROL_TAG, which is only the head of the prompt: a student's agent can schedule a task whose prompt carries it.
+ */
+export function isPatrolTask(task: { id: string; origin?: string | null }): boolean {
+  return isSystemTaskOfKind(task, 'teaching patrol');
+}
 
 const PATROL_PROMPT = `${PATROL_TAG}
 You are running your daily Teaching Patrol. This is a proactive check — no student messaged you.
 
 Instructions:
 1. Read COMPETENCY.md for this student.
-2. Read /workspace/global/COURSE_STATUS.md for latest Canvas/GitHub sync data (assignments, submissions, deadlines, GitHub activity). Use this instead of querying Canvas/GitHub directly — it's already synced.
-3. Check the current date and course week (Week 1 starts Jan 6, 2026).
+2. Read /workspace/global/COURSE_STATUS.md: the whole class's assignments, deadlines, announcements and files, as of the last sync. It says nothing about any one student. For THIS student's own standing call canvas_query with action "week_status" and no params: it is always about this student (the account linked to this chat, whoever you name), and gives the week's assignments with their due times and whether each is submitted, on time or graded. The actions that list the class ("submissions", "grades", "users") are for the admin chat only and are refused here: do not try them. For their GitHub activity call github_query with action "activity" and no params: it is always their own linked account, and a GitHub name written in COMPETENCY.md is not used.
+3. Check the current date, and work out the course week from the modules and deadlines in COURSE_STATUS.md (do not assume a start date).
 4. Evaluate each intervention trigger below. For EACH trigger, decide "intervene" or "no action" and log your reasoning.
 
 Intervention triggers:
@@ -28,10 +37,9 @@ Intervention triggers:
 - Confirmed misconception not yet remediated → send targeted correction
 - High confidence + scope missing "verbal" + mock interview within 2 days → offer verbal practice
 - Prerequisite gap: student working on topic X but prerequisite Y confidence < 0.4 → address prerequisite first
-- Canvas: assignment due within 24h + student has not submitted (check COURSE_STATUS.md) → proactive nudge
+- Canvas: assignment due within 24h + student has not submitted (check with canvas_query "week_status") → proactive nudge
 - Canvas: assignment past due + no submission → gentle check-in (not nagging)
 - GitHub: no commits in 5+ days + assignment active → ask if they need help getting started
-- Submission content: COURSE_STATUS.md "Submission Content Signals" shows topic thin/missing in report → target that gap
 
 5. If ALL triggers evaluate to "no action needed":
    - Update the Proactive Intervention Log in COMPETENCY.md with your decision and reasoning.
@@ -50,22 +58,35 @@ CRITICAL: The student must NEVER see your patrol reasoning. No messages like "No
 Remember: 90% of patrols should result in "no action needed". Your value is in judgment, not volume.`;
 
 /**
- * Check if a teaching patrol task already exists for a group folder.
+ * Check if a teaching patrol task already exists for a group folder: one the host seeded (isPatrolTask), so that a student's task that merely carries the patrol's
+ * marker does not keep the real one from being seeded.
  */
 export function hasPatrolTask(groupFolder: string): boolean {
   const tasks = getAllTasks();
-  return tasks.some(
-    (t) =>
-      t.group_folder === groupFolder &&
-      t.prompt.includes(PATROL_TAG) &&
-      t.status === 'active',
-  );
+  return tasks.some((t) => t.group_folder === groupFolder && isPatrolTask(t) && t.status === 'active');
+}
+
+/**
+ * Puts the current prompt into the host's own patrol rows of a group whose stored prompt is another. The prompt lives in the row and the scheduler runs the row, so a
+ * patrol that was seeded before a fix would go on running the old text for ever: this one used to tell the patrol to call canvas_query "submissions", which lists the
+ * whole class. Called at every start by the seed. Returns how many rows it changed.
+ */
+export function refreshPatrolPrompts(groupFolder: string): number {
+  let changed = 0;
+  for (const t of getAllTasks()) {
+    if (t.group_folder !== groupFolder || !isPatrolTask(t) || t.prompt === PATROL_PROMPT) continue;
+    updateTask(t.id, { prompt: PATROL_PROMPT });
+    changed++;
+    logger.info({ taskId: t.id, group: groupFolder }, 'Teaching patrol prompt brought up to date');
+  }
+  return changed;
 }
 
 /**
  * Seed teaching patrol tasks for all registered student groups.
- * Skips groups that already have an active patrol task.
- * Skips the main (admin) group.
+ * Skips groups that already have an active patrol task (their stored prompt is brought up to date instead).
+ * Skips the main (admin) group, and the smoke tests' chats (`smoke-*`): a patrol
+ * run every weekday for each of them would only spend the model.
  */
 export function seedTeachingPatrol(
   registeredGroups: Record<string, RegisteredGroup>,
@@ -73,8 +94,11 @@ export function seedTeachingPatrol(
   let seeded = 0;
 
   for (const [jid, group] of Object.entries(registeredGroups)) {
-    // Skip admin group
-    if (group.folder === MAIN_GROUP_FOLDER) continue;
+    // Skip admin group and smoke chats
+    if (group.folder === MAIN_GROUP_FOLDER || group.folder.startsWith('smoke-')) continue;
+
+    // A patrol that already exists keeps what it was seeded with unless it is told otherwise
+    refreshPatrolPrompts(group.folder);
 
     // Skip if patrol already exists
     if (hasPatrolTask(group.folder)) continue;
@@ -106,6 +130,7 @@ export function seedTeachingPatrol(
       next_run: nextRun,
       status: 'active',
       created_at: new Date().toISOString(),
+      origin: 'system',                       // the host made this one: its container's tool limits are lifted (src/task-origin.ts)
     });
 
     seeded++;

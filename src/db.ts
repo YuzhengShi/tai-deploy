@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { ASSISTANT_NAME, DATA_DIR, STORE_DIR } from './config.js';
+import { originBackfill } from './task-origin.js';
 import { NewMessage, RegisteredGroup, ScheduledTask, TaskRunLog } from './types.js';
 
 let db: Database.Database;
@@ -124,6 +125,23 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
+  // Who made a task ('system' or 'container', src/task-origin.ts): decides whether its container's tool limits are lifted and who may stop it. No default: a row nobody classified is
+  // not system. The rows without one are classified at every start, not only when the column is added: an older host that is rolled back to writes rows
+  // without it, and they must not stay unclassified once the new one is back.
+  try {
+    database.exec(`ALTER TABLE scheduled_tasks ADD COLUMN origin TEXT`);
+  } catch {
+    /* column already exists */
+  }
+  classifyTaskOrigins(database);
+
+  // How many tasks each group's agent has made lately (src/task-limits.ts: at most 20 in a rolling 24 hours). A row per creation, kept apart from scheduled_tasks so that
+  // cancelling a task, which deletes it, does not give the count back.
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS task_creations (group_folder TEXT NOT NULL, created_at TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_task_creations ON task_creations(group_folder, created_at);
+  `);
+
   // Add identity binding columns (Canvas/GitHub access control)
   try {
     database.exec(
@@ -169,6 +187,15 @@ function createSchema(database: Database.Database): void {
   } catch {
     /* columns already exist */
   }
+}
+
+/**
+ * Gives every task that has no origin one (src/task-origin.ts has the rule): 'system' for the host's own seeds, 'container' for everything else. Returns how many
+ * rows it classified. Exported for the migration's test, which builds a database with the old schema.
+ */
+export function classifyTaskOrigins(database: Database.Database): number {
+  const { sql, params } = originBackfill();
+  return database.prepare(sql).run(...params).changes;
 }
 
 export function initDatabase(): void {
@@ -373,6 +400,14 @@ export function getNewMessages(
   return { messages: rows, newTimestamp };
 }
 
+/** When the last message in a chat that TAi did not write was stored (ISO), or undefined: how long a student has been quiet (the patrol's gate). */
+export function getLastUserMessageTime(chatJid: string, botPrefix: string): string | undefined {
+  const row = db
+    .prepare(`SELECT MAX(timestamp) AS t FROM messages WHERE chat_jid = ? AND is_bot_message = 0 AND content NOT LIKE ?`)
+    .get(chatJid, `${botPrefix}:%`) as { t: string | null } | undefined;
+  return row?.t ?? undefined;
+}
+
 export function getMessagesSince(
   chatJid: string,
   sinceTimestamp: string,
@@ -397,8 +432,8 @@ export function createTask(
 ): void {
   db.prepare(
     `
-    INSERT INTO scheduled_tasks (id, group_folder, chat_jid, prompt, schedule_type, schedule_value, context_mode, next_run, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO scheduled_tasks (id, group_folder, chat_jid, prompt, schedule_type, schedule_value, context_mode, next_run, status, created_at, origin)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `,
   ).run(
     task.id,
@@ -411,7 +446,28 @@ export function createTask(
     task.next_run,
     task.status,
     task.created_at,
+    task.origin ?? null,
   );
+}
+
+/** A task an agent made for a group, at `at` (an ISO time). Rows older than three days are dropped here: the limit looks back one. */
+export function recordTaskCreation(groupFolder: string, at: string, keepSince?: string): void {
+  db.prepare('INSERT INTO task_creations (group_folder, created_at) VALUES (?, ?)').run(groupFolder, at);
+  db.prepare('DELETE FROM task_creations WHERE created_at < ?').run(keepSince ?? new Date(Date.parse(at) - 3 * 24 * 60 * 60 * 1000).toISOString());
+}
+
+/** How many tasks agents made for the group since `sinceIso` (cancelled ones included). */
+export function countTaskCreationsSince(groupFolder: string, sinceIso: string): number {
+  const row = db.prepare('SELECT COUNT(*) AS n FROM task_creations WHERE group_folder = ? AND created_at >= ?').get(groupFolder, sinceIso) as { n: number };
+  return row.n;
+}
+
+/** The group's tasks that agents made and that are still there: active or paused (a paused one is one resume away from running). The host's own tasks are not counted. */
+export function countOpenContainerTasks(groupFolder: string): number {
+  const row = db
+    .prepare(`SELECT COUNT(*) AS n FROM scheduled_tasks WHERE group_folder = ? AND origin = 'container' AND status IN ('active', 'paused')`)
+    .get(groupFolder) as { n: number };
+  return row.n;
 }
 
 export function getTaskById(id: string): ScheduledTask | undefined {

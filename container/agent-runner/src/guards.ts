@@ -69,7 +69,7 @@ const API_CREDENTIAL_NAMES = [
   'CANVAS_API_TOKEN',
   'GITHUB_TOKEN',
 ];
-const CREDENTIAL_LIKE = /(TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|CREDENTIAL|PRIVATE_?KEY|ACCESS_?KEY)/i;
+export const CREDENTIAL_LIKE = /(TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|CREDENTIAL|PRIVATE_?KEY|ACCESS_?KEY)/i;
 
 /**
  * Names of the environment variables Bash must not see: everything the host handed to this container as a secret (whatever it is
@@ -100,6 +100,11 @@ const BLOCKED_COMMANDS: RegExp[] = [
   /\bsocat\b/,
   /\btelnet\b/,
   /\/dev\/(tcp|udp)\//, // bash's own sockets
+  // Links and special files in the workspace. The host reads and writes files of the student's folder, and refuses to follow a link or wait on a FIFO there
+  // (src/safe-fs.ts); this keeps the agent from making them at all. Planted, a link leads a host read to any file of the host, a FIFO stops it for good.
+  /\bln\b(?=[^|;&\n]*\s(?:-[A-Za-z]*s[A-Za-z]*|--symbolic)(?:\s|$))/, // ln -s, ln -sf, ln -fs, ln a -s b, ln --symbolic (a hard link stays inside the mount)
+  /\bmkfifo\b/,
+  /\bmknod\b/,
   /\bpython3?\b.*\b(http\.server|SimpleHTTPServer|requests\.|urllib|socket\b|aiohttp|httpx)/,
   /\bnode\b.*\b(http|https|net|fetch)\b/,
   // Indirect execution (blocklist bypass via encoding or eval)
@@ -348,11 +353,12 @@ export function createWebFetchGuardHook(counters: TurnCounters, maxCalls: number
 
 // --- Write / Edit: size, workspace, competency ---------------------------------------------------------------------------------
 
-/** Block writes larger than maxBytes (non-main only). */
+/** Block writes larger than maxBytes (non-main only). A call with several edits counts what all of them put in. */
 export function createFileSizeGuardHook(maxBytes: number): HookCallback {
   return async (input) => {
     const ti = toolInput(input);
-    const content = (ti.content as string) || (ti.new_string as string) || '';
+    const edited = ((ti.edits as Array<{ new_string?: string }> | undefined) || []).map((e) => e.new_string || '').join('');
+    const content = (ti.content as string) || (ti.new_string as string) || edited;
     const size = Buffer.byteLength(content);
     if (size > maxBytes) {
       return deny(`File content too large (${(size / 1024 / 1024).toFixed(1)}MB). Maximum allowed: ${(maxBytes / 1024 / 1024).toFixed(0)}MB.`);

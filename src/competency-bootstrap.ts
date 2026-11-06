@@ -5,6 +5,7 @@
  */
 import { createTask } from './db.js';
 import { logger } from './logger.js';
+import { isSystemTaskOfKind } from './task-origin.js';
 
 const BOOTSTRAP_TAG = '[COMPETENCY_BOOTSTRAP]';
 
@@ -15,37 +16,18 @@ Your job: query Canvas for this student's grades and submission content, then in
 
 ## Step 1: Identify the student
 
-Read COMPETENCY.md to get the student's name. Then get the enrolled users list:
-  canvas_query({ action: "users" })
+Read COMPETENCY.md: the student's name is in its Student Profile. Who the student is on Canvas is not for you to work out: the Canvas tools are bound to this student by the host, so my_grades and student_submission always use the account linked to this chat, whatever user_id you pass, and the actions that list the class ("users", "grades", "submissions") are for the admin chat only and are refused here. Do not try them, and do not bind or change an identity. If canvas_query says this student's Canvas account is not linked, there is nothing to bootstrap: stop, change nothing and say nothing.
 
-Find the matching user_id for this student.
-
-IMPORTANT: Once you find the user_id, immediately persist it for access control:
-  set_student_identity({ canvas_user_id: "<user_id>" })
-
-If you also find their GitHub username (from submission URLs), include it:
-  set_student_identity({ canvas_user_id: "<user_id>", github_username: "<username>" })
-
-## Step 2: Get all assignments and grades
+## Step 2: Get all assignments and this student's grades
 
   canvas_query({ action: "assignments" })
-  canvas_query({ action: "grades" })
+  canvas_query({ action: "my_grades" })
 
 ## Step 3: Map assignments to competency concepts
 
-Each homework covers specific weekly topics. Use the assignment name/number and COURSE_REFERENCE.md to determine which competency concepts it tests. General mapping:
+Each homework covers the topics of its week. Use the assignment's name and description and the weekly topics in /workspace/global/COURSE_REFERENCE.md to decide which competency concepts it tests, and raise ONLY concepts that are already listed under Mastery Scores in COMPETENCY.md (never invent a concept name). The homework numbering and topics change from term to term: go by what the assignment says, not by a remembered list.
 
-- HW1 (Go basics, REST API, EC2) → Go programming basics, RESTful API design, AWS EC2, cross-compilation, security groups, performance testing, Tail latency
-- HW2 (Docker, deployment) → Docker concepts, Docker deployment to EC2, Container vs VM
-- HW3 (Terraform, IaC) → Terraform / Infrastructure as Code, MapReduce paper concepts
-- HW4 (Distributed fundamentals) → Distributed systems fundamentals, Client-server architecture, Stateless vs stateful
-- HW5 (Scalable design) → Scalable service design patterns
-- HW6 (Load testing, threads) → Load testing methodology, Concurrency and threads, Response time distributions
-- HW7/8 (CAP, consistency) → CAP theorem, Consistency models, Availability vs consistency tradeoffs
-- HW9 (Async, serverless) → Asynchronous processing, Message queues (Kafka), Serverless (AWS Lambda), Event-driven architecture
-- HW10 (Deployment, observability) → Deployment strategies, Observability
-
-If the assignment name doesn't clearly match, read the assignment detail:
+If the assignment name doesn't clearly say what it covers, read the assignment detail:
   canvas_query({ action: "assignment_detail", params: { assignment_id: "<id>" } })
 
 ## Step 4: Compute initial scores
@@ -67,7 +49,7 @@ Scope is [implementation] only — homework proves they built something, not tha
 ## Step 5: Fetch submission content for deeper signal (optional)
 
 For the 3 most recent graded assignments, try to read the submission content:
-  canvas_query({ action: "student_submission", params: { assignment_id: "<id>", user_id: "<uid>" } })
+  canvas_query({ action: "student_submission", params: { assignment_id: "<id>" } })
 
 If the submission includes a text body or report URL, read it. Look for:
 - Evidence of conceptual understanding (not just code) → add "theoretical" to scope
@@ -110,6 +92,7 @@ export function seedCompetencyBootstrap(
     next_run: new Date(Date.now() + 5000).toISOString(),
     status: 'active',
     created_at: new Date().toISOString(),
+    origin: 'system',                         // the host made this one: its container's tool limits are lifted (src/task-origin.ts)
   });
 
   logger.info(
@@ -119,13 +102,9 @@ export function seedCompetencyBootstrap(
 }
 
 /**
- * Check if a bootstrap task has already run for a group.
+ * Check if a bootstrap task has already run for a group: one the host seeded (its stored origin and its `bootstrap-` id), never a task that merely carries the marker:
+ * a student's agent can schedule a task that completes with BOOTSTRAP_TAG in its prompt, and the real bootstrap would then never run for that student.
  */
-export function hasBootstrapRun(groupFolder: string, allTasks: Array<{ group_folder: string; prompt: string; status: string }>): boolean {
-  return allTasks.some(
-    (t) =>
-      t.group_folder === groupFolder &&
-      t.prompt.includes(BOOTSTRAP_TAG) &&
-      t.status === 'completed',
-  );
+export function hasBootstrapRun(groupFolder: string, allTasks: Array<{ id: string; origin?: string | null; group_folder: string; status: string }>): boolean {
+  return allTasks.some((t) => t.group_folder === groupFolder && isSystemTaskOfKind(t, 'grade bootstrap') && t.status === 'completed');
 }

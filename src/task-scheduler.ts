@@ -4,23 +4,30 @@ import fs from 'fs';
 import path from 'path';
 
 import {
+  ASSISTANT_NAME,
   GROUPS_DIR,
   IDLE_TIMEOUT,
   MAIN_GROUP_FOLDER,
   SCHEDULER_POLL_INTERVAL,
+  TASK_CLOSE_DELAY,
   TIMEZONE,
 } from './config.js';
 import { ContainerOutput, runContainerAgent, writeTasksSnapshot } from './container-runner.js';
 import {
   getAllTasks,
   getDueTasks,
+  getLastUserMessageTime,
   getTaskById,
   logTaskRun,
   updateTask,
   updateTaskAfterRun,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
+import { logPatrolDecision, takeSendFlag, type PatrolRecord } from './intervention-log.js';
 import { logger } from './logger.js';
+import { gateNote, gatePatrol, recordPatrolRun, type GateDecision } from './patrol-gate.js';
+import { isSystemTask } from './task-origin.js';
+import { isPatrolTask } from './teaching-patrol.js';
 import { RegisteredGroup, ScheduledTask } from './types.js';
 
 export interface SchedulerDependencies {
@@ -28,6 +35,18 @@ export interface SchedulerDependencies {
   getSessions: () => Record<string, string>;
   queue: GroupQueue;
   onProcess: (groupJid: string, proc: ChildProcess, containerName: string, groupFolder: string) => void;
+}
+
+/** When a recurring task runs next (null for a task that runs once). */
+function nextRunOf(task: ScheduledTask): string | null {
+  if (task.schedule_type === 'cron') {
+    return CronExpressionParser.parse(task.schedule_value, { tz: TIMEZONE }).next().toISOString();
+  }
+  if (task.schedule_type === 'interval') {
+    const ms = parseInt(task.schedule_value, 10);
+    return new Date(Date.now() + ms).toISOString();
+  }
+  return null;
 }
 
 async function runTask(
@@ -64,6 +83,33 @@ async function runTask(
     return;
   }
 
+  // A student's teaching patrol: code decides first whether a model is needed today (src/patrol-gate.ts). A skip starts no container, calls no model,
+  // and is written down like any other run, so every day's decision can be read back from task_run_logs.
+  let gate: GateDecision | null = null;
+  let prompt = task.prompt;
+  if (isPatrolTask(task)) {
+    gate = gatePatrol(task, group, { lastStudentMessage: (jid) => getLastUserMessageTime(jid, ASSISTANT_NAME) });
+    logger.info(
+      { taskId: task.id, group: task.group_folder, mode: gate.mode, run: gate.run, reasons: gate.reasons },
+      gate.run ? 'Patrol gate: the model runs' : gate.mode === 'on' ? 'Patrol gate: no model today' : 'Patrol gate (shadow): would have skipped, runs anyway',
+    );
+    if (!gate.run && gate.mode === 'on') {
+      const why = `skipped by the gate: ${gate.reasons.join('; ')}`.slice(0, 480);
+      logTaskRun({
+        task_id: task.id,
+        run_at: new Date().toISOString(),
+        duration_ms: Date.now() - startTime,
+        status: 'success',
+        result: why,
+        error: null,
+      });
+      updateTaskAfterRun(task.id, nextRunOf(task), why.slice(0, 200), false);
+      logPatrolDecision(groupDir, { kind: 'skipped', keys: gate.keys, weekly: gate.weekly }, Date.now(), (m) => logger.warn({ taskId: task.id }, m));
+      return;
+    }
+    if (gate.mode === 'on') prompt = `${task.prompt}\n\n${gateNote(gate)}`;
+  }
+
   // Update tasks snapshot for container to read (filtered by group)
   const isMain = task.group_folder === MAIN_GROUP_FOLDER;
   const tasks = getAllTasks();
@@ -78,6 +124,7 @@ async function runTask(
       schedule_value: t.schedule_value,
       status: t.status,
       next_run: t.next_run,
+      origin: t.origin ?? null,
     })),
   );
 
@@ -89,33 +136,55 @@ async function runTask(
   const sessionId =
     task.context_mode === 'group' ? sessions[task.group_folder] : undefined;
 
-  // Idle timer: writes _close sentinel after IDLE_TIMEOUT of no output,
-  // so the container exits instead of hanging at waitForIpcMessage forever.
+  // Idle timer: closes the container's stdin, so that it exits instead of waiting for a next message that a task never gets (the queue
+  // does not pipe a student's message into a task's container). Two ways to start it: the runner says it is idle (TASK_CLOSE_DELAY, a few
+  // seconds: its answer has gone out, however empty it was), or a result arrives and nothing says idle after it (IDLE_TIMEOUT, the
+  // fallback for a runner that does not say so). Without the first, a patrol that ended with no text held its container for the whole
+  // CONTAINER_TIMEOUT: 937 s on 2026-11-03, with five containers for the whole school.
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  // The runner answered (a result with text) or said it was idle: its turn finished. A runner that is stopped before either (CONTAINER_TIMEOUT, a shutdown)
+  // has not finished the task.
+  let reportedDone = false;
 
-  const resetIdleTimer = () => {
+  const closeIn = (ms: number) => {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
-      logger.debug({ taskId: task.id }, 'Scheduled task idle timeout, closing container stdin');
+      logger.debug({ taskId: task.id, afterMs: ms }, 'Scheduled task is done, closing container stdin');
       deps.queue.closeStdin(task.chat_jid);
-    }, IDLE_TIMEOUT);
+    }, ms);
   };
+
+  // For the patrol's decision log (src/intervention-log.ts): how a failed run failed, and whether the run sent the student a message (the marker the send tool
+  // leaves; an old one from before this run is taken away first, so it is not read as this run's)
+  let apiFailure: string | null = null;
+  let unfinished = false;
+  if (gate) takeSendFlag(task.group_folder);
 
   try {
     const output = await runContainerAgent(
       group,
       {
-        prompt: task.prompt,
+        prompt,
         sessionId,
         groupFolder: task.group_folder,
         chatJid: task.chat_jid,
         isMain,
         isScheduledTask: true,
+        // Full access (class-wide Canvas, any GitHub owner, no tool limits) only for a task the host made itself. A task an agent scheduled runs as that student's
+        // own chat would, and delivers its reminder through send_message as before (src/task-origin.ts).
+        isSystemTask: isSystemTask(task),
         canvasUserId: group.canvasUserId,
         githubUsername: group.githubUsername,
       },
       (proc, containerName) => deps.onProcess(task.chat_jid, proc, containerName, task.group_folder),
       async (streamedOutput: ContainerOutput) => {
+        // The model could not be reached: the runner's result is its apology, and the task did nothing. The status of such an output is
+        // "success" (a chat has to show the apology), so it is read here. Counted as a failure, nothing of it is kept (the gate's
+        // signals stay new, the next patrol looks again), and the operator's `patrol` view calls it failed.
+        if (streamedOutput.apiFailure) {
+          apiFailure = streamedOutput.apiFailure;
+          error = `the model could not be reached (${streamedOutput.apiFailure}), so the task did nothing`;
+        }
         if (streamedOutput.result) {
           result = streamedOutput.result;
           // Scheduled tasks (patrol, bootstrap, etc.) must NEVER send text output
@@ -125,8 +194,13 @@ async function runTask(
             { taskId: task.id, group: task.group_folder },
             `Scheduled task output (suppressed): ${streamedOutput.result.slice(0, 200)}`,
           );
-          // Only reset idle timer on actual results, not session-update markers
-          resetIdleTimer();
+          // A result starts the long timer, not a session-update marker; the runner's own "idle" (below) shortens it
+          reportedDone = true;
+          closeIn(IDLE_TIMEOUT);
+        }
+        if (streamedOutput.idle) {
+          reportedDone = true;
+          closeIn(TASK_CLOSE_DELAY);
         }
         if (streamedOutput.status === 'error') {
           error = streamedOutput.error || 'Unknown error';
@@ -142,6 +216,13 @@ async function runTask(
       // Messages are sent via MCP tool (IPC), result text is just logged
       result = output.result;
     }
+    // The container runner reports a container that was stopped after it had streamed something (the 15-minute timeout) as a success with nothing in
+    // it, and a run that never finished must not be kept as one the model looked at. A runner that finishes its turn says idle, whatever it answered (one that
+    // wrote an answer is taken as done even without it: a container image from before the marker existed).
+    if (!error && !reportedDone) {
+      unfinished = true;
+      error = 'the task did not finish: its runner never said it was done (its container was stopped, or it ran out of time)';
+    }
 
     logger.info(
       { taskId: task.id, durationMs: Date.now() - startTime },
@@ -155,26 +236,39 @@ async function runTask(
 
   const durationMs = Date.now() - startTime;
 
+  // In shadow mode the model ran although the gate would not have let it: say so in the log, so a week of runs shows what the gate would have saved
+  const shadowSkip = gate !== null && gate.mode === 'shadow' && !gate.run;
   logTaskRun({
     task_id: task.id,
     run_at: new Date().toISOString(),
     duration_ms: durationMs,
     status: error ? 'error' : 'success',
-    result,
+    result: shadowSkip ? `[the gate would have skipped this run: ${gate!.reasons.join('; ')}] ${result ?? ''}`.slice(0, 2000) : result,
     error,
   });
 
-  let nextRun: string | null = null;
-  if (task.schedule_type === 'cron') {
-    const interval = CronExpressionParser.parse(task.schedule_value, {
-      tz: TIMEZONE,
-    });
-    nextRun = interval.next().toISOString();
-  } else if (task.schedule_type === 'interval') {
-    const ms = parseInt(task.schedule_value, 10);
-    nextRun = new Date(Date.now() + ms).toISOString();
+  // What the model has now looked at is what "new" is measured against tomorrow; a run that failed is not kept, so the next patrol looks again
+  if (gate && gate.run && !error) {
+    try {
+      recordPatrolRun(task.group_folder, gate, new Date());
+    } catch (err) {
+      logger.warn({ taskId: task.id, err: err instanceof Error ? err.message : String(err) }, 'Patrol gate: could not keep what the model looked at');
+    }
   }
-  // 'once' tasks have no next run
+
+  // The patrol's decision, one line in the student's intervention log, whatever the model did or did not write itself: ran and sent a message, ran and sent none
+  // (it decided not to), or failed. Signal keys and numbers only.
+  if (gate) {
+    const sent = takeSendFlag(task.group_folder);
+    const modelFailure = apiFailure as string | null;          // assigned by the runner's callback above, which the compiler's flow analysis does not follow
+    const base = { sent, keys: gate.keys, weekly: gate.weekly, seconds: durationMs / 1000, gate: gate.mode };
+    const record: PatrolRecord = error
+      ? { kind: 'failed', why: modelFailure ? 'model' : unfinished ? 'unfinished' : 'error', ...(modelFailure ? { apiFailure: modelFailure } : {}), ...base }
+      : { kind: 'ran', shadowSkip, ...base };
+    logPatrolDecision(groupDir, record, Date.now(), (m) => logger.warn({ taskId: task.id }, m));
+  }
+
+  const nextRun = nextRunOf(task);        // 'once' tasks have no next run
 
   const resultSummary = error
     ? `Error: ${error}`

@@ -18,42 +18,15 @@ import path from 'path';
 import { query, HookCallback, PreCompactHookInput } from '@anthropic-ai/claude-agent-sdk';
 import { fileURLToPath } from 'url';
 import { newTurnCounters, preToolUseHooks, secretEnvNames } from './guards.js';
-import { ApiFailure, classifyApiError, friendlyMessage } from './api-errors.js';
+import { ApiFailure, classifyApiError } from './api-errors.js';
+import { buildMcpServers } from './mcp-servers.js';
+import { claudeSystemAppend } from './prompt.js';
+import { ProgressReporter } from './progress.js';
+import { StdinReader, failureOutput, idleOutput, log, sessionLimits, writeOutput, type ContainerInput, type SessionState } from './protocol.js';
 import { appendInteraction, messageTexts, visibleText } from './session-log.js';
 
-interface ContainerInput {
-  prompt: string;
-  sessionId?: string;
-  groupFolder: string;
-  chatJid: string;
-  isMain: boolean;
-  isScheduledTask?: boolean;
-  secrets?: Record<string, string>;
-  canvasUserId?: string;
-  githubUsername?: string;
-}
-
-interface ContainerOutput {
-  status: 'success' | 'error';
-  result: string | null;
-  newSessionId?: string;
-  resetSession?: boolean; // the session was retired: the host forgets it
-  error?: string;
-}
-
-/**
- * What one conversation session has been through, across the queries of the main loop. A session is retired when it has had
- * DEFAULT_MAX_TURNS_PER_SESSION answers or its context has grown to DEFAULT_MAX_CONTEXT_TOKENS (TAI_MAX_TURNS_PER_SESSION and
- * TAI_MAX_CONTEXT_TOKENS override them): the next message then starts a fresh session. The competency files carry what matters over.
- * Upstream counted queries of the main loop instead, but a warm container takes follow-ups into the one running query, so that cap
- * never fired.
- */
-interface SessionState {
-  turns: number;
-  contextTokens: number;
-}
-const DEFAULT_MAX_TURNS_PER_SESSION = 25;
-const DEFAULT_MAX_CONTEXT_TOKENS = 90_000;
+// The container protocol (ContainerInput, ContainerOutput, the stdin reader, the output markers, the session caps) is in protocol.ts,
+// shared with pi-runner.ts, the same container run by pi instead of Claude Code; entrypoint.sh picks one by TAI_HARNESS.
 
 interface SessionEntry {
   sessionId: string;
@@ -108,83 +81,6 @@ class MessageStream {
       this.waiting = null;
     }
   }
-}
-
-/**
- * Reads NDJSON lines from stdin, buffers them, supports blocking nextLine()
- * and non-blocking drainBuffered().
- */
-class StdinReader {
-  private buffer: string[] = [];
-  private partial = '';
-  private closed = false;
-  private waiting: (() => void) | null = null;
-
-  constructor() {
-    process.stdin.setEncoding('utf8');
-
-    process.stdin.on('data', (chunk: string) => {
-      const parts = (this.partial + chunk).split('\n');
-      this.partial = parts.pop()!; // last element is incomplete or ''
-      for (const line of parts) {
-        if (line.length > 0) {
-          this.buffer.push(line);
-        }
-      }
-      this.waiting?.();
-    });
-
-    process.stdin.on('end', () => {
-      // flush any trailing partial line
-      if (this.partial.length > 0) {
-        this.buffer.push(this.partial);
-        this.partial = '';
-      }
-      this.closed = true;
-      this.waiting?.();
-    });
-
-    process.stdin.on('error', () => {
-      this.closed = true;
-      this.waiting?.();
-    });
-  }
-
-  /** Returns next buffered line or waits; returns null on EOF with empty buffer. */
-  async nextLine(): Promise<string | null> {
-    while (true) {
-      if (this.buffer.length > 0) {
-        return this.buffer.shift()!;
-      }
-      if (this.closed) return null;
-      await new Promise<void>(r => { this.waiting = r; });
-      this.waiting = null;
-    }
-  }
-
-  /** Returns all currently buffered lines (non-blocking). */
-  drainBuffered(): string[] {
-    const lines = this.buffer.splice(0);
-    return lines;
-  }
-
-  /** True when EOF received and buffer empty. */
-  get isClosed(): boolean {
-    return this.closed && this.buffer.length === 0;
-  }
-}
-
-const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
-const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
-
-function writeOutput(output: ContainerOutput): void {
-  console.log(OUTPUT_START_MARKER);
-  console.log(JSON.stringify(output));
-  console.log(OUTPUT_END_MARKER);
-}
-
-function log(message: string): void {
-  console.error(`[agent-runner] ${message}`);
 }
 
 function getSessionSummary(sessionId: string, transcriptPath: string): string | null {
@@ -342,74 +238,37 @@ function formatTranscriptMarkdown(messages: ParsedMessage[], title?: string | nu
 
 
 /**
+ * What the student's page shows of a turn (progress.ts), from Claude Code's tool hooks. They only look: each answers {}, and a failure in the
+ * reporter never reaches the tool. A call that a guard refuses starts and never ends here; the host takes the next "thinking" or the end of the
+ * turn as the end of it.
+ */
+function progressHooks(reporter: ProgressReporter): { pre: HookCallback; post: HookCallback; failed: HookCallback } {
+  const fields = (input: unknown) => input as { tool_name?: string; tool_input?: unknown; tool_response?: unknown; tool_use_id?: string };
+  return {
+    pre: async (input) => {
+      const i = fields(input);
+      reporter.toolStart(i.tool_use_id ?? '', i.tool_name ?? '', i.tool_input);
+      return {};
+    },
+    post: async (input) => {
+      const i = fields(input);
+      reporter.toolEnd(i.tool_use_id ?? '', i.tool_response, false, { name: i.tool_name ?? '', args: i.tool_input });
+      return {};
+    },
+    failed: async (input) => {
+      const i = fields(input);
+      reporter.toolEnd(i.tool_use_id ?? '', undefined, true, { name: i.tool_name ?? '', args: i.tool_input });
+      return {};
+    },
+  };
+}
+
+/**
  * Run a single query and stream results via writeOutput.
  * Uses MessageStream (AsyncIterable) to keep isSingleUserTurn=false,
  * allowing agent teams subagents to run to completion.
  * Polls stdinReader's in-memory buffer for follow-up messages during the query.
  */
-function buildMcpServers(
-  mcpServerPath: string,
-  containerInput: ContainerInput,
-  sdkEnv: Record<string, string | undefined>,
-) {
-  // AWS credentials for MCP tools that call boto3 scripts (tts.py, image_gen.py)
-  const awsEnv = Object.fromEntries(
-    ['AWS_REGION', 'AWS_DEFAULT_REGION', 'AWS_ACCESS_KEY_ID',
-     'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN']
-      .filter(k => sdkEnv[k])
-      .map(k => [k, sdkEnv[k]!])
-  );
-
-  const servers: Record<string, { command: string; args: string[]; env: Record<string, string> }> = {
-    nanoclaw: {
-      command: 'node',
-      args: [mcpServerPath],
-      env: {
-        NANOCLAW_CHAT_JID: containerInput.chatJid,
-        NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
-        NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
-        NANOCLAW_IS_SCHEDULED_TASK: containerInput.isScheduledTask ? '1' : '0',
-        // Identity binding (from trusted DB — containers cannot modify)
-        ...(containerInput.canvasUserId ? { NANOCLAW_CANVAS_USER_ID: containerInput.canvasUserId } : {}),
-        ...(containerInput.githubUsername ? { NANOCLAW_GITHUB_USERNAME: containerInput.githubUsername } : {}),
-        ...awsEnv,
-        // Canvas LMS + GitHub integration credentials
-        ...(sdkEnv['CANVAS_API_TOKEN'] ? { CANVAS_API_TOKEN: sdkEnv['CANVAS_API_TOKEN'] } : {}),
-        ...(sdkEnv['CANVAS_BASE_URL'] ? { CANVAS_BASE_URL: sdkEnv['CANVAS_BASE_URL'] } : {}),
-        ...(sdkEnv['CANVAS_COURSE_ID'] ? { CANVAS_COURSE_ID: sdkEnv['CANVAS_COURSE_ID'] } : {}),
-        ...(sdkEnv['GITHUB_TOKEN'] ? { GITHUB_TOKEN: sdkEnv['GITHUB_TOKEN'] } : {}),
-        ...(sdkEnv['GITHUB_TOKEN_PUBLIC'] ? { GITHUB_TOKEN_PUBLIC: sdkEnv['GITHUB_TOKEN_PUBLIC'] } : {}),
-        ...(sdkEnv['GITHUB_BASE_URL'] ? { GITHUB_BASE_URL: sdkEnv['GITHUB_BASE_URL'] } : {}),
-        ...(sdkEnv['GITHUB_ALLOWED_ORGS'] ? { GITHUB_ALLOWED_ORGS: sdkEnv['GITHUB_ALLOWED_ORGS'] } : {}),
-        ...(sdkEnv['YOUTUBE_API_KEY'] ? { YOUTUBE_API_KEY: sdkEnv['YOUTUBE_API_KEY'] } : {}),
-        ...(sdkEnv['VOICE_INTERVIEW_SECRET'] ? { VOICE_INTERVIEW_SECRET: sdkEnv['VOICE_INTERVIEW_SECRET'] } : {}),
-        ...(sdkEnv['VOICE_BASE_URL'] ? { VOICE_BASE_URL: sdkEnv['VOICE_BASE_URL'] } : {}),
-        ...(sdkEnv['VOICE_PORT'] ? { VOICE_PORT: sdkEnv['VOICE_PORT'] } : {}),
-      },
-    },
-  };
-
-  // LeanRAG is at /workspace/leanrag for non-main groups (dedicated mount)
-  // or /workspace/project/leanrag for main (project root mount).
-  const leanragPaths = ['/workspace/leanrag', '/workspace/project/leanrag'];
-  const leanragRoot = leanragPaths.find(p => fs.existsSync(`${p}/graph.pkl`));
-  if (leanragRoot) {
-    log(`LeanRAG registered: ${leanragRoot}/graph.pkl`);
-    servers.leanrag = {
-      command: '/opt/leanrag/bin/python3',
-      args: ['-m', 'leanrag.mcp_server'],
-      env: {
-        PYTHONPATH: path.dirname(leanragRoot),
-        ...awsEnv,
-      },
-    };
-  } else {
-    log(`LeanRAG NOT found (checked: ${leanragPaths.join(', ')})`);
-  }
-
-  return servers;
-}
-
 async function runQuery(
   prompt: string,
   sessionId: string | undefined,
@@ -436,8 +295,7 @@ async function runQuery(
   const studentTexts = (text: string) => messageTexts(text).filter((t) => !t.startsWith('[SYSTEM]')).join(' / ');
   const pendingTurns: string[] = [studentTexts(prompt)];
   let inFlight = 1;
-  const maxTurns = parseInt(sdkEnv['TAI_MAX_TURNS_PER_SESSION'] || '', 10) || DEFAULT_MAX_TURNS_PER_SESSION;
-  const maxContextTokens = parseInt(sdkEnv['TAI_MAX_CONTEXT_TOKENS'] || '', 10) || DEFAULT_MAX_CONTEXT_TOKENS;
+  const { maxTurns, maxContextTokens } = sessionLimits(sdkEnv);
   const sessionFull = () => state.turns >= maxTurns || state.contextTokens >= maxContextTokens;
   let sessionCapped = false;
   const carryOver: string[] = [];
@@ -515,25 +373,24 @@ async function runQuery(
     log(`Additional directories: ${extraDirs.join(', ')}`);
   }
 
-  // Inject current date+time so the agent can answer time questions accurately
-  // Explicitly pass timeZone so it works reliably inside Docker containers
-  const tz = process.env.TZ || 'UTC';
-  const now = new Date();
-  const dateTimeHeader = `Current date and time: ${now.toLocaleDateString('en-US', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: tz,
-  })} at ${now.toLocaleTimeString('en-US', {
-    hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz, timeZoneName: 'short',
-  })}.\n\n`;
+  // The date and time (so the agent can answer time questions accurately; the time zone is passed explicitly so it works inside Docker)
+  // and the student's memory go AFTER the persona: Cerebras caches a prompt by prefix, and a line that changes every minute (or for every
+  // student) ahead of the 27 KB persona made the first call of every session uncached (prompt.ts).
   const memCtxPath = '/workspace/group/memory_context.md';
-  const memoryContext = fs.existsSync(memCtxPath)
-    ? '\n\n' + fs.readFileSync(memCtxPath, 'utf-8') + '\n\n'
-    : '';
-  const systemAppend = dateTimeHeader + memoryContext + (globalClaudeMd || '');
+  const systemAppend = claudeSystemAppend({
+    persona: globalClaudeMd,
+    memory: fs.existsSync(memCtxPath) ? fs.readFileSync(memCtxPath, 'utf-8') : undefined,
+    now: new Date(),
+    timeZone: process.env.TZ || 'UTC',
+  });
 
   // Every credential the host handed over is unset for the commands Bash runs; the SDK itself needs them in its environment.
   const secretNames = secretEnvNames(containerInput.secrets, sdkEnv);
   // What the guards count per answer (WebFetch calls); reset when the model has answered.
   const counters = newTurnCounters();
+  // Progress for the student's page; a scheduled task has no one looking at it.
+  const reporter = new ProgressReporter({ enabled: !containerInput.isScheduledTask });
+  const progress = progressHooks(reporter);
 
   // The runner records every exchange itself, because the model does not (see session-log.ts). Not for the admin chat or scheduled tasks.
   const recordExchange = (reply: string | null | undefined) => {
@@ -576,7 +433,9 @@ async function runQuery(
       mcpServers: buildMcpServers(mcpServerPath, containerInput, sdkEnv),
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook()] }],
-        PreToolUse: preToolUseHooks(containerInput.isMain, secretNames, counters),
+        PreToolUse: [...preToolUseHooks(containerInput.isMain, secretNames, counters), { hooks: [progress.pre] }],
+        PostToolUse: [{ hooks: [progress.post] }],
+        PostToolUseFailure: [{ hooks: [progress.failed] }],
       },
     }
   })) {
@@ -594,6 +453,7 @@ async function runQuery(
     if (message.type === 'system' && message.subtype === 'init') {
       newSessionId = message.session_id;
       log(`Session initialized: ${newSessionId}`);
+      reporter.thinking();
     }
 
     if (message.type === 'system' && (message as { subtype?: string }).subtype === 'task_notification') {
@@ -604,6 +464,7 @@ async function runQuery(
     if (message.type === 'result') {
       resultCount++;
       counters.webFetch = 0;
+      reporter.beginTurn();          // what the next message looks at is its own
       let textResult = 'result' in message ? (message as { result?: string }).result : null;
       // A failed model request (after the CLI's own retries): abort the query and let the caller tell the student something human.
       // Only an overflow clears the session; a busy provider or a 500 does not (upstream called every 500 "memory too full").
@@ -723,7 +584,7 @@ async function main(): Promise<void> {
       // Crash with active session — likely context overflow. Reset and continue.
       if (sessionId) {
         log(`Query crashed with active session, resetting: ${errorMessage}`);
-        writeOutput({ status: 'success', result: friendlyMessage('overflow'), resetSession: true });
+        writeOutput(failureOutput('overflow'));
         startOver();
         // Fall through to wait for next stdin message
       } else {
@@ -746,19 +607,16 @@ async function main(): Promise<void> {
       if (queryResult.apiFailure) {
         const { kind, status } = queryResult.apiFailure;
         log(`Model API failure (${kind}${status ? ' ' + status : ''}): telling the student, ${kind === 'overflow' ? 'clearing' : 'keeping'} the session`);
-        writeOutput(
-          kind === 'overflow'
-            ? { status: 'success', result: friendlyMessage(kind), resetSession: true }
-            : { status: 'success', result: friendlyMessage(kind), newSessionId: sessionId },
-        );
+        writeOutput(failureOutput(kind, sessionId));
         if (kind === 'overflow') startOver();
       }
 
-      // If EOF was detected during the query, exit immediately.
-      // Don't emit a session-update marker (it would reset the host's
-      // idle timer and cause a 30-min delay before the next close).
+      // If EOF was detected during the query, exit immediately. The query did finish, and a scheduled task that is closed early (a student
+      // wrote in) still has to say it was done, or the host takes it for a run that never finished: so the idle marker goes out (the host
+      // starts its idle timer on a text result only, in a chat, so it cannot cause the long delay the session-update marker once did).
       if (queryResult.closedDuringQuery) {
         log('EOF consumed during query, exiting');
+        writeOutput(idleOutput(sessionId));
         break;
       }
 
@@ -771,8 +629,8 @@ async function main(): Promise<void> {
         continue;
       }
 
-      // Emit session update so host can track it
-      writeOutput({ status: 'success', result: null, newSessionId: sessionId });
+      // Emit session update so host can track it; the query is over and the runner waits, which is what `idle` says
+      writeOutput(idleOutput(sessionId));
     }
 
     log('Query ended, waiting for next stdin message...');

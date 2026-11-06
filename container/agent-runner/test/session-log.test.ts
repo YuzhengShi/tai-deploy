@@ -25,6 +25,12 @@ describe('visibleText', () => {
     expect(visibleText('answer<internal>never closed')).toBe('answer');
     expect(visibleText('<internal>only this</internal>')).toBe('');
   });
+
+  it('drops the reasoning qwen writes as emphasised text', () => {
+    expect(visibleText('<i>internal: he wants the answer</i>\n\nI can\'t hand you that.')).toBe("I can't hand you that.");
+    expect(visibleText('hello <i>internal: never closed')).toBe('hello');
+    expect(visibleText('an <i>italic</i> word')).toBe('an <i>italic</i> word');
+  });
 });
 
 describe('appendInteraction', () => {

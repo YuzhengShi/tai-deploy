@@ -240,4 +240,88 @@ describe('GroupQueue', () => {
 
     expect(processed).toContain('group3@g.us');
   });
+
+  // --- Scheduled tasks must not take every slot ---
+
+  it('lets a limited number of containers be scheduled tasks and keeps the rest for messages', async () => {
+    const q = new GroupQueue(1);              // one task at a time, two containers in all (the mocked limit)
+    const started: string[] = [];
+    const release: Record<string, () => void> = {};
+    const task = (name: string) => () =>
+      new Promise<void>((resolve) => {
+        started.push(name);
+        release[name] = resolve;
+      });
+    q.setProcessMessagesFn(async () => {
+      started.push('message');
+      return true;
+    });
+
+    q.enqueueTask('group1@g.us', 'patrol-1', task('patrol-1'));
+    q.enqueueTask('group2@g.us', 'patrol-2', task('patrol-2'));       // a second container is free, the cap on tasks says wait
+    await vi.advanceTimersByTimeAsync(10);
+    expect(started).toEqual(['patrol-1']);
+
+    q.enqueueMessageCheck('group3@g.us');                              // the student gets the free slot
+    await vi.advanceTimersByTimeAsync(10);
+    expect(started).toEqual(['patrol-1', 'message']);
+
+    release['patrol-1']();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(started).toEqual(['patrol-1', 'message', 'patrol-2']);      // when the first task is done the next one goes
+    release['patrol-2']();
+    await vi.advanceTimersByTimeAsync(10);
+  });
+
+  it('serves a waiting message before a waiting task when a slot frees up', async () => {
+    const q = new GroupQueue(2);
+    const started: string[] = [];
+    const release: Record<string, () => void> = {};
+    const hold = (name: string) => () =>
+      new Promise<void>((resolve) => {
+        started.push(name);
+        release[name] = resolve;
+      });
+    q.setProcessMessagesFn(async (jid: string) => {
+      started.push('message ' + jid);
+      return true;
+    });
+    q.enqueueTask('group1@g.us', 'a', hold('a'));
+    q.enqueueTask('group2@g.us', 'b', hold('b'));                      // both containers busy with tasks
+    q.enqueueTask('group3@g.us', 'c', hold('c'));                      // waits
+    q.enqueueMessageCheck('group4@g.us');                              // waits too, but it is a student
+    await vi.advanceTimersByTimeAsync(10);
+    expect(started).toEqual(['a', 'b']);
+    release['a']();
+    await vi.advanceTimersByTimeAsync(10);
+    // the student first, though the task was in line earlier; the message is answered at once, so the task follows
+    expect(started).toEqual(['a', 'b', 'message group4@g.us', 'c']);
+    release['b']();
+    release['c']();
+    await vi.advanceTimersByTimeAsync(10);
+  });
+
+  // --- The last slot stays for a student (a voice call's tool host started ahead of the call asks first: src/voice/hub.ts spareContainer) ---
+
+  it('has a spare slot only while another is free after it: the last slot is kept for a student who writes', async () => {
+    const release: Array<() => void> = [];
+    queue.setProcessMessagesFn(async () => {
+      await new Promise<void>((resolve) => release.push(resolve));
+      return true;
+    });
+
+    expect(queue.hasSpareSlot()).toBe(true);                     // nothing runs: both of the two slots (the mocked limit) are free
+    queue.enqueueMessageCheck('group1@g.us');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(queue.hasSpareSlot()).toBe(false);                    // one runs and one is free: that one is a student's, not for something started ahead
+    queue.enqueueMessageCheck('group2@g.us');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(queue.hasSpareSlot()).toBe(false);                    // all taken
+
+    release[0]();
+    release[1]();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(queue.hasSpareSlot()).toBe(true);                     // both gone: room again
+  });
+
 });

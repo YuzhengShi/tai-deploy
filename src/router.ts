@@ -1,4 +1,4 @@
-import { MAX_MESSAGE_LENGTH, TIMEZONE } from './config.js';
+import { ASSISTANT_NAME, MAX_MESSAGE_LENGTH, TIMEZONE } from './config.js';
 import { Channel, NewMessage } from './types.js';
 
 export function escapeXml(s: string): string {
@@ -36,12 +36,17 @@ export function stripInternalTags(text: string): string {
     .replace(/<internal\b(?:(?!<internal\b|<\/internal)[\s\S])*?<\/commentary[}>]?/gi, '')
     .replace(/<internal\b[^>]*>[\s\S]*?<\/internal\s*>/gi, '')  // closed tags (attributes tolerated)
     .replace(/<internal\b[\s\S]*$/gi, '')                        // unclosed tag → strip to end
+    // qwen sometimes writes its reasoning as emphasised text instead of a tag: "<i>internal: ... </i>" (closed, or running to the end)
+    .replace(/<(i|em|b)>\s*internal\b[\s\S]*?<\/\1>/gi, '')
+    .replace(/<(?:i|em|b)>\s*internal\b[\s\S]*$/gi, '')
     .replace(/<\/?(?:commentary|analysis)\b(?:\s[^>\n]*)?[}>]?/gi, '')     // stray reasoning-channel tags
     .replace(/^[\s\S]*?assistantfinal/i, '')                     // reasoning-channel text ahead of the final answer
     .replace(/^.*\bto=functions\.[^\n]*$/gim, '')                // a tool call written as a line of text
     // A planning sentence run into the reply without a space: "We need to introduce ourselves as TAi.hey! i'm TAi ..."
     .replace(/^\s*(?:We|I)\s+(?:need|should|must|will|have to)\s[^\n]*?[.!?](?=[A-Za-z])/, '')
     .replace(/Human:\s*<messages>[\s\S]*/g, '')                // hallucinated Human turn → strip everything after
+    .replace(/<reply_rule>[\s\S]*?<\/reply_rule>/g, '')       // the host's length rule (src/reply-shape.ts), if a model repeats it
+    .replace(/<reply_rule>[\s\S]*$/g, '')
     .replace(/<messages>[\s\S]*?<\/messages>/g, '')           // bare message XML (closed)
     .replace(/<messages>[\s\S]*$/g, '')                       // bare message XML (unclosed)
     .replace(/<message\s+[^>]*>[\s\S]*?<\/message>/g, '')   // individual <message> tags (closed)
@@ -110,9 +115,40 @@ function redactSystemPromptLeakage(text: string): string {
   return text;
 }
 
+/**
+ * gpt-oss writes some of its ordinary characters as look-alikes: a non-breaking hyphen (U+2011) in "half‑open", a narrow no-break space
+ * (U+202F) before a unit or in a date, a zero-width space now and then. They look like the plain ones and are not: a student who
+ * searches for "half-open", pastes "load‑test" into a shell or a file name, or compiles a snippet copied from a code block gets a
+ * mismatch nobody can see (the memory-recall check of the evaluation failed on exactly that). They become the plain character. The
+ * dashes and curly quotes of ordinary prose stay as written; inside code (a fenced block or backticks) a curly quote or a long dash is
+ * never what was meant and is straightened. The zero-width joiner is left alone: emoji sequences are built with it.
+ */
+export function normalizeTypography(text: string): string {
+  const plain = text
+    .replace(/[‐‑‒]/g, '-')
+    .replace(/[     ]/g, ' ')
+    .replace(/[​⁠﻿]/g, '');
+  return plain.replace(/```[\s\S]*?```|`[^`\n]+`/g, (code) =>
+    code
+      .replace(/[‘’]/g, "'")
+      .replace(/[“”]/g, '"')
+      .replace(/[–—−]/g, '-'),
+  );
+}
+
+/**
+ * gpt-oss, writing in the persona's lower-case voice, now and then splits its own name when it introduces itself: "hey! i'm ta i".
+ * Only that: lower case, right after "i'm", "i am", "this is" or "it's". A course about a TA says "the TA I met" and "ask your ta i
+ * think" in other places, and those stay as written.
+ */
+export function mendOwnName(text: string): string {
+  return text.replace(/\b(i['’]?m|i am|this is|it['’]?s) ta i\b/gi, (_whole, lead: string) => `${lead} ${ASSISTANT_NAME}`);
+}
+
 export function formatOutbound(rawText: string): string {
   let text = stripInternalTags(rawText);
   if (!text) return '';
+  text = mendOwnName(normalizeTypography(text));
   text = redactSystemPromptLeakage(text);
   return text;
 }

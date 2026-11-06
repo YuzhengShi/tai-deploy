@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="description" content="The CS6650 class as TAi sees it, for the teaching team">
+  <title>Teaching view</title>
+  <link rel="icon" href="mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="team.css">
+  <script type="module" src="team.js"></script>
+</head>
+<body class="team">
+  <a class="skip-link" href="#main">Skip to the page</a>
+
+  <header class="team-bar">
+    <a class="team-brand" href="./" aria-label="Back to the conversation with TAi"><img src="mark.svg" alt="" width="28" height="28"><span>TAi</span></a>
+    <h1>Teaching view</h1>
+    <p class="team-stamp" id="stamp" role="status"></p>
+    <div class="team-actions">
+      <button class="btn" id="refresh" type="button" disabled>Refresh</button>
+      <button class="btn" id="theme" type="button" aria-label="Switch between light and dark">Dark</button>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <noscript><p class="state">This page needs JavaScript.</p></noscript>
+    <p class="state" id="state" role="status">Loading the class&hellip;</p>
+
+    <section class="state-card" id="forbidden" aria-labelledby="forbidden-title" hidden>
+      <h2 id="forbidden-title">This page is for the teaching team</h2>
+      <p>The account you are signed in with is not one of the teaching team's. If it should be, the person who looks after TAi can change that.</p>
+      <a href="./">Back to the conversation</a>
+    </section>
+
+    <section class="state-card" id="failed" aria-labelledby="failed-title" hidden>
+      <h2 id="failed-title">The class could not be loaded</h2>
+      <p id="failed-why">TAi did not answer.</p>
+      <button class="btn btn-primary" id="retry" type="button">Try again</button>
+    </section>
+
+    <div id="content" hidden>
+      <div class="controls">
+        <div class="field">
+          <label for="filter">Filter concepts, students and questions</label>
+          <input id="filter" type="search" placeholder="For example: raft, or a name" autocomplete="off" spellcheck="false">
+        </div>
+        <label class="check"><input id="staff" type="checkbox"><span>Count the teaching team's own accounts too</span></label>
+      </div>
+      <ul class="notes" id="notes" aria-label="Notes about the data"></ul>
+
+      <section aria-labelledby="h-glance">
+        <h2 class="sr-only" id="h-glance">The class at a glance</h2>
+        <ul class="cards" id="cards"></ul>
+      </section>
+
+      <section class="panel" aria-labelledby="h-attention">
+        <h2 id="h-attention">Needs attention</h2>
+        <p class="lead" id="attention-lead"></p>
+        <div id="attention"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-heat">
+        <h2 id="h-heat">Competency heat map</h2>
+        <p class="lead" id="heat-lead"></p>
+        <div class="tools">
+          <span class="tool"><label for="order">Order the students by</label>
+            <select id="order">
+              <option value="name">name</option>
+              <option value="weakest">weakest first</option>
+              <option value="quiet">quietest first</option>
+            </select></span>
+          <button class="btn" id="csv" type="button">Download CSV</button>
+        </div>
+        <div id="heat"></div>
+        <p class="heat-note" id="heat-note">Point at a cell, or click it, to read it here.</p>
+        <ul class="legend" id="legend" aria-label="What the cells mean"></ul>
+      </section>
+
+      <section class="panel" aria-labelledby="h-mis">
+        <h2 id="h-mis">Misconceptions across the class</h2>
+        <p class="lead" id="mis-lead"></p>
+        <div id="misconceptions"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-patrol">
+        <h2 id="h-patrol">The teaching patrol</h2>
+        <p class="lead" id="patrol-lead"></p>
+        <div id="patrol"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-quick">
+        <h2 id="h-quick">Quick checks</h2>
+        <p class="lead" id="quick-lead"></p>
+        <div class="tools"><label class="check"><input id="quick-min" type="checkbox"><span>Only questions with two or more answers</span></label></div>
+        <div id="quick"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-voice">
+        <h2 id="h-voice">Voice</h2>
+        <p class="lead" id="voice-lead"></p>
+        <div id="voice"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-students">
+        <h2 id="h-students">Students</h2>
+        <p class="lead" id="students-lead"></p>
+        <div id="students"></div>
+      </section>
+    </div>
+  </main>
+
+  <dialog class="detail" id="detail" aria-labelledby="detail-title">
+    <div class="detail-head">
+      <h2 id="detail-title">Student</h2>
+      <button class="btn" id="detail-close" type="button">Close</button>
+    </div>
+    <div class="detail-body" id="detail-body" tabindex="-1"></div>
+  </dialog>
+</body>
+</html>

@@ -1,0 +1,26 @@
+/* TAi's progress (docs/PROGRESS.md): the words beside the typing dots, and the "Looked at" line under a reply. Colours, sizes and the dark theme are
+   style.css's tokens; nothing here animates (the dots' own animation is style.css's, and reduced motion stops it there). */
+
+/* The typing bubble with words: the dots and the label side by side. The label's box is as wide as the longest label there can be (an invisible copy of
+   it sits in the same grid cell), so the bubble keeps its size when the words change, and the words never wrap, so its height keeps too. */
+.row.typing .bubble.has-label { display: inline-flex; align-items: center; gap: 12px; min-width: 0; max-width: 100%; }
+.typing-label { display: inline-grid; min-width: 0; max-width: 100%; font-size: 14.5px; line-height: 1.4; color: var(--muted); }
+.typing-label > span { grid-area: 1 / 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.typing-label > .typing-label-size { visibility: hidden; }
+.row.typing.is-queued .dots i { animation-play-state: paused; opacity: 0.45; }
+
+/* A reply being written (TAI_PORTAL_STREAM, docs/STREAMING.md): its words, a sentence at a time, in the bubble where the dots were. The box is the one the
+   reply will have (a reply bubble's padding, and the room its reaction button takes beside it, kept by .ghost), so the reply that arrives has the same left edge
+   and width and breaks the words already there at the same places, and .no-rise on it keeps it from fading in again over them. (When the response that brings
+   the reply still says TAi is typing, the dots come back under it for a moment, as they always did, and the list may scroll with it.) */
+.row.typing.has-preview .bubble, .row.typing.has-preview .bubble.has-label { display: block; padding: 14px 20px; max-width: min(100%, 700px); }
+.row.typing.has-preview .bubble > .dots, .row.typing.has-preview .bubble > .typing-label, .row.typing.has-preview .typing-note { display: none; }
+.row.typing.has-preview .actions.ghost { visibility: hidden; pointer-events: none; }
+.row.no-rise { animation: none; }
+
+/* "Looked at": what TAi opened for this reply. Small and quiet, under the words, inside the bubble; a link opens in a new tab. */
+.looked { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 11px 0 0; padding-top: 9px; border-top: 1px solid var(--line); font-size: 13px; line-height: 1.35; color: var(--muted); }
+.looked-lead { margin-right: 2px; }
+.looked .chip { display: inline-block; flex: 0 0 auto; min-width: 0; max-width: 100%; padding: 3px 10px; border: 1px solid transparent; border-radius: 999px; background: var(--pill); color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.looked a.chip { text-decoration: none; }
+.looked a.chip:hover { background: var(--pill-hover); border-color: var(--dash); }

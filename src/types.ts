@@ -1,3 +1,5 @@
+import type { MessageExtras, TurnView } from './turn-status.js';
+
 export interface AdditionalMount {
   hostPath: string; // Absolute path on host (supports ~ for home)
   containerPath?: string; // Optional — defaults to basename of hostPath. Mounted at /workspace/extra/{value}
@@ -56,6 +58,13 @@ export interface NewMessage {
   is_bot_message?: boolean;
 }
 
+/**
+ * Who made a scheduled task (src/task-origin.ts has the rules): 'system' = the host itself (the teaching patrol, the grade bootstrap, the course sync), the
+ * only kind whose container has its tool limits lifted and that a student's agent may not stop; 'container' = an agent's schedule_task, whoever the agent was (a student's,
+ * or the admin chat's).
+ */
+export type TaskOrigin = 'system' | 'container';
+
 export interface ScheduledTask {
   id: string;
   group_folder: string;
@@ -69,6 +78,8 @@ export interface ScheduledTask {
   last_result: string | null;
   status: 'active' | 'paused' | 'completed';
   created_at: string;
+  /** Null (or absent) = not classified yet, which counts as 'container': the migration (db.ts) classifies the rows that exist at every start. */
+  origin?: TaskOrigin | null;
 }
 
 export interface TaskRunLog {
@@ -85,7 +96,8 @@ export interface TaskRunLog {
 export interface Channel {
   name: string;
   connect(): Promise<void>;
-  sendMessage(jid: string, text: string): Promise<void>;
+  // `extras` are for the channels that can show more than words (the web page shows what the answer looked at); the others ignore them.
+  sendMessage(jid: string, text: string, extras?: MessageExtras): Promise<void>;
   isConnected(): boolean;
   ownsJid(jid: string): boolean;
   disconnect(): Promise<void>;
@@ -95,6 +107,8 @@ export interface Channel {
   sendReaction?(jid: string, messageId: string, emoji: string): Promise<void>;
   sendAudioMessage?(jid: string, audioBuffer: Buffer): Promise<void>;
   sendImageMessage?(jid: string, imageBuffer: Buffer, caption?: string): Promise<void>;
+  // Optional: what a chat's turn is doing (a status the page shows while TAi works) and what its answer looked at (src/turn-status.ts). The web page only.
+  turn?: TurnView;
 }
 
 // Callback type that channels use to deliver inbound messages

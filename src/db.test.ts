@@ -5,6 +5,7 @@ import {
   createTask,
   deleteTask,
   getAllChats,
+  getLastUserMessageTime,
   getMessagesSince,
   getNewMessages,
   getTaskById,
@@ -37,6 +38,20 @@ function store(overrides: {
     is_from_me: overrides.is_from_me ?? false,
   });
 }
+
+// --- getLastUserMessageTime (how long a student has been quiet: the patrol's gate) ---
+
+describe('getLastUserMessageTime', () => {
+  it('is the latest message TAi did not write (by the flag or by the old name prefix), and undefined for a chat with none', () => {
+    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    store({ id: 'u1', chat_jid: 'group@g.us', sender: 's', sender_name: 'Ana', content: 'hi', timestamp: '2024-01-01T00:00:01.000Z' });
+    store({ id: 'u2', chat_jid: 'group@g.us', sender: 's', sender_name: 'Ana', content: 'and again', timestamp: '2024-01-01T00:00:05.000Z' });
+    storeMessage({ id: 'b1', chat_jid: 'group@g.us', sender: 'bot', sender_name: 'TAi', content: 'a reply', timestamp: '2024-01-01T00:00:09.000Z', is_from_me: true, is_bot_message: true });
+    store({ id: 'b2', chat_jid: 'group@g.us', sender: 'bot', sender_name: 'TAi', content: 'TAi: an older reply', timestamp: '2024-01-01T00:00:10.000Z' });
+    expect(getLastUserMessageTime('group@g.us', 'TAi')).toBe('2024-01-01T00:00:05.000Z');
+    expect(getLastUserMessageTime('nobody@g.us', 'TAi')).toBeUndefined();
+  });
+});
 
 // --- storeMessage (NewMessage format) ---
 

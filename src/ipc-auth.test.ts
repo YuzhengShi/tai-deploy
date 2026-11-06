@@ -174,6 +174,7 @@ describe('pause_task authorization', () => {
       next_run: '2025-06-01T00:00:00.000Z',
       status: 'active',
       created_at: '2024-01-01T00:00:00.000Z',
+      origin: 'container',        // a task an agent made: a group stops those (the host's own are not its to stop: src/ipc-task-limits.test.ts)
     });
   });
 
@@ -208,6 +209,7 @@ describe('resume_task authorization', () => {
       next_run: '2025-06-01T00:00:00.000Z',
       status: 'paused',
       created_at: '2024-01-01T00:00:00.000Z',
+      origin: 'container',
     });
   });
 
@@ -260,6 +262,7 @@ describe('cancel_task authorization', () => {
       next_run: null,
       status: 'active',
       created_at: '2024-01-01T00:00:00.000Z',
+      origin: 'container',
     });
 
     await processTaskIpc({ type: 'cancel_task', taskId: 'task-own' }, 'other-group', false, deps);
@@ -641,7 +644,7 @@ describe('set_student_identity authorization', () => {
     expect(group!.githubUsername).toBe('other-gh');
   });
 
-  it('non-main group can set its own identity (scheduled task)', async () => {
+  it('non-main group cannot set its own identity: the host cannot tell a system task\'s file from a student agent\'s, so only the admin chat binds (src/ipc-task-origin.test.ts)', async () => {
     await processTaskIpc(
       {
         type: 'set_student_identity',
@@ -654,7 +657,7 @@ describe('set_student_identity authorization', () => {
 
     const group = getRegisteredGroup('other@g.us');
     expect(group).toBeDefined();
-    expect(group!.canvasUserId).toBe('11111');
+    expect(group!.canvasUserId).toBeUndefined();
   });
 
   it('non-main group cannot set another groups identity', async () => {
@@ -677,19 +680,70 @@ describe('set_student_identity authorization', () => {
   it('updates only provided fields without clearing others', async () => {
     // First set canvas ID
     updateGroupIdentity('other-group', { canvasUserId: '11111' });
-    // Then set github without touching canvas
+    // Then set github without touching canvas (the admin chat: a container's own request is refused, see above)
     await processTaskIpc(
       {
         type: 'set_student_identity',
+        targetFolder: 'other-group',
         githubUsername: 'alice-gh',
       },
-      'other-group',
-      false,
+      'main',
+      true,
       deps,
     );
 
     const group = getRegisteredGroup('other@g.us');
     expect(group!.canvasUserId).toBe('11111');
     expect(group!.githubUsername).toBe('alice-gh');
+  });
+
+  it('leaves a binding as it is when a container asks for another one', async () => {
+    updateGroupIdentity('other-group', { canvasUserId: '11111', githubUsername: 'alice-gh' });
+    await processTaskIpc({ type: 'set_student_identity', canvasUserId: '22222', githubUsername: 'bob-gh' }, 'other-group', false, deps);
+    const group = getRegisteredGroup('other@g.us');
+    expect(group!.canvasUserId).toBe('11111');
+    expect(group!.githubUsername).toBe('alice-gh');
+  });
+});
+
+// --- the student page's activity list ---
+
+describe('the activity list is told of a reminder', () => {
+  const once = (prompt: string, targetJid = 'other@g.us') => ({
+    type: 'schedule_task',
+    prompt,
+    schedule_type: 'once',
+    schedule_value: new Date(Date.now() + 3_600_000).toISOString(),
+    targetJid,
+  });
+
+  it('with its time, for the student whose task it is, and not for a recurring task', async () => {
+    const seen: Array<{ folder: string; entry: { type: string; title: string; text: string; detail?: string } }> = [];
+    deps.recordActivity = (folder, entry) => seen.push({ folder, entry });
+    await processTaskIpc(once('remind them to start Homework 7'), 'main', true, deps);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].folder).toBe('other-group');
+    expect(seen[0].entry).toMatchObject({ type: 'reminder', text: 'remind them to start Homework 7' });
+    expect(seen[0].entry.title).toMatch(/^Reminder · \w{3}, \w{3} \d+, \d+:\d\d (AM|PM)$/);
+    expect(seen[0].entry.detail).toContain('Scheduled for ');
+    await processTaskIpc({ type: 'schedule_task', prompt: 'daily routine', schedule_type: 'cron', schedule_value: '0 9 * * *', targetJid: 'other@g.us' }, 'main', true, deps);
+    expect(seen).toHaveLength(1);
+    expect(getAllTasks()).toHaveLength(2);
+  });
+
+  it('only for a task that was made: one a group may not schedule for another is no activity of the other', async () => {
+    const seen: string[] = [];
+    deps.recordActivity = (folder) => seen.push(folder);
+    await processTaskIpc(once('not allowed', 'third@g.us'), 'other-group', false, deps);
+    expect(seen).toEqual([]);
+    expect(getAllTasks()).toHaveLength(0);
+  });
+
+  it('and a list that cannot be written to does not stop the task', async () => {
+    deps.recordActivity = () => {
+      throw new Error('the page is not up');
+    };
+    await processTaskIpc(once('still made'), 'main', true, deps);
+    expect(getAllTasks()).toHaveLength(1);
   });
 });

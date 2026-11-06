@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="TAi">
+  <defs>
+    <linearGradient id="g" x1="8" y1="6" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3b82f6"/>
+      <stop offset=".55" stop-color="#7c5cf6"/>
+      <stop offset="1" stop-color="#ec5bb4"/>
+    </linearGradient>
+    <radialGradient id="h" cx="22" cy="16" r="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="url(#g)"/>
+  <circle cx="32" cy="32" r="30" fill="url(#h)"/>
+  <path d="M32 12Q34 30 52 32Q34 34 32 52Q30 34 12 32Q30 30 32 12Z" fill="#fff"/>
+  <circle cx="47" cy="17" r="2.6" fill="#fff" fill-opacity=".9"/>
+</svg>

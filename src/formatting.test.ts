@@ -5,6 +5,7 @@ import {
   escapeXml,
   formatMessages,
   formatOutbound,
+  normalizeTypography,
   stripInternalTags,
 } from './router.js';
 import { NewMessage } from './types.js';
@@ -167,6 +168,15 @@ describe('stripInternalTags', () => {
     expect(stripInternalTags('<internal>\nSome reasoning...')).toBe('');
   });
 
+  it('strips the reasoning qwen writes as emphasised text, "<i>internal: ...</i>" (measured, harness/scenarios.py s3)', () => {
+    expect(
+      stripInternalTags('<i>internal: Student wants the answer. I must not give it.</i>\n\nI can\'t hand you that.'),
+    ).toBe("I can't hand you that.");
+    expect(stripInternalTags('<em>Internal reasoning: x</em>hello')).toBe('hello');
+    expect(stripInternalTags('hello <i>internal: never closed')).toBe('hello');
+    expect(stripInternalTags('an <i>italic</i> word and an <i>internet</i> one')).toBe('an <i>italic</i> word and an <i>internet</i> one');
+  });
+
   it('strips unclosed internal tag preserving text before it', () => {
     expect(
       stripInternalTags('response text\n<internal>\nreasoning stuff'),
@@ -261,6 +271,42 @@ describe('stripInternalTags: reasoning and tool-call text of another model', () 
     expect(stripInternalTags('<commentary>hello</commentary> there')).toBe('hello there');
     expect(stripInternalTags('analysis: the student is new. assistantfinalWelcome!')).toBe('Welcome!');
     expect(stripInternalTags('commentary to=functions.send_message json{"text":"x"}\nreal answer')).toBe('real answer');
+  });
+});
+
+describe('normalizeTypography', () => {
+  it('turns the look-alike hyphens and spaces a model writes into the plain ones', () => {
+    expect(normalizeTypography('the half‑open state, a 5‑minute load‑test, a figure‒dash and a hyphen‐')).toBe(
+      'the half-open state, a 5-minute load-test, a figure-dash and a hyphen-',
+    );
+    expect(normalizeTypography('Nov 5 03:23 PT and 10 ms and 3 ms')).toBe('Nov 5 03:23 PT and 10 ms and 3 ms');
+    expect(normalizeTypography('zero​width⁠ and﻿mark')).toBe('zerowidth and' + 'mark');
+  });
+
+  it('leaves the dashes, curly quotes and emoji of ordinary prose alone', () => {
+    const prose = 'you’re close — “mostly” right – try again 🤔 👨‍💻';
+    expect(normalizeTypography(prose)).toBe(prose);
+  });
+
+  it('straightens quotes and long dashes inside code, and only there', () => {
+    const text = 'say “hi” then `x — y = ‘a’` and\n```go\nfmt.Println(“hi”) – 1\n```\nbut “this” stays';
+    expect(normalizeTypography(text)).toBe('say “hi” then `x - y = \'a\'` and\n```go\nfmt.Println("hi") - 1\n```\nbut “this” stays');
+  });
+
+  it('is applied to what a student is sent', () => {
+    expect(formatOutbound('the half‑open state')).toBe('the half-open state');
+  });
+
+  it('puts the assistant\'s own name back together when the model splits it while introducing itself', () => {
+    expect(formatOutbound("hey! i'm ta i, the ai teaching assistant")).toBe(`hey! i'm ${NAME}, the ai teaching assistant`);
+    expect(formatOutbound('hi, this is ta i. what are you on?')).toBe(`hi, this is ${NAME}. what are you on?`);
+    expect(formatOutbound("I’m ta i, your assistant")).toBe(`I’m ${NAME}, your assistant`);
+  });
+
+  it('leaves "ta i" alone anywhere else: a course about a TA says it', () => {
+    for (const same of ['the TA I met with said so', 'ask your ta i think they know', 'i like tai chi and data i', 'my ta i guess is out']) {
+      expect(formatOutbound(same)).toBe(same);
+    }
   });
 });
 

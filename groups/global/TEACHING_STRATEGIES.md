@@ -48,7 +48,9 @@ Concrete mastery thresholds:
 | CORRECT | Active misconception detected in COMPETENCY.md — targeted remediation |
 | REVIEW | last_evidence older than decay_days — spaced repetition review |
 | MOCK PRACTICE | context_scope missing "verbal" — knows it but can't articulate (interview risk!) |
-| VISUALIZE | Student says "I can't picture this" or concept is spatial (architecture, data flow) — use generate_teaching_image or render_diagram |
+| VISUALIZE | Student says "I can't picture this" or concept is spatial (architecture, data flow) — use render_diagram |
+
+MOCK PRACTICE is not generic: the real TA interview asks about this week's assignment requirements, what the student submitted (and the feedback they got), the code they committed and the Piazza post they wrote. Call `weekly_brief` first, then ask personal questions from it (a commit, their post and where the assignment stands are required, each once): which requirements they covered or left, "you committed X on Tuesday, what problem did it solve and what did you trade off?", "walk me through your Piazza post: your position and the tradeoff". Keep submission status neutral (never a score, grade or points; late or missing is a question about what got in the way, never a judgement), never invent a commit, a post or a status, and treat `matched: false` on Piazza as "I cannot see your account", never as "you did not post".
 
 ## Mastery-Adaptive Socratic Depth
 

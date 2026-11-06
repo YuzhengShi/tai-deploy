@@ -1,0 +1,31 @@
+/* The review of a mock interview, in the detail of its card (review.js). Only the tokens of style.css: the page's focus ring and button base apply. */
+
+.review { margin: 10px 0 12px; }
+.review-title { margin: 0 0 8px; color: var(--muted); font-size: 12.5px; font-weight: 650; letter-spacing: 0.05em; text-transform: uppercase; }
+.review-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.review-item { min-width: 0; padding: 12px 14px; background: var(--pill); border-radius: 18px; }
+
+/* how it went, in a word, with a dot whose colour says the same: the word is what is read, the colour is only help */
+.review-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 6px; }
+.review-band { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px; border-radius: 999px; background: var(--bubble); color: var(--text); font-size: 12.5px; font-weight: 650; line-height: 1.5; }
+.review-band::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.review-band[data-tone="good"]::before { background: var(--ok); }
+.review-band[data-tone="mid"]::before { background: var(--blue); }
+.review-band[data-tone="low"]::before { background: var(--name-interviewer); }
+.review-topic { min-width: 0; color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+
+.review-q { margin: 0 0 6px; font-size: 15px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.review-said, .review-better { margin: 0 0 6px; color: var(--muted); font-size: 14.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.review-label { color: var(--text); font-weight: 650; }
+
+.review-practise {
+  min-height: 36px; margin-top: 4px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--bubble); color: var(--text);
+  font-size: 13.5px; font-weight: 650; -webkit-tap-highlight-color: transparent;
+}
+.review-practise:hover:not(:disabled) { background: var(--pill-hover); }
+.review-practise:disabled { opacity: 0.55; }
+
+@media (max-width: 720px) {
+  .review-item { padding: 11px 12px; }
+  .review-practise { min-height: 40px; }
+}

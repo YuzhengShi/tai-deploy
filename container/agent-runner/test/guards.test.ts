@@ -94,9 +94,24 @@ describe('Bash hook', () => {
     'python3 -c "import urllib.request"',
     'eval "$X"',
     'echo aGk= | base64 -d | bash',
+    // links and special files: what a host read of the student's folder would follow or wait on (src/safe-fs.ts)
+    'ln -s ../../../.env /workspace/group/competency/interviews.md',
+    'rm /workspace/group/uploads/a.txt; ln -sf /etc/passwd /workspace/group/uploads/a.txt',
+    'ln -fs ../.. uploads',
+    'ln target -s linkname',
+    'ln --symbolic ../.. uploads',
+    "l''n -s ../.. uploads",
+    'mkfifo /workspace/group/competency/strategy-log.md',
+    'mknod /workspace/group/x p',
   ])('blocks %s for a student and not for main', async (command) => {
     expect(await denied(student, { command })).toMatch(/restricted pattern/);
     expect(await denied(main, { command })).toBeNull();
+  });
+
+  it('lets a hard link and the words "ln" and "link" in ordinary commands through', async () => {
+    for (const command of ['ln a.txt b.txt', 'echo "a link in a sentence"', 'ls -l', 'git log -n 3']) {
+      expect(await denied(student, { command })).toBeNull();
+    }
   });
 
   it.each([
@@ -168,6 +183,13 @@ describe('file size guard', () => {
     expect(await denied(guard, { content: '0123456789' })).toBeNull();
     expect(await denied(guard, { content: '01234567890' })).toMatch(/too large/);
     expect(await denied(guard, { new_string: 'ééééé6' })).toMatch(/too large/); // 11 bytes
+  });
+
+  it('counts every edit of a multi-edit call together', async () => {
+    const guard = createFileSizeGuardHook(10);
+    expect(await denied(guard, { edits: [{ new_string: '01234' }, { new_string: '56789' }] })).toBeNull();
+    expect(await denied(guard, { edits: [{ new_string: '01234' }, { new_string: '567890' }] })).toMatch(/too large/);
+    expect(await denied(guard, { edits: [{ old_string: 'a' }] })).toBeNull();
   });
 });
 

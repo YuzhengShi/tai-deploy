@@ -8,6 +8,7 @@ import { CronExpressionParser } from 'cron-parser';
 import { MAIN_GROUP_FOLDER, TIMEZONE } from './config.js';
 import { createTask, getAllTasks } from './db.js';
 import { logger } from './logger.js';
+import { isSystemTaskOfKind } from './task-origin.js';
 import { RegisteredGroup } from './types.js';
 
 const SYNC_TAG = '[COURSE_SYNC]';
@@ -192,12 +193,8 @@ IMPORTANT:
  */
 export function hasSyncTask(): boolean {
   const tasks = getAllTasks();
-  return tasks.some(
-    (t) =>
-      t.group_folder === MAIN_GROUP_FOLDER &&
-      t.prompt.includes(SYNC_TAG) &&
-      t.status === 'active',
-  );
+  // one the host seeded (its stored origin and its `course-sync-` id), never a task that merely carries SYNC_TAG
+  return tasks.some((t) => t.group_folder === MAIN_GROUP_FOLDER && isSystemTaskOfKind(t, 'course sync') && t.status === 'active');
 }
 
 /**
@@ -224,6 +221,10 @@ export function seedCourseSync(
 
   const [mainJid] = mainEntry;
 
+  // Off by default (TAI_SEED_COURSE_SYNC): this task's prompt asks for a section per student (submissions, grades, GitHub activity) in the file that EVERY student's agent
+  // reads (/workspace/global/COURSE_STATUS.md). The live deployment writes that file with a script that has nothing about one student (src/course-status.ts).
+  logger.warn('Course sync agent seeded (TAI_SEED_COURSE_SYNC=1): it writes per-student sections into the COURSE_STATUS.md that every student\'s agent reads (docs/SECURITY.md)');
+
   let nextRun: string;
   try {
     const interval = CronExpressionParser.parse(SYNC_CRON, { tz: TIMEZONE });
@@ -245,6 +246,7 @@ export function seedCourseSync(
     next_run: nextRun,
     status: 'active',
     created_at: new Date().toISOString(),
+    origin: 'system',                         // the host made this one (src/task-origin.ts); it runs in the admin group, which is isMain whatever the origin
   });
 
   logger.info(

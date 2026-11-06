@@ -6,13 +6,16 @@ import { ChildProcess, exec, spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { StringDecoder } from 'string_decoder';
 
 import {
   CONTAINER_CPU_LIMIT,
   CONTAINER_IMAGE,
   CONTAINER_MAX_OUTPUT_SIZE,
   CONTAINER_MEMORY_LIMIT,
+  CONTAINER_NETWORK,
   CONTAINER_PIDS_LIMIT,
+  CONTAINER_PREFIX,
   CONTAINER_TIMEOUT,
   DATA_DIR,
   GROUPS_DIR,
@@ -23,8 +26,13 @@ import {
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
 import { buildMemoryContext, buildMemoryExport, pruneExpiredMemories } from './memory.js';
+import { routeModel } from './model-route.js';
 import { validateAdditionalMounts } from './mount-security.js';
+import { writeFileAtomicSafe } from './safe-fs.js';
+import { studentTimeZone } from './student-tz.js';
+import { PROGRESS_MARKER, parseProgressLine, portalStreamOn, withoutTextEvents, type ProgressEvent } from './turn-status.js';
 import { RegisteredGroup } from './types.js';
+import { visionFor, type VisionLaunch } from './vision-env.js';
 
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
@@ -47,6 +55,9 @@ export interface ContainerInput {
   chatJid: string;
   isMain: boolean;
   isScheduledTask?: boolean;
+  // With isScheduledTask: the host itself made this task (the patrol, the bootstrap: src/task-origin.ts), the only kind whose container has its per-session tool limits
+  // lifted. It reads no more than a student's chat does (only the admin chat reads the class). A task an agent scheduled is a scheduled task without this.
+  isSystemTask?: boolean;
   secrets?: Record<string, string>;
   // Identity binding (from trusted DB, not student-writable files)
   canvasUserId?: string;
@@ -60,6 +71,13 @@ export interface ContainerOutput {
   // The runner retired the session (context overflow, or it had its turns): forget it, the next container starts a new one
   resetSession?: boolean;
   error?: string;
+  // The model request failed and `result` is the runner's apology to the student, not an answer (the status stays "success": a chat shows it)
+  apiFailure?: 'overflow' | 'busy' | 'auth' | 'other';
+  // The runner has finished what it was asked and waits for the next message
+  idle?: boolean;
+  // With `idle`: how many follow-up messages the runner has received so far. GroupQueue.markIdle compares it with what was piped: a marker that
+  // counts fewer is out of date (a message is on its way to the runner), and the container is busy. Absent: an image that does not count.
+  received?: number;
 }
 
 interface VolumeMount {
@@ -76,7 +94,29 @@ function buildVolumeMounts(
   const homeDir = getHomeDir();
   const projectRoot = process.cwd();
 
-  if (isMain) {
+  if (isMain && process.env.TAI_ADMIN_FULL_PROJECT !== '1') {
+    // The admin group here (the owner's second chat on the student page) gets what an instructor needs to look at the class, read-only: every
+    // student's COMPETENCY.md and notes, the database and the chat histories, the audit log; and its own folder to write in. Not the project
+    // root (the source, the .env with every token) and not other groups' sessions or IPC: this agent reads text that students write, and must
+    // not be one prompt away from the keys. TAI_ADMIN_FULL_PROJECT=1 brings back the original's whole-project mount.
+    const readOnly: Array<[string, string]> = [
+      ['groups', GROUPS_DIR],
+      ['store', STORE_DIR],
+      ['data/audit', path.join(DATA_DIR, 'audit')],
+    ];
+    for (const [name, hostDir] of readOnly) {
+      try {
+        mounts.push({ hostPath: fs.realpathSync(hostDir), containerPath: `/workspace/project/${name}`, readonly: true });
+      } catch {
+        // not there yet (no audit log before the first admin operation) — skip
+      }
+    }
+    mounts.push({
+      hostPath: path.join(GROUPS_DIR, group.folder),
+      containerPath: '/workspace/group',
+      readonly: false,
+    });
+  } else if (isMain) {
     // Main gets the entire project root mounted
     mounts.push({
       hostPath: projectRoot,
@@ -139,20 +179,25 @@ function buildVolumeMounts(
   );
   fs.mkdirSync(groupSessionsDir, { recursive: true });
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
+  // (this directory is the container's too: a link planted where a file of the host's is written would be followed, so these writes refuse one: src/safe-fs.ts)
   if (!fs.existsSync(settingsFile)) {
-    fs.writeFileSync(settingsFile, JSON.stringify({
-      env: {
-        // Enable agent swarms (subagent orchestration)
-        // https://code.claude.com/docs/en/agent-teams#orchestrate-teams-of-claude-code-sessions
-        CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-        // Load CLAUDE.md from additional mounted directories
-        // https://code.claude.com/docs/en/memory#load-memory-from-additional-directories
-        CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
-        // Enable Claude's memory feature (persists user preferences between sessions)
-        // https://code.claude.com/docs/en/memory#manage-auto-memory
-        CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
-      },
-    }, null, 2) + '\n');
+    try {
+      writeFileAtomicSafe(settingsFile, JSON.stringify({
+        env: {
+          // Enable agent swarms (subagent orchestration)
+          // https://code.claude.com/docs/en/agent-teams#orchestrate-teams-of-claude-code-sessions
+          CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
+          // Load CLAUDE.md from additional mounted directories
+          // https://code.claude.com/docs/en/memory#load-memory-from-additional-directories
+          CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
+          // Enable Claude's memory feature (persists user preferences between sessions)
+          // https://code.claude.com/docs/en/memory#manage-auto-memory
+          CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
+        },
+      }, null, 2) + '\n', groupSessionsDir);
+    } catch (err) {
+      logger.warn({ group: group.folder, err: (err as Error).message }, 'The group\'s Claude settings file was not written');
+    }
   }
 
   // Sync skills from container/skills/ into each group's .claude/skills/
@@ -167,7 +212,11 @@ function buildVolumeMounts(
       for (const file of fs.readdirSync(srcDir)) {
         const srcFile = path.join(srcDir, file);
         const dstFile = path.join(dstDir, file);
-        fs.copyFileSync(srcFile, dstFile);
+        try {
+          writeFileAtomicSafe(dstFile, fs.readFileSync(srcFile), groupSessionsDir);   // not copyFileSync: it would write through a link the container planted
+        } catch (err) {
+          logger.warn({ group: group.folder, skill: skillDir, file, err: (err as Error).message }, 'A skill file was not copied into the group\'s sessions directory');
+        }
       }
     }
   }
@@ -186,6 +235,9 @@ function buildVolumeMounts(
   const groupIpcDir = path.join(DATA_DIR, 'ipc', group.folder);
   fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
+  // the host's answers to the container's task requests (src/ipc.ts answer(): the container's tools wait for a file here); made here, with the others, so the
+  // watcher never has to make a directory that the container can replace
+  fs.mkdirSync(path.join(groupIpcDir, 'results'), { recursive: true });
   mounts.push({
     hostPath: groupIpcDir,
     containerPath: '/workspace/ipc',
@@ -286,6 +338,13 @@ async function readSecrets(useLight = false): Promise<Record<string, string>> {
     'API_TIMEOUT_MS',
     'TAI_MAX_TURNS_PER_SESSION',
     'TAI_MAX_CONTEXT_TOKENS',
+    // pi (the default harness) reads the same gateway settings; these override them (container/agent-runner/src/pi-support.ts)
+    'TAI_LLM_API',
+    'TAI_LLM_BASE_URL',
+    'TAI_LLM_API_KEY',
+    'TAI_LLM_MODEL',
+    'TAI_LLM_CONTEXT_WINDOW',
+    'TAI_LLM_MAX_TOKENS',
     'DISABLE_TELEMETRY',
     'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
     'DISABLE_AUTOUPDATER',
@@ -303,6 +362,7 @@ async function readSecrets(useLight = false): Promise<Record<string, string>> {
     'VOICE_PORT',
     'VOICE_BASE_URL',
     'GITHUB_ALLOWED_ORGS',
+    'TAI_DISABLED_TOOLS',
     'MS_EMAIL',
     'MS_PASSWORD',
     'PIAZZA_EMAIL',
@@ -338,16 +398,31 @@ async function readSecrets(useLight = false): Promise<Record<string, string>> {
     }
   }
 
-  // Model routing: use light model (Haiku) for scheduled tasks and simple interactions
-  if (useLight && secrets['ANTHROPIC_MODEL_LIGHT']) {
-    secrets['ANTHROPIC_MODEL'] = secrets['ANTHROPIC_MODEL_LIGHT'];
-  }
-  delete secrets['ANTHROPIC_MODEL_LIGHT'];
+  // Model routing: the scheduled tasks use the background model (ANTHROPIC_MODEL_LIGHT) when one is set; see model-route.ts for why every name is routed
+  routeModel(secrets, useLight);
 
   return secrets;
 }
 
-function buildContainerArgs(mounts: VolumeMount[], containerName: string, isMain: boolean): string[] {
+/**
+ * The harness that runs the conversation inside the container: pi (the default) or Claude Code (TAI_HARNESS=claude in .env or in the
+ * orchestrator's environment, read at every spawn). Both speak the same container protocol; see container/entrypoint.sh.
+ */
+export function agentHarness(): 'pi' | 'claude' {
+  const value = (readEnvFile(['TAI_HARNESS']).TAI_HARNESS || process.env.TAI_HARNESS || '').trim().toLowerCase();
+  return value === 'claude' ? 'claude' : 'pi';
+}
+
+/**
+ * Whether this run's container is asked to stream the reply it writes (TAI_PORTAL_STREAM=1 in the orchestrator's environment, off by default): only
+ * for a student's chat on the web page, never the admin chat, a scheduled task, a chat of another channel or a voice call's tool host. The runner
+ * writes text events only when it is started with the variable, and the host reads them only from a container that was (parseProgressLine).
+ */
+function streamsReply(input: ContainerInput): boolean {
+  return portalStreamOn() && !input.isMain && input.isScheduledTask !== true && input.chatJid.startsWith('web:');
+}
+
+function buildContainerArgs(mounts: VolumeMount[], containerName: string, isMain: boolean, studentTz?: string, streamText = false, vision: VisionLaunch | null = null): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
   // Run as host user so bind-mounted files are accessible.
@@ -363,8 +438,25 @@ function buildContainerArgs(mounts: VolumeMount[], containerName: string, isMain
   // Pass host timezone so the Claude Code preset's date injection is correct
   args.push('-e', `TZ=${TIMEZONE}`);
 
+  // The student's own time zone (their page told us; validated by src/portal/prefs.ts), so a deadline can be told on their clock as well as in
+  // Pacific (canvas_api.py: due_local). Not set when they have not said or it is no zone: the answers are then what they always were.
+  if (studentTz) args.push('-e', `TAI_STUDENT_TZ=${studentTz}`);
+
+  // The reply is written to the page as the model writes it (docs/STREAMING.md): the runner says nothing of it unless it is started with this
+  if (streamText) args.push('-e', 'TAI_PORTAL_STREAM=1');
+
+  // The picture tool (TAI_VISION, docs/VISION.md): a student's chat container is told it is on, and which gateway alias looks at pictures (a plain name, checked
+  // by src/vision-env.ts). No key here: `docker run` arguments are logged at debug; the gateway's key is the one the model already uses, handed over as a secret on stdin.
+  if (vision) {
+    args.push('-e', 'TAI_VISION=1');
+    if (vision.model) args.push('-e', `TAI_VISION_MODEL=${vision.model}`);
+  }
+
   // Development: compile the mounted agent-runner source at start instead of running the dist built into the image
   if (process.env.TAI_COMPILE_ON_START === '1') args.push('-e', 'TAI_COMPILE_ON_START=1');
+
+  // Which harness runs the conversation in the container (entrypoint.sh picks the runner by it)
+  args.push('-e', `TAI_HARNESS=${agentHarness()}`);
 
   // Resource limits — prevent runaway containers from exhausting host
   args.push('--memory', CONTAINER_MEMORY_LIMIT);
@@ -380,14 +472,10 @@ function buildContainerArgs(mounts: VolumeMount[], containerName: string, isMain
   // Limit /tmp to 512MB with noexec to prevent disk exhaustion and code execution
   args.push('--tmpfs', '/tmp:size=512m,noexec');
 
-  // Network: main gets nanoclaw-net (inter-container access for yt-transcript-api etc.)
-  // Student containers also get nanoclaw-net for now (YouTube transcript needs it).
+  // Network: CONTAINER_NETWORK (default nanoclaw-net: inter-container access for the gateway, yt-transcript-api etc.) for main and
+  // students alike. The live deployment names its own, so its containers cannot reach an evaluation's stand-ins.
   // TODO: create a restricted network that only routes to approved services.
-  if (isMain) {
-    args.push('--network', 'nanoclaw-net');
-  } else {
-    args.push('--network', 'nanoclaw-net');
-  }
+  args.push('--network', CONTAINER_NETWORK);
 
   // Docker: -v with :ro suffix for readonly
   for (const mount of mounts) {
@@ -403,11 +491,19 @@ function buildContainerArgs(mounts: VolumeMount[], containerName: string, isMain
   return args;
 }
 
+/**
+ * Runs the agent in a container. `onOutput` (streaming mode) hears every result the runner writes. `onProgress` (only with `onOutput`) hears what
+ * the runner says between results (src/turn-status.ts: a tool starts or ends, the model is thinking, what a lookup returned), in the order it was
+ * written relative to the results: it goes through the same chain. It is not output: it does not count as the container having answered (a run that
+ * is stopped by its timeout while it only reported progress is a timeout with no output) and it does not reset the container's hard timeout (a loop
+ * of tool calls must still be stopped). A caller that passes none sees what it always saw: the progress lines are skipped.
+ */
 export async function runContainerAgent(
   group: RegisteredGroup,
   input: ContainerInput,
   onProcess: (proc: ChildProcess, containerName: string) => void,
   onOutput?: (output: ContainerOutput) => Promise<void>,
+  onProgress?: (event: ProgressEvent) => void,
 ): Promise<ContainerOutput> {
   const startTime = Date.now();
 
@@ -416,8 +512,9 @@ export async function runContainerAgent(
 
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
-  const containerName = `nanoclaw-${safeName}-${Date.now()}`;
-  const containerArgs = buildContainerArgs(mounts, containerName, input.isMain);
+  const containerName = `${CONTAINER_PREFIX}-${safeName}-${Date.now()}`;
+  const streamText = streamsReply(input);
+  const containerArgs = buildContainerArgs(mounts, containerName, input.isMain, studentTimeZone(group.folder, STORE_DIR), streamText, visionFor(input));
 
   logger.debug(
     {
@@ -453,7 +550,7 @@ export async function runContainerAgent(
   try {
     const memCtx = buildMemoryContext(input.chatJid, group.folder, input.prompt);
     if (memCtx) {
-      fs.writeFileSync(memCtxPath, memCtx, 'utf-8');
+      writeFileAtomicSafe(memCtxPath, memCtx, groupDir);       // (the student's folder is the container's too: never written through a link)
     } else {
       try { fs.unlinkSync(memCtxPath); } catch { /* ok */ }
     }
@@ -465,11 +562,7 @@ export async function runContainerAgent(
   // Write full memory store for in-session query (memory_query tool)
   try {
     const exportData = buildMemoryExport(group.folder, input.chatJid);
-    fs.writeFileSync(
-      path.join(groupDir, 'memory_store.json'),
-      JSON.stringify(exportData),
-      'utf-8',
-    );
+    writeFileAtomicSafe(path.join(groupDir, 'memory_store.json'), JSON.stringify(exportData), groupDir);
   } catch (err) {
     logger.warn({ err, group: group.folder }, 'Failed to write memory_store.json');
   }
@@ -499,8 +592,12 @@ export async function runContainerAgent(
     let newSessionId: string | undefined;
     let outputChain = Promise.resolve();
 
+    // A chunk of the pipe can end inside a multi-byte character (a reply in Chinese, an emoji); the decoder holds the rest for the next one. Only for
+    // a container that streams its reply, whose lines carry the words: the others are read as they always were.
+    const decoder = streamText ? new StringDecoder('utf8') : null;
+
     container.stdout.on('data', (data) => {
-      const chunk = data.toString();
+      const chunk = decoder ? decoder.write(data) : data.toString();
 
       // Always accumulate for logging
       if (!stdoutTruncated) {
@@ -517,11 +614,31 @@ export async function runContainerAgent(
         }
       }
 
-      // Stream-parse for output markers
+      // Stream-parse for output markers, and for the progress lines between them, in the order they were written
       if (onOutput) {
         parseBuffer += chunk;
         let startIdx: number;
-        while ((startIdx = parseBuffer.indexOf(OUTPUT_START_MARKER)) !== -1) {
+        for (;;) {
+          startIdx = parseBuffer.indexOf(OUTPUT_START_MARKER);
+          const progressIdx = onProgress ? parseBuffer.indexOf(PROGRESS_MARKER) : -1;
+          if (progressIdx !== -1 && (startIdx === -1 || progressIdx < startIdx)) {
+            const lineEnd = parseBuffer.indexOf('\n', progressIdx);
+            if (lineEnd === -1) break; // an incomplete line: wait for the rest
+            const event = parseProgressLine(parseBuffer.slice(progressIdx, lineEnd), { text: streamText });
+            parseBuffer = parseBuffer.slice(lineEnd + 1);
+            if (event) {
+              // through the chain of the results: a result that is still being delivered is not overtaken by what came after it
+              outputChain = outputChain.then(() => {
+                try {
+                  onProgress!(event);
+                } catch (err) {
+                  logger.warn({ group: group.name, error: err }, 'Progress listener failed');
+                }
+              });
+            }
+            continue;
+          }
+          if (startIdx === -1) break;
           const endIdx = parseBuffer.indexOf(OUTPUT_END_MARKER, startIdx);
           if (endIdx === -1) break; // Incomplete pair, wait for more data
 
@@ -667,6 +784,8 @@ export async function runContainerAgent(
       ];
 
       const isError = code !== 0;
+      // what a log keeps of a streaming container's stdout has no preview in it: the words are in it once, as the result that was delivered
+      const loggedStdout = streamText ? withoutTextEvents(stdout) : stdout;
 
       if (isVerbose || isError) {
         logLines.push(
@@ -688,7 +807,7 @@ export async function runContainerAgent(
           stderr,
           ``,
           `=== Stdout${stdoutTruncated ? ' (TRUNCATED)' : ''} ===`,
-          stdout,
+          loggedStdout,
         );
       } else {
         logLines.push(
@@ -719,7 +838,7 @@ export async function runContainerAgent(
             code,
             duration,
             stderr,
-            stdout,
+            stdout: loggedStdout,
             logFile,
           },
           'Container exited with error',
@@ -783,7 +902,7 @@ export async function runContainerAgent(
         logger.error(
           {
             group: group.name,
-            stdout,
+            stdout: loggedStdout,
             stderr,
             error: err,
           },
@@ -810,6 +929,56 @@ export async function runContainerAgent(
   });
 }
 
+/**
+ * A voice call's tool host (docs/VOICE.md, "Tool host"): the student's agent container, built exactly as runContainerAgent builds it
+ * (mounts, limits, network, secrets, identity binding from the registered group), started with TAI_MODE=tool-host so that it answers
+ * tool calls on stdio instead of running the agent. The ContainerInput line is written here; the caller (src/voice/tool-host.ts) owns
+ * the process from then on. Never main: a call never gets the admin's mounts or rights. The Deepgram key and the relay's gateway key are
+ * not secrets of the container.
+ */
+export async function spawnToolHost(group: RegisteredGroup, chatJid: string): Promise<{ process: ChildProcess; containerName: string; refresh: () => void }> {
+  const groupDir = path.join(GROUPS_DIR, group.folder);
+  fs.mkdirSync(groupDir, { recursive: true });
+  const mounts = buildVolumeMounts(group, false);
+  const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
+  const containerName = `${CONTAINER_PREFIX}-voice-${safeName}-${Date.now()}`;
+  const args = buildContainerArgs(mounts, containerName, false, studentTimeZone(group.folder, STORE_DIR));
+  args.splice(args.length - 1, 0, '-e', 'TAI_MODE=tool-host'); // before the image, which buildContainerArgs puts last
+
+  // memory_query reads this file, as in a text agent's container; a host kept for the student's next call has it written again (voice/tool-host-pool.ts)
+  const writeMemoryStore = (): void => {
+    try {
+      writeFileAtomicSafe(path.join(groupDir, 'memory_store.json'), JSON.stringify(buildMemoryExport(group.folder, chatJid)), groupDir);
+    } catch (err) {
+      logger.warn({ err, group: group.folder }, 'Failed to write memory_store.json for the voice tool host');
+    }
+  };
+  writeMemoryStore();
+
+  const secrets = await readSecrets(false);
+  delete secrets.DEEPGRAM_API_KEY;
+  delete secrets.TAI_VOICE_LLM_KEY;
+  const input: ContainerInput = {
+    prompt: '',
+    groupFolder: group.folder,
+    chatJid,
+    isMain: false,
+    secrets,
+    canvasUserId: group.canvasUserId,
+    githubUsername: group.githubUsername,
+  };
+
+  logger.info({ group: group.name, containerName }, 'Spawning voice tool host');
+  const child = spawn('docker', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+  // listeners before anything else can fire: an 'error' (no docker) or an EPIPE with nobody listening would end the orchestrator
+  child.on('error', (err) => logger.warn({ group: group.folder, containerName, err: err.message }, 'Voice tool host spawn error'));
+  child.stdin?.on('error', () => undefined);
+  child.stdout?.on('error', () => undefined);
+  child.stderr?.on('error', () => undefined);
+  child.stdin?.write(JSON.stringify(input) + '\n');
+  return { process: child, containerName, refresh: writeMemoryStore };
+}
+
 export function writeTasksSnapshot(
   groupFolder: string,
   isMain: boolean,
@@ -821,6 +990,8 @@ export function writeTasksSnapshot(
     schedule_value: string;
     status: string;
     next_run: string | null;
+    /** 'system' for the host's own tasks (the patrol, the bootstrap): list_tasks says so, and the container's tools do not offer to stop one (src/task-origin.ts). */
+    origin?: string | null;
   }>,
 ): void {
   // Write filtered tasks to the group's IPC directory
@@ -833,7 +1004,11 @@ export function writeTasksSnapshot(
     : tasks.filter((t) => t.groupFolder === groupFolder);
 
   const tasksFile = path.join(groupIpcDir, 'current_tasks.json');
-  fs.writeFileSync(tasksFile, JSON.stringify(filteredTasks, null, 2));
+  try {
+    writeFileAtomicSafe(tasksFile, JSON.stringify(filteredTasks, null, 2), groupIpcDir);   // (the container's directory: never written through a link it planted)
+  } catch (err) {
+    logger.warn({ group: groupFolder, err: (err as Error).message }, 'The tasks snapshot was not written');
+  }
 }
 
 export interface AvailableGroup {
@@ -861,15 +1036,20 @@ export function writeGroupsSnapshot(
   const visibleGroups = isMain ? groups : [];
 
   const groupsFile = path.join(groupIpcDir, 'available_groups.json');
-  fs.writeFileSync(
-    groupsFile,
-    JSON.stringify(
-      {
-        groups: visibleGroups,
-        lastSync: new Date().toISOString(),
-      },
-      null,
-      2,
-    ),
-  );
+  try {
+    writeFileAtomicSafe(
+      groupsFile,
+      JSON.stringify(
+        {
+          groups: visibleGroups,
+          lastSync: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+      groupIpcDir,
+    );
+  } catch (err) {
+    logger.warn({ group: groupFolder, err: (err as Error).message }, 'The groups snapshot was not written');
+  }
 }

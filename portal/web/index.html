@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+  <meta charset="utf-8">
+  <base href="__BASE__">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="TAi, the CS6650 teaching assistant">
+  <title>TAi</title>
+  <link rel="icon" href="mark.svg" type="image/svg+xml">
+  <!-- the web app manifest and its icons: what lets the page be added to a home screen (on an iPhone that is the only way it can be sent notifications), sw.js is registered by settings.js -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="TAi">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="review.css">
+  <link rel="stylesheet" href="highlight.css">
+  <link rel="stylesheet" href="settings.css">
+  <link rel="stylesheet" href="status.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script type="module" src="voice.js"></script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <div class="app" id="app" data-state="loading">
+
+    <nav class="rail" aria-label="TAi">
+      <div class="rail-main" id="rail-main" hidden>
+        <button class="rail-btn is-active" id="rail-chat" type="button" aria-label="Conversation" title="Conversation">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 19 17H10l-4.2 3.2c-.5.4-1.3 0-1.3-.7V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5Z"/></svg>
+        </button>
+        <button class="rail-btn" id="rail-search" type="button" aria-label="Search the conversation" title="Search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+        </button>
+        <!-- the Activity list (activity.js): calls, notes TAi keeps, reminders, progress, course news. Drawn only when the server offers it; on a phone,
+             where this rail is not there, the Chats drawer has the same entry -->
+        <button class="rail-btn" id="rail-activity" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Activity" title="Activity" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 2"/></svg>
+        </button>
+        <a class="rail-btn" id="rail-classroom" href="/" target="_blank" rel="noopener" aria-label="Open the CS6650 classroom" title="The CS6650 classroom">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><circle cx="16.75" cy="16.75" r="3.4"/></svg>
+        </a>
+      </div>
+      <div class="rail-foot">
+        <button class="rail-btn" id="theme" type="button" aria-label="Switch between light and dark" title="Light / dark">
+          <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/></svg>
+          <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+        </button>
+      </div>
+    </nav>
+
+    <div class="stage">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="pill" id="chats-btn" type="button" aria-haspopup="dialog" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+            <span>Chats</span>
+          </button>
+        </div>
+        <div class="who">
+          <span class="avatar-ring" id="avatar-ring"><img src="mark.svg" alt="" width="64" height="64"></span>
+          <span class="name-pill" id="name-pill">TAi</span>
+        </div>
+        <div class="topbar-right">
+          <!-- a voice call: drawn only when the server offers calls; the panel it opens sits above the message box (voice.js). The button is a plain
+               call; the chevron beside it offers the other way to talk, "Talk it through" (TAi listens while the student explains something) -->
+          <div class="callgroup" id="call-group" hidden>
+            <button class="callbtn" id="call-btn" type="button" aria-label="Start a voice call with TAi" title="Voice call">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 14v-2a7.5 7.5 0 0 1 15 0v2"/><rect x="3.5" y="13" width="4" height="6.5" rx="1.8"/><rect x="16.5" y="13" width="4" height="6.5" rx="1.8"/></svg>
+            </button>
+            <button class="callmore" id="call-more" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="call-menu" aria-label="More ways to talk with TAi" title="More ways to talk">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="menu callmenu" id="call-menu" role="menu" aria-label="Ways to talk with TAi" hidden>
+              <button class="menu-item" type="button" role="menuitem" data-call="chat"><strong>Voice call</strong><small>Talk with TAi about anything</small></button>
+              <button class="menu-item" type="button" role="menuitem" data-call="talk"><strong>Talk it through</strong><small>Explain something out loud. TAi listens, then asks one question.</small></button>
+            </div>
+          </div>
+          <div class="account" id="account" hidden>
+            <button class="pill" id="avatar" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Account">
+              <span class="avatar-dot" id="avatar-letter">?</span>
+              <span class="avatar-name" id="avatar-name"></span>
+              <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="menu" id="menu" role="menu" hidden>
+              <div class="menu-who"><strong id="menu-name"></strong><span id="menu-email"></span></div>
+              <!-- the teaching view (team.html), for the owner only: drawn when GET api/me says features.team; it opens in this tab -->
+              <button class="menu-item" id="menu-team" type="button" role="menuitem" hidden>Teaching view</button>
+              <button class="menu-item" id="menu-theme" type="button" role="menuitem">Switch to light mode</button>
+              <!-- Settings (settings.js): notifications in this browser, the voice's speed, the time zone. Drawn only when the server offers something to set -->
+              <button class="menu-item" id="menu-settings" type="button" role="menuitem" aria-haspopup="dialog" hidden>Settings</button>
+              <button class="menu-item" id="signout" type="button" role="menuitem">Sign out</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <p class="loading" id="loading" role="status">Loading…</p>
+
+      <section class="chat" id="chat" hidden data-mode="gate" aria-label="Conversation with TAi">
+        <div class="scroller" id="scroller" tabindex="-1">
+          <div class="thread">
+            <ol class="messages" id="messages" aria-live="polite" aria-relevant="additions"></ol>
+          </div>
+        </div>
+        <div class="dock">
+          <div class="dock-inner">
+            <p class="banner" id="banner" role="status" hidden>Reconnecting…</p>
+            <!-- "N new messages" while some arrived that the reader has not seen; a plain arrow when they are all seen but the reader is above the latest -->
+            <button class="jump" id="jump" type="button" hidden>
+              <span id="jump-text">1 new message</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <span class="sr-only" id="jump-live" role="status" aria-live="polite" aria-atomic="true"></span>
+            <span class="sr-only" id="status-live" role="status" aria-live="polite" aria-atomic="true"></span>
+
+            <!-- a voice call: an orb above the message box, not a modal: the chat stays in reach. What is said is in the conversation (the history's
+                 lines of kind speech); the call's two buttons, mute and end, are in the message box (voice.js) -->
+            <section class="call" id="call" hidden aria-label="Voice call with TAi" data-state="idle" data-mode="conversational">
+              <div class="orb" aria-hidden="true"><span class="orb-halo"></span><span class="orb-core"></span><span class="orb-slash"></span></div>
+              <div class="call-info">
+                <span class="call-state" id="call-state" role="status" aria-live="polite">Connecting…</span>
+                <span class="call-meta">
+                  <span class="call-badge" id="call-badge" hidden>Mock interview</span>
+                  <span class="call-timer" id="call-timer"></span>
+                </span>
+              </div>
+              <button class="icon-btn call-close" id="call-close" type="button" aria-label="Close the call panel" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+              </button>
+            </section>
+
+            <ul class="tray" id="tray" aria-label="Files to send with your next message" aria-live="polite" hidden></ul>
+            <input id="file-input" type="file" multiple hidden>
+
+            <!-- recording a voice note: takes the message box's place until it is sent or deleted (voice.js) -->
+            <div class="recbar" id="recbar" role="group" aria-label="Recording a voice note" hidden>
+              <button class="rec-cancel" id="rec-cancel" type="button" aria-label="Delete the recording" title="Delete">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M9.5 7V5h5v2M6.5 7l.8 12.2a1.5 1.5 0 0 0 1.5 1.3h6.4a1.5 1.5 0 0 0 1.5-1.3L17.5 7M10 11v6M14 11v6"/></svg>
+              </button>
+              <span class="rec-dot" aria-hidden="true"></span>
+              <span class="rec-time"><span id="rec-time">0:00</span><span class="rec-limit" id="rec-limit"> / 3:00</span></span>
+              <span class="rec-label" id="rec-label" role="status">Recording</span>
+              <span class="rec-level" id="rec-level" aria-hidden="true"></span>
+              <button class="rec-send" id="rec-send" type="button" aria-label="Send the voice note" title="Send">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg>
+              </button>
+            </div>
+
+            <form class="composer" id="composer" autocomplete="off">
+              <!-- the plus is "attach a file": it opens the file picker, and is not drawn when the server has no files -->
+              <button class="plus" id="plus" type="button" aria-label="Attach a file" title="Attach a file" hidden disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              <label class="sr-only" for="input">Message TAi</label>
+              <textarea id="input" rows="1" placeholder="Sign in to message TAi" enterkeyhint="send" disabled></textarea>
+              <span class="count" id="count" aria-live="off"></span>
+              <!-- one round button at the right end: the microphone while the box is empty, the arrow once there is something to send -->
+              <button class="mic" id="mic" type="button" aria-label="Record a voice note" title="Record a voice note" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg>
+              </button>
+              <button class="send" id="send" type="submit" aria-label="Send" disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg>
+              </button>
+              <!-- during a call these two take the microphone's and the arrow's place (the arrow comes back when there is something typed to send) -->
+              <div class="call-actions" id="call-actions" hidden>
+                <button class="call-mute" id="call-mute" type="button" aria-pressed="false" aria-label="Mute your microphone" title="Mute">
+                  <svg class="i-mic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg>
+                  <svg class="i-mic-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 10.3V6.5a3 3 0 0 0-5.6-1.5M9 9v2.5a3 3 0 0 0 4.6 2.5M5.5 11.5a6.5 6.5 0 0 0 10.4 5.2M18.5 11.5a6.4 6.4 0 0 1-.7 2.9M12 18v2.5M4 4l16 16"/></svg>
+                </button>
+                <button class="call-end" id="call-end" type="button" aria-label="End the call" title="End call">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                </button>
+              </div>
+            </form>
+            <p class="fineprint">TAi is an AI assistant and can make mistakes. Check important details with the teaching team.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <aside class="drawer" id="drawer" hidden aria-label="Chats">
+      <div class="drawer-head">
+        <h2>Chats</h2>
+        <button class="icon-btn" id="drawer-close" type="button" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <label class="search-box">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+        <input id="search-input" type="search" placeholder="Search this conversation" autocomplete="off">
+      </label>
+      <!-- the Activity list (activity.js): calls, the notes TAi keeps, reminders. Drawn only when the server offers it. The rail has a button for it
+           too, but a phone has no rail: this is the way in there -->
+      <button class="drawer-activity" id="drawer-activity" type="button" aria-haspopup="dialog" hidden>
+        <span class="acard-tile"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 2"/></svg></span>
+        <span class="drawer-activity-text"><strong>Activity</strong><small>Calls, notes, reminders and more</small></span>
+      </button>
+      <div class="drawer-list" id="drawer-list"></div>
+      <a class="drawer-foot" href="/" target="_blank" rel="noopener">Open the CS6650 classroom</a>
+    </aside>
+    <div class="scrim" id="scrim" hidden></div>
+
+    <!-- a picture, enlarged: Esc or a click closes it -->
+    <dialog class="lightbox" id="lightbox" aria-label="Picture">
+      <button class="lightbox-close" id="lightbox-close" type="button" aria-label="Close the picture">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+      <img id="lightbox-img" alt="">
+    </dialog>
+
+    <!-- what happened for the student, day by day: calls, the notes TAi kept, reminders it set, progress, news of the course (activity.js) -->
+    <dialog class="act-sheet" id="activity" aria-labelledby="activity-title">
+      <div class="act-sheet-head">
+        <h2 id="activity-title">Activity</h2>
+        <button class="icon-btn" id="activity-close" type="button" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <p class="act-sheet-lead">Your calls with TAi, the notes it keeps, reminders, where you have got to and what changed in the course, newest first.</p>
+      <div class="act-sheet-body" id="activity-body" tabindex="-1"></div>
+      <span class="sr-only" id="activity-live" role="status" aria-live="polite"></span>
+    </dialog>
+
+    <!-- Settings (settings.js): each section is drawn only where it works (notifications when the server has push, the voice's speed when calls are on) -->
+    <dialog class="set-sheet" id="settings" aria-labelledby="settings-title">
+      <div class="set-head">
+        <h2 id="settings-title">Settings</h2>
+        <button class="icon-btn" id="settings-close" type="button" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="set-body">
+        <section class="set-section" id="set-notify" aria-labelledby="set-notify-title" hidden>
+          <h3 id="set-notify-title">Notifications</h3>
+          <div class="set-row">
+            <span class="set-label" id="set-notify-label">Notify me in this browser</span>
+            <button class="switch" id="set-notify-switch" type="button" role="switch" aria-checked="false" aria-labelledby="set-notify-label" aria-describedby="set-notify-note set-notify-hint" disabled><span class="switch-knob"></span></button>
+          </div>
+          <p class="set-note" id="set-notify-note" role="status" data-tone="plain"></p>
+          <p class="set-hint" id="set-notify-hint"></p>
+        </section>
+        <section class="set-section" id="set-voice" aria-labelledby="set-voice-title" hidden>
+          <h3 id="set-voice-title">Voice</h3>
+          <div class="set-row">
+            <label class="set-label" for="set-speed">Voice speed</label>
+            <select class="set-select" id="set-speed">
+              <option value="0.85">Slower</option>
+              <option value="1" selected>Normal</option>
+              <option value="1.2">Faster</option>
+            </select>
+          </div>
+          <p class="set-hint">How fast TAi speaks in a voice call, from your next call.</p>
+        </section>
+        <section class="set-section" id="set-email" aria-labelledby="set-email-title" hidden>
+          <h3 id="set-email-title">Email</h3>
+          <div class="set-row">
+            <span class="set-label" id="set-email-label">Email me when I miss a message</span>
+            <button class="switch" id="set-email-switch" type="button" role="switch" aria-checked="false" aria-labelledby="set-email-label" aria-describedby="set-email-note set-email-hint" disabled><span class="switch-knob"></span></button>
+          </div>
+          <p class="set-note" id="set-email-note" role="status" data-tone="plain"></p>
+          <p class="set-hint" id="set-email-hint"></p>
+        </section>
+        <section class="set-section" id="set-zone-section" aria-labelledby="set-zone-title">
+          <h3 id="set-zone-title">Time zone</h3>
+          <div class="set-row">
+            <span class="set-label">Your time zone</span>
+            <span class="set-value" id="set-zone"></span>
+          </div>
+          <p class="set-hint" id="set-zone-hint">Taken from this device.</p>
+        </section>
+      </div>
+    </dialog>
+
+    <!-- the mock interview's link: a click starts it (the microphone and the speaker need one anyway) -->
+    <dialog class="sheet" id="interview" aria-labelledby="interview-title" aria-describedby="interview-text">
+      <div class="sheet-orb" aria-hidden="true"></div>
+      <h2 id="interview-title">Start your mock interview</h2>
+      <p id="interview-text">TAi will interview you by voice, the way a real interview goes. Find a quiet spot: the call uses your microphone and your speakers or headphones. The chat stays open beside it.</p>
+      <div class="sheet-actions">
+        <button class="btn-primary" id="interview-start" type="button">Start the interview</button>
+        <button class="btn-plain" id="interview-later" type="button">Not now</button>
+      </div>
+    </dialog>
+
+    <div class="dropzone" id="dropzone" aria-hidden="true" hidden>
+      <div class="dropzone-card">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 14v4.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V14"/></svg>
+        <span>Drop files to attach them</span>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+  </div>
+</body>
+</html>

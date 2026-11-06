@@ -12,10 +12,22 @@ import {
 } from './config.js';
 import { AvailableGroup } from './container-runner.js';
 import { seedCompetencyBootstrap } from './competency-bootstrap.js';
-import { createTask, deleteTask, getTaskById, updateGroupIdentity, updateTask } from './db.js';
+import {
+  countOpenContainerTasks,
+  countTaskCreationsSince,
+  createTask,
+  deleteTask,
+  getTaskById,
+  recordTaskCreation,
+  updateGroupIdentity,
+  updateTask,
+} from './db.js';
+import { ipcMediaPath } from './ipc-media.js';
 import { buildMemoryExport, MemoryFact, storeMemory } from './memory.js';
 import { logger } from './logger.js';
+import { writeFileAtomicSafe } from './safe-fs.js';
 import { formatOutbound } from './router.js';
+import { checkNewTask } from './task-limits.js';
 import { RegisteredGroup } from './types.js';
 
 // Audit log for high-risk admin operations (append-only)
@@ -34,7 +46,54 @@ function auditLog(operation: string, details: Record<string, unknown>): void {
   logger.info({ operation, ...details }, 'AUDIT: admin operation');
 }
 
+/** What became of a request that a container made through its schedule_task, pause_task, resume_task or cancel_task tool. */
+export interface IpcResult {
+  ok: boolean;
+  /** A sentence the agent can say to the student as it stands. */
+  message: string;
+  taskId?: string;
+}
+
+/** The container picks the name of its request, and it names a file: a plain id of 8 to 64 letters, digits, dashes and underscores, or no answer. */
+const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
+
+/**
+ * Tells the container that asked what became of its request: a file `results/<requestId>.json` in its own IPC directory, which its tool waits for
+ * (container/agent-runner/src/ipc-result.ts). Until now these tools wrote a file and answered "scheduled" or "requested" at once, so a request the host dropped (a typo in
+ * a schedule, another group's task, now a limit) left the agent and the student told something false. Written through writeFileAtomicSafe, which refuses a `results` that
+ * is a link leading out of the group's directory; a request with no valid id, or a failure to write, is not an error of the request's (an older container asks for no answer).
+ */
+export function answer(sourceGroup: string, requestId: unknown, result: IpcResult): void {
+  if (typeof requestId !== 'string' || !REQUEST_ID.test(requestId)) return;
+  try {
+    const groupIpcDir = path.join(DATA_DIR, 'ipc', sourceGroup);
+    const body: IpcResult = { ok: result.ok, message: String(result.message).slice(0, 600), ...(result.taskId ? { taskId: result.taskId } : {}) };
+    writeFileAtomicSafe(path.join(groupIpcDir, 'results', `${requestId}.json`), JSON.stringify(body), groupIpcDir);
+  } catch (err) {
+    logger.warn({ sourceGroup, err: err instanceof Error ? err.message : String(err) }, 'Could not write the answer to an IPC request');
+  }
+}
+
+/** Something that happened for a student and belongs in their activity list on the page: a note TAi kept, a reminder it set. */
+export interface ActivityEntry {
+  type: 'memory' | 'reminder';
+  title: string;
+  text: string;
+  detail?: string;
+}
+
+/** "Tue, Nov 3, 9:00 AM": a time as the student reads it, in the course's time zone. */
+function whenText(iso: string): string {
+  // newer ICU puts a narrow no-break space before AM/PM: a plain space is what a title and a search should hold
+  return new Date(iso).toLocaleString('en-US', { timeZone: TIMEZONE, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).replace(/[  ]/g, ' ');
+}
+
+/** Notes TAi keeps for its own working (not things about the student) are not shown as something it remembered. */
+const WORKING_NOTES = new Set(['checkpoint', 'session']);
+
 export interface IpcDeps {
+  /** The page's activity list: told of a note TAi kept and of a reminder it set (best-effort: a failure here never stops the IPC file being handled). */
+  recordActivity?: (folder: string, entry: ActivityEntry) => void;
   sendMessage: (jid: string, text: string) => Promise<void>;
   sendReaction: (jid: string, messageId: string, emoji: string) => Promise<void>;
   sendAudioMessage: (jid: string, audioBuffer: Buffer) => Promise<void>;
@@ -125,8 +184,8 @@ export function startIpcWatcher(deps: IpcDeps): void {
                 const targetGroup = registeredGroups[data.chatJid];
                 if (isMain || (targetGroup && targetGroup.folder === sourceGroup)) {
                   // Map container path to host path
-                  const relative = (data.audioPath as string).replace(/^\/workspace\/ipc\//, '');
-                  const hostPath = path.join(DATA_DIR, 'ipc', sourceGroup, relative);
+                  const hostPath = ipcMediaPath(sourceGroup, data.audioPath as string);
+                  if (!hostPath) throw new Error('audioPath is outside the IPC directory');
                   const buffer = fs.readFileSync(hostPath);
                   await deps.sendAudioMessage(data.chatJid, buffer);
                   logger.info({ chatJid: data.chatJid, sourceGroup, size: buffer.length }, 'IPC voice message sent');
@@ -136,8 +195,8 @@ export function startIpcWatcher(deps: IpcDeps): void {
               } else if (data.type === 'image_message' && data.chatJid && data.imagePath) {
                 const targetGroup = registeredGroups[data.chatJid];
                 if (isMain || (targetGroup && targetGroup.folder === sourceGroup)) {
-                  const relative = (data.imagePath as string).replace(/^\/workspace\/ipc\//, '');
-                  const hostPath = path.join(DATA_DIR, 'ipc', sourceGroup, relative);
+                  const hostPath = ipcMediaPath(sourceGroup, data.imagePath as string);
+                  if (!hostPath) throw new Error('imagePath is outside the IPC directory');
                   const buffer = fs.readFileSync(hostPath);
                   await deps.sendImageMessage(data.chatJid, buffer, data.caption as string | undefined);
                   logger.info({ chatJid: data.chatJid, sourceGroup, size: buffer.length }, 'IPC image message sent');
@@ -148,17 +207,25 @@ export function startIpcWatcher(deps: IpcDeps): void {
                 if (isMain || (data.studentFolder as string) === sourceGroup) {
                   storeMemory(data.studentFolder as string, data.fact as MemoryFact);
                   logger.info({ studentFolder: data.studentFolder, sourceGroup }, 'IPC memory stored');
+                  const fact = data.fact as MemoryFact;
+                  if (fact.text && !WORKING_NOTES.has(fact.category || 'other')) {
+                    try {
+                      deps.recordActivity?.(data.studentFolder as string, {
+                        type: 'memory',
+                        title: 'Remembered',
+                        text: fact.text,
+                        detail: `${fact.text}\n\nTAi kept this note about you so that it can pick things up next time. See all of them, or take one back, under "What TAi remembers" in the account menu.`,
+                      });
+                    } catch { /* the list is a convenience */ }
+                  }
                   // Refresh memory_store.json so memory_query sees the new entry this session
                   try {
                     const folder = data.studentFolder as string;
                     const chatJid = Object.entries(registeredGroups).find(([, g]) => g.folder === folder)?.[0];
                     if (chatJid) {
                       const exportData = buildMemoryExport(folder, chatJid);
-                      fs.writeFileSync(
-                        path.join(GROUPS_DIR, folder, 'memory_store.json'),
-                        JSON.stringify(exportData),
-                        'utf-8',
-                      );
+                      // (the agent that sent this message can have planted a link under that name: never written through one, src/safe-fs.ts)
+                      writeFileAtomicSafe(path.join(GROUPS_DIR, folder, 'memory_store.json'), JSON.stringify(exportData), path.join(GROUPS_DIR, folder));
                     }
                   } catch { /* best-effort */ }
                 } else {
@@ -230,6 +297,8 @@ export async function processTaskIpc(
   data: {
     type: string;
     taskId?: string;
+    // The container's own name for this request: the answer is written to results/<requestId>.json (answer())
+    requestId?: string;
     prompt?: string;
     schedule_type?: string;
     schedule_value?: string;
@@ -257,162 +326,170 @@ export async function processTaskIpc(
   const registeredGroups = deps.registeredGroups();
 
   switch (data.type) {
-    case 'schedule_task':
-      if (
-        data.prompt &&
-        data.schedule_type &&
-        data.schedule_value &&
-        data.targetJid
-      ) {
-        // Resolve the target group from JID
-        const targetJid = data.targetJid as string;
-        const targetGroupEntry = registeredGroups[targetJid];
+    case 'schedule_task': {
+      // Every way out of this case says why, to the container that asked (answer(): a file its tool waits for), so that the agent and the student are never told
+      // "scheduled" about a request that was dropped. A group that is not the admin chat is held to the limits of src/task-limits.ts.
+      const say = (ok: boolean, message: string, taskId?: string) => answer(sourceGroup, data.requestId, { ok, message, ...(taskId ? { taskId } : {}) });
+      if (!data.prompt || !data.schedule_type || !data.schedule_value || !data.targetJid) {
+        say(false, 'Not scheduled: the request was incomplete (it needs the instructions, a kind of schedule, the schedule and the chat).');
+        break;
+      }
+      // Resolve the target group from JID
+      const targetJid = data.targetJid as string;
+      const targetGroupEntry = registeredGroups[targetJid];
 
-        if (!targetGroupEntry) {
-          logger.warn(
-            { targetJid },
-            'Cannot schedule task: target group not registered',
-          );
+      if (!targetGroupEntry) {
+        logger.warn({ targetJid }, 'Cannot schedule task: target group not registered');
+        say(false, 'Not scheduled: that chat is not registered.');
+        break;
+      }
+
+      const targetFolder = targetGroupEntry.folder;
+
+      // Authorization: non-main groups can only schedule for themselves
+      if (!isMain && targetFolder !== sourceGroup) {
+        logger.warn({ sourceGroup, targetFolder }, 'Unauthorized schedule_task attempt blocked');
+        say(false, 'Not scheduled: a chat can only schedule for itself.');
+        break;
+      }
+
+      const scheduleType = data.schedule_type as 'cron' | 'interval' | 'once';
+
+      let nextRun: string | null = null;
+      if (scheduleType === 'cron') {
+        try {
+          const interval = CronExpressionParser.parse(data.schedule_value, {
+            tz: TIMEZONE,
+          });
+          nextRun = interval.next().toISOString();
+        } catch {
+          logger.warn({ scheduleValue: data.schedule_value }, 'Invalid cron expression');
+          say(false, `Not scheduled: "${data.schedule_value}" is not a cron schedule I can read.`);
           break;
         }
-
-        const targetFolder = targetGroupEntry.folder;
-
-        // Authorization: non-main groups can only schedule for themselves
-        if (!isMain && targetFolder !== sourceGroup) {
-          logger.warn(
-            { sourceGroup, targetFolder },
-            'Unauthorized schedule_task attempt blocked',
-          );
+      } else if (scheduleType === 'interval') {
+        const ms = parseInt(data.schedule_value, 10);
+        if (isNaN(ms) || ms <= 0) {
+          logger.warn({ scheduleValue: data.schedule_value }, 'Invalid interval');
+          say(false, `Not scheduled: "${data.schedule_value}" is not a number of milliseconds above zero.`);
           break;
         }
-
-        const scheduleType = data.schedule_type as 'cron' | 'interval' | 'once';
-
-        let nextRun: string | null = null;
-        if (scheduleType === 'cron') {
-          try {
-            const interval = CronExpressionParser.parse(data.schedule_value, {
-              tz: TIMEZONE,
-            });
-            nextRun = interval.next().toISOString();
-          } catch {
-            logger.warn(
-              { scheduleValue: data.schedule_value },
-              'Invalid cron expression',
-            );
-            break;
-          }
-        } else if (scheduleType === 'interval') {
-          const ms = parseInt(data.schedule_value, 10);
-          if (isNaN(ms) || ms <= 0) {
-            logger.warn(
-              { scheduleValue: data.schedule_value },
-              'Invalid interval',
-            );
-            break;
-          }
-          nextRun = new Date(Date.now() + ms).toISOString();
-        } else if (scheduleType === 'once') {
-          const scheduled = new Date(data.schedule_value);
-          if (isNaN(scheduled.getTime())) {
-            logger.warn(
-              { scheduleValue: data.schedule_value },
-              'Invalid timestamp',
-            );
-            break;
-          }
-          // If timestamp is in the past (e.g. agent sent local time without
-          // timezone and host parsed as UTC), run in 5 seconds instead of
-          // skipping or firing stale.
-          nextRun = scheduled.getTime() <= Date.now()
-            ? new Date(Date.now() + 5000).toISOString()
-            : scheduled.toISOString();
+        nextRun = new Date(Date.now() + ms).toISOString();
+      } else if (scheduleType === 'once') {
+        const scheduled = new Date(data.schedule_value);
+        if (isNaN(scheduled.getTime())) {
+          logger.warn({ scheduleValue: data.schedule_value }, 'Invalid timestamp');
+          say(false, `Not scheduled: "${data.schedule_value}" is not a time I can read. Use local time like 2026-02-01T15:30:00.`);
+          break;
         }
+        // If timestamp is in the past (e.g. agent sent local time without
+        // timezone and host parsed as UTC), run in 5 seconds instead of
+        // skipping or firing stale.
+        nextRun = scheduled.getTime() <= Date.now()
+          ? new Date(Date.now() + 5000).toISOString()
+          : scheduled.toISOString();
+      } else {
+        logger.warn({ scheduleType }, 'Unknown schedule type');
+        say(false, `Not scheduled: "${String(data.schedule_type).slice(0, 40)}" is not a kind of schedule (it is cron, interval or once).`);
+        break;
+      }
 
-        const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const contextMode =
-          data.context_mode === 'group' || data.context_mode === 'isolated'
-            ? data.context_mode
-            : 'isolated';
-        createTask({
-          id: taskId,
-          group_folder: targetFolder,
-          chat_jid: targetJid,
-          prompt: data.prompt,
-          schedule_type: scheduleType,
-          schedule_value: data.schedule_value,
-          context_mode: contextMode,
-          next_run: nextRun,
-          status: 'active',
-          created_at: new Date().toISOString(),
-        });
-        auditLog('schedule_task', {
-          taskId, sourceGroup, targetFolder, scheduleType,
-          scheduleValue: data.schedule_value, contextMode,
-          promptPreview: data.prompt.slice(0, 200),
-        });
-        logger.info(
-          { taskId, sourceGroup, targetFolder, contextMode },
-          'Task created via IPC',
+      // The limits of a student's agent (src/task-limits.ts; the admin chat has none): how often, how far ahead, how long, how many open, how many made today, and the
+      // heads of the host's own prompts. The host decides here whatever wrote the file: a student's agent can write one without the container's tool.
+      if (!isMain) {
+        const now = new Date();
+        const verdict = checkNewTask(
+          { prompt: data.prompt, scheduleType, scheduleValue: data.schedule_value },
+          now,
+          {
+            open: countOpenContainerTasks(targetFolder),
+            createdLastDay: countTaskCreationsSince(targetFolder, new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()),
+          },
+          TIMEZONE,
         );
+        if (!verdict.ok) {
+          // the length of the instructions, never their words
+          auditLog('schedule_task_refused', { sourceGroup, scheduleType, scheduleValue: data.schedule_value, promptChars: data.prompt.length, reason: verdict.message });
+          logger.warn({ sourceGroup, scheduleType, reason: verdict.message }, 'schedule_task refused: over a limit');
+          say(false, verdict.message);
+          break;
+        }
+      }
+
+      const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const contextMode =
+        data.context_mode === 'group' || data.context_mode === 'isolated'
+          ? data.context_mode
+          : 'isolated';
+      createTask({
+        id: taskId,
+        group_folder: targetFolder,
+        chat_jid: targetJid,
+        prompt: data.prompt,
+        schedule_type: scheduleType,
+        schedule_value: data.schedule_value,
+        context_mode: contextMode,
+        next_run: nextRun,
+        status: 'active',
+        created_at: new Date().toISOString(),
+        // A task an agent scheduled is never a system task, whoever the agent was and whatever the file says (it also carries a `createdBy` that nothing
+        // reads): the file is the container's own words, and a student's agent can write one without the tool. Only the host's seeds say 'system'
+        // (src/task-origin.ts), and only a system task's container has its tool limits lifted.
+        origin: 'container',
+      });
+      // counted when it is made, in a table of its own: cancelling the task deletes its row, and must not give the day's count back
+      if (!isMain) recordTaskCreation(targetFolder, new Date().toISOString());
+      auditLog('schedule_task', {
+        taskId, sourceGroup, targetFolder, scheduleType,
+        scheduleValue: data.schedule_value, contextMode,
+        promptPreview: data.prompt.slice(0, 200),
+      });
+      logger.info(
+        { taskId, sourceGroup, targetFolder, contextMode },
+        'Task created via IPC',
+      );
+      say(true, `Scheduled (${taskId}): ${scheduleType} ${data.schedule_value}${nextRun ? `; next run ${whenText(nextRun)}` : ''}.`, taskId);
+      // a reminder the student asked for (a one-time task) goes in their activity list; a recurring task is TAi's own routine
+      if (scheduleType === 'once' && nextRun) {
+        try {
+          deps.recordActivity?.(targetFolder, { type: 'reminder', title: `Reminder · ${whenText(nextRun)}`, text: data.prompt, detail: `${data.prompt}\n\nScheduled for ${whenText(nextRun)}.` });
+        } catch { /* the list is a convenience */ }
       }
       break;
+    }
 
     case 'pause_task':
-      if (data.taskId) {
-        const task = getTaskById(data.taskId);
-        if (task && (isMain || task.group_folder === sourceGroup)) {
-          updateTask(data.taskId, { status: 'paused' });
-          logger.info(
-            { taskId: data.taskId, sourceGroup },
-            'Task paused via IPC',
-          );
-        } else {
-          logger.warn(
-            { taskId: data.taskId, sourceGroup },
-            'Unauthorized task pause attempt',
-          );
-        }
-      }
-      break;
-
     case 'resume_task':
-      if (data.taskId) {
-        const task = getTaskById(data.taskId);
-        if (task && (isMain || task.group_folder === sourceGroup)) {
-          updateTask(data.taskId, { status: 'active' });
-          logger.info(
-            { taskId: data.taskId, sourceGroup },
-            'Task resumed via IPC',
-          );
-        } else {
-          logger.warn(
-            { taskId: data.taskId, sourceGroup },
-            'Unauthorized task resume attempt',
-          );
-        }
+    case 'cancel_task': {
+      const [verb, done] = data.type === 'pause_task' ? ['pause', 'paused'] : data.type === 'resume_task' ? ['resume', 'resumed'] : ['cancel', 'cancelled'];
+      const say = (ok: boolean, message: string) => answer(sourceGroup, data.requestId, { ok, message });
+      const task = data.taskId ? getTaskById(data.taskId) : undefined;
+      // a task of another group is "no such task" to a group that is not the admin chat: it is not told that the task exists
+      if (!task || (!isMain && task.group_folder !== sourceGroup)) {
+        logger.warn({ taskId: data.taskId, sourceGroup }, `Unauthorized or unknown task ${verb} attempt`);
+        say(false, data.taskId ? `There is no task ${String(data.taskId).slice(0, 80)} in this chat.` : 'No task was named.');
+        break;
       }
-      break;
-
-    case 'cancel_task':
-      if (data.taskId) {
-        const task = getTaskById(data.taskId);
-        if (task && (isMain || task.group_folder === sourceGroup)) {
-          auditLog('cancel_task', { sourceGroup, taskId: data.taskId, taskGroup: task.group_folder });
-          deleteTask(data.taskId);
-          logger.info(
-            { taskId: data.taskId, sourceGroup },
-            'Task cancelled via IPC',
-          );
-        } else {
-          logger.warn(
-            { taskId: data.taskId, sourceGroup },
-            'Unauthorized task cancel attempt',
-          );
-        }
+      // The host's own tasks (the patrol, the bootstrap) are not for a student's agent to stop: a group that is not the admin chat changes only the tasks that agents made
+      // in it. (A task nobody classified is not one of those either.)
+      if (!isMain && task.origin !== 'container') {
+        auditLog('task_change_refused', { sourceGroup, taskId: task.id, verb, origin: task.origin ?? null });
+        logger.warn({ taskId: task.id, sourceGroup, verb }, 'A group tried to change a task of the system\'s: refused');
+        say(false, `Task ${task.id} is part of the system's own routine (the teaching patrol or the account setup), so it cannot be ${done} from here.`);
+        break;
       }
+      if (data.type === 'pause_task') {
+        updateTask(task.id, { status: 'paused' });
+      } else if (data.type === 'resume_task') {
+        updateTask(task.id, { status: 'active' });
+      } else {
+        auditLog('cancel_task', { sourceGroup, taskId: task.id, taskGroup: task.group_folder });
+        deleteTask(task.id);
+      }
+      logger.info({ taskId: task.id, sourceGroup }, `Task ${done} via IPC`);
+      say(true, `Task ${task.id} ${done}.`);
       break;
+    }
 
     case 'refresh_groups':
       // Only main group can request a refresh
@@ -497,30 +574,31 @@ export async function processTaskIpc(
     }
 
     case 'set_student_identity':
-      // Only main or scheduled tasks can set identity (verified by IPC directory)
+      // Only the admin chat binds an identity (verified by the IPC directory). The binding is what keeps one student's agent from reading another's grades
+      // (canvas_query my_grades and student_submission use it), so a container must not be able to write it. The tool of that name refuses a container that
+      // is not the admin chat or a system task, but this file is the container's own words: a student's agent can write it into its own IPC directory without
+      // the tool (nothing guards that directory), and the host cannot tell a system task's file from a student's, so until now any group could bind any Canvas
+      // user to itself. A student's binding comes from the allowlist (ensureStudentGroup) when their chat is registered; the grade bootstrap's own call is a
+      // no-op there, and is ignored here without a word.
       if (!isMain) {
-        // For non-main, only allow setting own group's identity
-        // (scheduled tasks like bootstrap run in the student's group context)
         const targetFolder = data.targetFolder || sourceGroup;
-        if (targetFolder !== sourceGroup) {
+        const current = Object.values(registeredGroups).find((g) => g.folder === targetFolder);
+        const changesNothing =
+          targetFolder === sourceGroup &&
+          !!current &&
+          (!data.canvasUserId || data.canvasUserId === current.canvasUserId) &&
+          (!data.githubUsername || data.githubUsername === current.githubUsername);
+        if (!changesNothing) {
+          auditLog('set_student_identity_refused', {
+            sourceGroup, targetFolder,
+            canvasUserId: data.canvasUserId, githubUsername: data.githubUsername,
+          });
           logger.warn(
             { sourceGroup, targetFolder },
             'Unauthorized set_student_identity attempt blocked',
           );
-          break;
         }
-        if (data.canvasUserId || data.githubUsername) {
-          const updated = updateGroupIdentity(targetFolder, {
-            canvasUserId: data.canvasUserId,
-            githubUsername: data.githubUsername,
-          });
-          if (updated) {
-            logger.info(
-              { targetFolder, canvasUserId: data.canvasUserId, githubUsername: data.githubUsername },
-              'Student identity updated via IPC (self)',
-            );
-          }
-        }
+        break;
       } else {
         // Main can set identity for any group
         const targetFolder = data.targetFolder || sourceGroup;

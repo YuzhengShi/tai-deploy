@@ -24,7 +24,12 @@ export function messageTexts(prompt: string): string[] {
 
 /** What the student sees of a reply: without the model's <internal> reasoning. */
 export function visibleText(reply: string): string {
-  return reply.replace(/<internal\b[\s\S]*?<\/internal\s*>/gi, '').replace(/<internal\b[\s\S]*$/i, '').trim();
+  return reply
+    .replace(/<internal\b[\s\S]*?<\/internal\s*>/gi, '')
+    .replace(/<internal\b[\s\S]*$/i, '')
+    .replace(/<(i|em|b)>\s*internal\b[\s\S]*?<\/\1>/gi, '') // qwen's "<i>internal: ...</i>", which the host strips too (src/router.ts)
+    .replace(/<(?:i|em|b)>\s*internal\b[\s\S]*$/i, '')
+    .trim();
 }
 
 function oneLine(text: string, max: number): string {

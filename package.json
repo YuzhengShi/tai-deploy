@@ -31,6 +31,7 @@
     "qrcode-terminal": "^0.12.0",
     "socket.io": "^4.8.3",
     "uuid": "^13.0.0",
+    "ws": "^8.19.0",
     "yaml": "^2.8.2",
     "zod": "^4.3.6"
   },
@@ -40,6 +41,7 @@
     "@types/node": "^22.10.0",
     "@types/qrcode-terminal": "^0.12.2",
     "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.0.18",
     "prettier": "^3.8.1",
     "tsx": "^4.19.0",

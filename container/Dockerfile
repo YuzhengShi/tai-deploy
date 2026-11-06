@@ -55,6 +55,34 @@ RUN /opt/leanrag/bin/pip install --no-cache-dir -r /tmp/leanrag-requirements.txt
 RUN npm install -g agent-browser @anthropic-ai/claude-code @mermaid-js/mermaid-cli
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
+# pi's grep and find tools run ripgrep and fd; without them pi would try to download them, which the runner forbids (PI_OFFLINE=1).
+# ripgrep is Debian's. fd is not: Debian's fd-find is 8.6.0, which rejects --no-require-git (pi's find passes it outside a git
+# repository), so every find call failed. A static release of fd instead, checked against the sha256 pinned here (the digest GitHub
+# lists for each asset, recomputed from the downloaded file). pi looks for "fd" and then "fdfind" (Debian's name); the binary is
+# installed under both, and the build stops if the one called fdfind does not know the flag. Change FD_VERSION and both sums together.
+# A layer of its own, after the heavy ones above, so a rebuild keeps those cached.
+# The same apt line carries tesseract with its English data, for the read_image_text tool (scripts/ocr_image.py reads the text of a screenshot a
+# student attached). Measured on bookworm: tesseract-ocr 5.3.0-2 and tesseract-ocr-eng 1:4.1.0-2 are 7 packages and 23 MiB installed, 10 MiB of
+# them the orientation data that Debian's tesseract-ocr depends on whatever --no-install-recommends says. It runs as the node user (no root needed).
+ARG FD_VERSION=10.5.0
+ARG FD_SHA256_X86_64=761c72dc8e120d85b22292063be8a796e2eeb20eb3e4f38b8fa2343ccf3514a7
+ARG FD_SHA256_AARCH64=d76c4317f7d5dba69f8a2a15856c90c777e7f0dd4e85f0de8c76de6992c374d4
+RUN apt-get update && apt-get install -y --no-install-recommends ripgrep tesseract-ocr tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/* \
+    && case "$(dpkg --print-architecture)" in \
+         amd64) fd_arch=x86_64; fd_sha256="$FD_SHA256_X86_64" ;; \
+         arm64) fd_arch=aarch64; fd_sha256="$FD_SHA256_AARCH64" ;; \
+         *) echo "no fd release is pinned for $(dpkg --print-architecture)" >&2; exit 1 ;; \
+       esac \
+    && fd_dir="fd-v${FD_VERSION}-${fd_arch}-unknown-linux-musl" \
+    && curl -fsSL --retry 3 --retry-delay 2 -o /tmp/fd.tar.gz "https://github.com/sharkdp/fd/releases/download/v${FD_VERSION}/${fd_dir}.tar.gz" \
+    && echo "${fd_sha256}  /tmp/fd.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/fd.tar.gz -C /tmp "${fd_dir}/fd" \
+    && install -m 0755 "/tmp/${fd_dir}/fd" /usr/local/bin/fd \
+    && ln -s fd /usr/local/bin/fdfind \
+    && rm -rf /tmp/fd.tar.gz "/tmp/${fd_dir}" \
+    && fdfind --help | grep -q -- --no-require-git
+
 # Create app directory
 WORKDIR /app
 

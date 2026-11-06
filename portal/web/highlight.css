@@ -1,0 +1,106 @@
+/* Syntax colours for the code blocks of TAi's answers. highlight.js builds a <span class="hl-KIND"> per coloured run; docs/HIGHLIGHT.md has the rules.
+
+   The colours are variables, set where style.css sets its own: :root for light, the dark block under prefers-color-scheme for data-theme="auto",
+   and :root[data-theme="dark"] for a student who chose dark. Each is at least 4.5:1 against the block's background (--code-bg of style.css in that
+   theme); highlight.test.js reads both files, resolves them the way the cascade does for all twelve ways a page can be in (theme setting, the
+   system's scheme, prefers-contrast), and fails if one is not. Change a colour here and that test says whether it still holds.
+
+   prefers-contrast: more gets its own set, at least 7:1, rather than no colour: colour is still how a keyword is told from a string, and
+   it is the grey comments that most need to be darker. Forced colors (Windows high contrast) replace every colour with the system's anyway;
+   the rule at the end says so rather than leave it to the browser, and keeps the one thing that is not a colour (italic comments). */
+
+:root {
+  --hl-keyword: #6d28d9;
+  --hl-type: #0c6e86;
+  --hl-string: #14773a;
+  --hl-comment: #5c6472;
+  --hl-number: #a24a05;
+  --hl-function: #1d4ed8;
+  --hl-operator: #475569;
+  --hl-punctuation: #63636d;
+  --hl-variable: #be123c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] {
+    --hl-keyword: #c4b5fd;
+    --hl-type: #5eead4;
+    --hl-string: #86efac;
+    --hl-comment: #9ca3af;
+    --hl-number: #fdba74;
+    --hl-function: #93c5fd;
+    --hl-operator: #cbd5e1;
+    --hl-punctuation: #9b9b9b;
+    --hl-variable: #fda4af;
+  }
+}
+
+:root[data-theme="dark"] {
+  --hl-keyword: #c4b5fd;
+  --hl-type: #5eead4;
+  --hl-string: #86efac;
+  --hl-comment: #9ca3af;
+  --hl-number: #fdba74;
+  --hl-function: #93c5fd;
+  --hl-operator: #cbd5e1;
+  --hl-punctuation: #9b9b9b;
+  --hl-variable: #fda4af;
+}
+
+/* more contrast: the same three selectors again, after the ones above (equal specificity, so the later wins), each with its own set */
+@media (prefers-contrast: more) {
+  :root {
+    --hl-keyword: #4c1d95;
+    --hl-type: #0f4f4a;
+    --hl-string: #14532d;
+    --hl-comment: #3f4754;
+    --hl-number: #7c2d12;
+    --hl-function: #1e3a8a;
+    --hl-operator: #1f2937;
+    --hl-punctuation: #374151;
+    --hl-variable: #881337;
+  }
+}
+
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] {
+    --hl-keyword: #ddd6fe;
+    --hl-type: #99f6e4;
+    --hl-string: #bbf7d0;
+    --hl-comment: #d1d5db;
+    --hl-number: #fed7aa;
+    --hl-function: #bfdbfe;
+    --hl-operator: #e5e7eb;
+    --hl-punctuation: #e5e7eb;
+    --hl-variable: #fecdd3;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root[data-theme="dark"] {
+    --hl-keyword: #ddd6fe;
+    --hl-type: #99f6e4;
+    --hl-string: #bbf7d0;
+    --hl-comment: #d1d5db;
+    --hl-number: #fed7aa;
+    --hl-function: #bfdbfe;
+    --hl-operator: #e5e7eb;
+    --hl-punctuation: #e5e7eb;
+    --hl-variable: #fecdd3;
+  }
+}
+
+.code .hl-keyword { color: var(--hl-keyword); }
+.code .hl-type { color: var(--hl-type); }
+.code .hl-string { color: var(--hl-string); }
+.code .hl-comment { color: var(--hl-comment); font-style: italic; }
+.code .hl-number { color: var(--hl-number); }
+.code .hl-function { color: var(--hl-function); }
+.code .hl-operator { color: var(--hl-operator); }
+.code .hl-punctuation { color: var(--hl-punctuation); }
+.code .hl-variable { color: var(--hl-variable); }
+
+@media (forced-colors: active) {
+  .code .hl-keyword, .code .hl-type, .code .hl-string, .code .hl-comment, .code .hl-number,
+  .code .hl-function, .code .hl-operator, .code .hl-punctuation, .code .hl-variable { color: inherit; }
+}

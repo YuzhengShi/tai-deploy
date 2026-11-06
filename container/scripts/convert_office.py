@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Convert Office files (.docx, .xlsx, .pptx) to readable plain text.
+"""Convert Office files (.docx, .xlsx, .pptx) and PDFs to readable plain text.
 
-Usage: python3 /opt/scripts/convert_office.py <input_file>
+Usage: /opt/leanrag/bin/python3 /opt/scripts/convert_office.py <input_file>   (the venv: it has the libraries)
 
 Outputs extracted text to stdout. Exits non-zero on failure.
 """
@@ -61,6 +61,25 @@ def convert_pptx(path: str) -> str:
     return '\n'.join(parts)
 
 
+def convert_pdf(path: str) -> str:
+    try:
+        import pymupdf as fitz
+    except ImportError:          # older releases only know the old name
+        import fitz
+    parts = []
+    size = 0
+    with fitz.open(path) as doc:
+        for number, page in enumerate(doc, 1):
+            text = page.get_text().strip()
+            if text:
+                parts.append(f"=== Page {number} ===" + chr(10) + text)
+                size += len(text)
+            if number >= 60 or size > 60000:      # a student's PDF is a report or a spec, not a book: the first sixty pages are plenty
+                parts.append("[stopped here: the rest of the file is not shown]")
+                break
+    return chr(10).join(parts)
+
+
 def main():
     if len(sys.argv) != 2:
         print(f"Usage: {sys.argv[0]} <input_file>", file=sys.stderr)
@@ -79,6 +98,7 @@ def main():
         '.doc': convert_docx,
         '.xls': convert_xlsx,
         '.ppt': convert_pptx,
+        '.pdf': convert_pdf,
     }
 
     converter = converters.get(ext)

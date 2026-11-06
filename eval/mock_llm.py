@@ -19,6 +19,9 @@ MOCK_SCRIPTS (default /scripts):
             {"history": true} answers with what the model was shown (message count, markers MARK-xxx seen in earlier turns,
             whether the system prompt carries TAi's persona); a "sleep" key delays any of these.
 
+A script names Claude Code's tools (Bash, Read, Write, Edit, Grep, Glob, WebFetch ...). When the client is pi (its tools are bash, read ...)
+the call is translated to pi's name and arguments, so one script serves both harnesses (pi_call).
+
 Requests with no tools (Claude Code's own background calls: titles, quota checks) get a short fixed text. Every request is appended
 to MOCK_LOG as one JSON line (time, path, message summary, step, what was sent back), so a test can read what the model was shown.
 """
@@ -39,6 +42,7 @@ SCRIPTS_DIR = os.environ.get("MOCK_SCRIPTS", "/scripts")
 LOG_PATH = os.environ.get("MOCK_LOG", "/logs/mockllm.jsonl")
 DIRECTIVE = re.compile(r"MOCK:([A-Za-z0-9_.-]+)")
 MARKER = re.compile(r"MARK-[A-Za-z0-9]+")
+PLANTED = re.compile(r"PLANTED-[A-Za-z0-9_-]+")
 PERSONA_FINGERPRINT = "Teaching Assistant for CS6650"
 CHUNK = 48 * 1024
 
@@ -71,6 +75,33 @@ def message_text(msg):
     if isinstance(content, str):
         return content
     return "\n".join(block_text(b) for b in content)
+
+
+def is_pi(body):
+    """Is the client pi? Its tools are called bash, read, write ... where Claude Code's are Bash, Read, Write ..."""
+    names = {t.get("name") for t in (body or {}).get("tools") or []}
+    return "bash" in names and "Bash" not in names
+
+
+def pi_call(name, inp):
+    """A script is written for Claude Code's tools; the same call for pi, whose tools take `path` where Claude's take `file_path`, and whose
+    edit is a list of {oldText, newText}. MCP tools (mcp__server__tool) keep their names in both."""
+    if name == "Bash":
+        return "bash", {k: inp[k] for k in ("command", "timeout") if k in inp}
+    if name == "Read":
+        return "read", {"path": inp.get("file_path", ""), **{k: inp[k] for k in ("offset", "limit") if k in inp}}
+    if name == "Write":
+        return "write", {"path": inp.get("file_path", ""), "content": inp.get("content", "")}
+    if name in ("Edit", "MultiEdit"):
+        edits = inp.get("edits") or [{"old_string": inp.get("old_string", ""), "new_string": inp.get("new_string", "")}]
+        return "edit", {"path": inp.get("file_path", ""), "edits": [{"oldText": e.get("old_string", ""), "newText": e.get("new_string", "")} for e in edits]}
+    if name == "Grep":
+        return "grep", {k: inp[k] for k in ("pattern", "path", "glob") if k in inp}
+    if name == "Glob":
+        return "find", {k: inp[k] for k in ("pattern", "path") if k in inp}
+    if name == "WebFetch":
+        return "web_fetch", {"url": inp.get("url", "")}
+    return name, inp
 
 
 def has_tool_result(msg):
@@ -139,8 +170,10 @@ def decide(body):
     if final.get("history"):
         earlier = "\n".join(message_text(m) for m in messages[:last])
         markers = sorted(set(MARKER.findall(earlier)))
-        text = "HISTORY n_messages=%d real_user_turns=%d earlier_markers=%s persona_in_system=%s" % (
-            len(messages), len(users), ",".join(markers) or "none", PERSONA_FINGERPRINT in system_text(body))
+        # PLANTED-xxx in the system prompt or in a tool declaration: what an agent that loaded files from its working directory would show
+        planted = sorted(set(PLANTED.findall(system_text(body) + json.dumps(body.get("tools") or []))))
+        text = "HISTORY n_messages=%d real_user_turns=%d earlier_markers=%s persona_in_system=%s planted=%s" % (
+            len(messages), len(users), ",".join(markers) or "none", PERSONA_FINGERPRINT in system_text(body), ",".join(planted) or "none")
         return {"text": text, "sleep": final.get("sleep", 0)}, info
     if final.get("echo"):
         parts = ["[%d] %s" % (i + 1, block_text(r).strip().replace("\n", " ")[:300]) for i, r in enumerate(results)]
@@ -195,6 +228,20 @@ class Handler(BaseHTTPRequestHandler):
                  "max_tokens": body.get("max_tokens"), "bytes": len(raw), "system_len": len(system_text(body)),
                  "system_sha1": hashlib.sha1(system_text(body).encode()).hexdigest()[:10],
                  "messages": summarize(body.get("messages", [])), "action": {k: (v if k != "input" else "...") for k, v in action.items()}}
+        # What the request weighs, by part (bytes of JSON): the system prompt blocks, each tool definition, the messages. This is what a
+        # harness adds before the student has said anything, and what an input-token budget (Cerebras's tokens a minute) is spent on.
+        tools = body.get("tools") or []
+        system = body.get("system", "")
+        entry.update(system_blocks=[len(block_text(b)) for b in system] if isinstance(system, list) else [len(str(system))],
+                     tools_bytes=len(json.dumps(tools)), tool_sizes={t.get("name", "?"): len(json.dumps(t)) for t in tools},
+                     messages_bytes=len(json.dumps(body.get("messages", []))))
+        dump = os.environ.get("MOCK_DUMP_FIRST")   # keep the whole body of the first request that carries tools, for a look at what is in it
+        if dump and tools and not os.path.exists(dump):
+            try:
+                with open(dump, "w", encoding="utf-8") as f:
+                    f.write(raw.decode("utf-8", "replace"))
+            except OSError:
+                pass
         entry.update(info)
         with _log_lock:
             try:
@@ -218,18 +265,21 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- response shapes ------------------------------------------------------------------------------------------------
 
-    def _blocks(self, action):
+    def _blocks(self, action, body=None):
         if action.get("tool"):
-            return [{"type": "tool_use", "id": rid("toolu_"), "name": action["tool"], "input": action.get("input", {})}], "tool_use"
+            name, inp = action["tool"], action.get("input", {})
+            if is_pi(body):
+                name, inp = pi_call(name, inp)
+            return [{"type": "tool_use", "id": rid("toolu_"), "name": name, "input": inp}], "tool_use"
         return [{"type": "text", "text": action.get("text", "")}], "end_turn"
 
     def _whole(self, action, body, in_tokens):
-        blocks, stop = self._blocks(action)
+        blocks, stop = self._blocks(action, body)
         self._json(200, {"id": rid("msg_"), "type": "message", "role": "assistant", "model": body.get("model", "mock"), "content": blocks,
                          "stop_reason": stop, "stop_sequence": None, "usage": {"input_tokens": in_tokens, "output_tokens": 8}})
 
     def _stream(self, action, body, in_tokens):
-        blocks, stop = self._blocks(action)
+        blocks, stop = self._blocks(action, body)
         self.send_response(200)
         self.send_header("content-type", "text/event-stream")
         self.send_header("cache-control", "no-cache")

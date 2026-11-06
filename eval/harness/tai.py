@@ -195,10 +195,88 @@ def transcripts(folder):
     return [p for _t, p in sorted(found, reverse=True)]
 
 
+# pi's tools as Claude Code names them: the scripts and checks of this harness are written against Claude's names and inputs
+PI_TO_CLAUDE = {"bash": "Bash", "read": "Read", "write": "Write", "edit": "Edit", "grep": "Grep", "find": "Glob", "ls": "Glob", "web_fetch": "WebFetch"}
+
+
+def claude_style_input(name, args):
+    """A pi tool call's arguments as the input of the Claude Code tool that does the same."""
+    args = args or {}
+    if name == "bash":
+        return {"command": args.get("command", "")}
+    if name == "read":
+        return {"file_path": args.get("path", ""), **{k: args[k] for k in ("offset", "limit") if k in args}}
+    if name == "write":
+        return {"file_path": args.get("path", ""), "content": args.get("content", "")}
+    if name == "edit":
+        edits = args.get("edits") or []
+        out = {"file_path": args.get("path", ""), "edits": [{"old_string": e.get("oldText", ""), "new_string": e.get("newText", "")} for e in edits]}
+        if edits:
+            out.update(old_string=edits[0].get("oldText", ""), new_string=edits[0].get("newText", ""))
+        return out
+    if name == "grep":
+        return {k: args[k] for k in ("pattern", "path", "glob") if args.get(k)}
+    if name in ("find", "ls"):
+        return {"pattern": args.get("pattern", "*"), "path": args.get("path", ".")}
+    if name == "web_fetch":
+        return {"url": args.get("url", "")}
+    return args
+
+
+def pi_transcripts(folder):
+    """The pi session files of a group: the container keeps them in the mounted .claude directory, under pi-sessions."""
+    base = "%s/data/sessions/%s/.claude/pi-sessions" % (T, folder)
+    try:
+        return sorted((os.path.join(base, n) for n in os.listdir(base) if n.endswith(".jsonl")), key=os.path.getmtime, reverse=True)
+    except OSError:
+        return []
+
+
+def pi_rows(path):
+    """The rows of a pi session file in the shape of Claude Code's (message.content blocks tool_use / tool_result / text), so that
+    session_rows and tool_events read both."""
+    rows = []
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if e.get("type") != "message":
+                continue
+            m = e.get("message") or {}
+            role, content = m.get("role"), m.get("content")
+            uuid = "%s:%s" % (os.path.basename(path), e.get("id"))
+            if role == "assistant" and isinstance(content, list):
+                blocks = []
+                for b in content:
+                    if not isinstance(b, dict):
+                        continue
+                    if b.get("type") == "toolCall":
+                        blocks.append({"type": "tool_use", "id": b.get("id"), "name": PI_TO_CLAUDE.get(b.get("name"), b.get("name")),
+                                       "input": claude_style_input(b.get("name"), b.get("arguments"))})
+                    elif b.get("type") == "text":
+                        blocks.append({"type": "text", "text": b.get("text", "")})
+                rows.append({"uuid": uuid, "timestamp": e.get("timestamp"), "type": "assistant", "message": {"role": "assistant", "content": blocks}})
+            elif role == "toolResult":
+                body = "\n".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text") if isinstance(content, list) else str(content)
+                rows.append({"uuid": uuid, "timestamp": e.get("timestamp"), "type": "user",
+                             "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": m.get("toolCallId"), "content": body, "is_error": bool(m.get("isError"))}]}})
+            elif role == "user":
+                text = content if isinstance(content, str) else "\n".join(b.get("text", "") for b in (content or []) if isinstance(b, dict))
+                rows.append({"uuid": uuid, "timestamp": e.get("timestamp"), "type": "user", "message": {"role": "user", "content": [{"type": "text", "text": text}]}})
+    return rows
+
+
 def session_rows(folder):
-    """Every row of every Claude Code session file of a group, oldest first. Resuming may write a new session file that repeats the
-    old rows, so rows are deduplicated by their uuid."""
+    """Every row of every session file of a group (Claude Code's and pi's), oldest first. Resuming may write a new session file that
+    repeats the old rows, so rows are deduplicated by their uuid."""
     rows, seen = [], set()
+    for path in pi_transcripts(folder):
+        for row in pi_rows(path):
+            if row["uuid"] not in seen:
+                seen.add(row["uuid"])
+                rows.append(row)
     for path in transcripts(folder):
         with open(path, encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -248,7 +326,8 @@ def sessions():
 
 # What the first orch_env call of a harness script passes unless it measures the image built from the Dockerfile (sched.py --precompiled):
 # containers compile the mounted agent-runner source at start, so a variant swap or a hook change is what runs.
-EVAL_IMAGE = dict(TAI_COMPILE_ON_START=1, CONTAINER_IMAGE="tai-agent:eval", CONTAINER_TIMEOUT=900000)   # the timeout resets what sched.py SC4/SC6 left (10 s)
+EVAL_IMAGE = dict(TAI_COMPILE_ON_START=1, CONTAINER_IMAGE="tai-agent:clean", CONTAINER_TIMEOUT=900000)   # the timeout resets what sched.py SC4/SC6 left (10 s)
+# tai-agent:clean is the image built from the repository's Dockerfile (pi, ripgrep, fd and both runners are in it); the older tai-agent:eval has neither pi nor the tools
 
 
 def orch_env(**kv):

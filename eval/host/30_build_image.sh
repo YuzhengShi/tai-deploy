@@ -7,7 +7,7 @@
 set -u
 . "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 MODE="${1:-start}"
-rssh "bash -s -- $MODE ${2:-eval}" <<'REMOTE'
+rssh "bash -s -- $MODE ${2:-eval} ${3:-}" <<'REMOTE'
 set -u
 MODE="$1"
 TAG="$2"
@@ -39,8 +39,27 @@ look)
 inspect)
   # what the Dockerfile as it is put into the image: the compiled runner, the entrypoint, the pinned mcp
   docker run --rm --entrypoint sh tai-agent:$TAG -c 'echo "dist: $(ls /app/dist | tr "\n" " ")"; echo "entrypoint: $(grep -c TAI_COMPILE_ON_START /app/entrypoint.sh) mention(s) of TAI_COMPILE_ON_START; last line: $(tail -n 1 /app/entrypoint.sh)"; echo "mcp: $(/opt/leanrag/bin/pip list 2>/dev/null | grep -i "^mcp ")"; echo "user: $(id -un)"' 2>&1 | cut -c1-200 ;;
+loadtime)
+  # how long a fresh node takes to load pi (seconds from process start, as process.uptime() says), three times plain and three times with
+  # node's compile cache (NODE_COMPILE_CACHE: the first run fills it, the next ones read it)
+  docker run --rm --entrypoint sh tai-agent:$TAG -c 'cd /app && T="await import(\"@earendil-works/pi-coding-agent\"); console.log(process.uptime().toFixed(2))"; echo "plain: $(for i in 1 2 3; do node --input-type=module -e "$T"; done | tr "\n" " ")"; export NODE_COMPILE_CACHE=/tmp/cc; echo "compile cache: $(for i in 1 2 3; do node --input-type=module -e "$T"; done | tr "\n" " ")"; du -sh /tmp/cc 2>/dev/null | cut -f1; nproc' 2>&1 | cut -c1-200 ;;
+startup)
+  # seconds from `docker run` (with the flags the orchestrator uses) to the first line the runner logs, three times, for one harness:
+  #   30_build_image.sh startup clean pi | claude
+  H="${3:-pi}"
+  mkdir -p ~/tai-eval/startup-group
+  docker rm -f startup-probe >/dev/null 2>&1
+  for i in 1 2 3; do
+    s=$(date +%s.%N)
+    echo '{"prompt":"x","groupFolder":"startup","chatJid":"startup@web","isMain":false}' | timeout 60 docker run -i --rm --name startup-probe --cpus 1.0 --memory 2g --pids-limit 256 \
+      --security-opt no-new-privileges --cap-drop ALL --tmpfs /tmp:size=512m,noexec -e TZ=UTC -e TAI_HARNESS=$H --network nanoclaw-net \
+      -v ~/tai-eval/startup-group:/workspace/group tai-agent:$TAG 2>&1 | while read -r line; do
+        case "$line" in *"Received input"*) e=$(date +%s.%N); echo "$H: first runner line after $(awk "BEGIN{printf \"%.1f\", $e-$s}") s"; docker kill startup-probe >/dev/null 2>&1; break ;; esac
+      done
+    sleep 3
+  done ;;
 versions)
   docker image inspect tai-agent:$TAG --format 'image {{.Id}} {{.Size}} bytes, created {{.Created}}' 2>&1 | cut -c1-200
-  docker run --rm --entrypoint sh tai-agent:$TAG -c 'cd /app && echo "node $(node --version)"; echo "sdk $(node -p "require(\"./node_modules/@anthropic-ai/claude-agent-sdk/package.json\").version")"; ls node_modules/@anthropic-ai; (claude --version 2>&1 | head -1); echo "global claude-code: $(ls /usr/local/lib/node_modules/@anthropic-ai 2>/dev/null)"; echo "cli bundled in the sdk (the one the SDK runs): $(ls node_modules/@anthropic-ai/claude-agent-sdk | grep -E "^cli" | tr "\n" " ")"; node node_modules/@anthropic-ai/claude-agent-sdk/cli.js --version 2>&1 | head -1' 2>&1 | cut -c1-200 ;;
+  docker run --rm --entrypoint sh tai-agent:$TAG -c 'cd /app && echo "node $(node --version)"; echo "pi $(node -p "require(\"./node_modules/@earendil-works/pi-coding-agent/package.json\").version") (needs node 22.19 or later); rg: $(rg --version 2>&1 | head -1); fd: $(fdfind --version 2>&1 | head -1); runners: $(ls dist | grep -E "^(index|pi-runner).js" | tr "\n" " ")"; echo "sdk $(node -p "require(\"./node_modules/@anthropic-ai/claude-agent-sdk/package.json\").version")"; ls node_modules/@anthropic-ai; (claude --version 2>&1 | head -1); echo "global claude-code: $(ls /usr/local/lib/node_modules/@anthropic-ai 2>/dev/null)"; echo "cli bundled in the sdk (the one the SDK runs): $(ls node_modules/@anthropic-ai/claude-agent-sdk | grep -E "^cli" | tr "\n" " ")"; node node_modules/@anthropic-ai/claude-agent-sdk/cli.js --version 2>&1 | head -1' 2>&1 | cut -c1-200 ;;
 esac
 REMOTE

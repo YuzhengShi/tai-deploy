@@ -1,4 +1,5 @@
-"""Does the gateway answer with gpt-oss when qwen cannot, on the route Claude Code uses (Anthropic Messages, /v1/messages, streaming)?
+"""Does the gateway answer with gpt-oss when qwen cannot, on the route Claude Code uses (Anthropic Messages, /v1/messages, streaming) and, with
+the argument `chat`, on the route pi uses (OpenAI chat completions, /v1/chat/completions, streaming)?
 
 LiteLLM documents router fallbacks for /chat/completions; whether they apply to the Anthropic-format route is what the first cases
 check, with a deployment that always fails (the alias test-bad-key: Cerebras answers 401) whose fallback is gpt-oss, in a plain and in
@@ -6,7 +7,7 @@ a streaming request. The last case checks the other mechanism, the qwen budget (
 TAI_QWEN_TPM_BUDGET, requests that find the budget used up are sent to gpt-oss. Evidence is the gateway's own log (one line per
 upstream call, with the status of a failed one), not what a model says.
 
-Runs in a container on nanoclaw-net, because tai-litellm is only reachable there:   stack.sh fallbacktest [budget-case]
+Runs in a container on nanoclaw-net, because tai-litellm is only reachable there:   stack.sh fallbacktest [budget] [chat]
 """
 import json
 import os
@@ -28,6 +29,7 @@ def key():
 
 KEY = key()
 rows = []
+ROUTE = "chat" if "chat" in sys.argv[1:] else "messages"
 
 
 def events(since):
@@ -48,8 +50,15 @@ def events(since):
 
 def ask(model, stream=False, text="Reply with the single word: pong"):
     body = {"model": model, "max_tokens": 200, "messages": [{"role": "user", "content": text}], "stream": stream}
-    req = urllib.request.Request(BASE + "/v1/messages", data=json.dumps(body).encode(), method="POST",
-                                 headers={"content-type": "application/json", "authorization": "Bearer " + KEY, "anthropic-version": "2023-06-01"})
+    headers = {"content-type": "application/json", "authorization": "Bearer " + KEY}
+    if ROUTE == "chat":
+        path = "/v1/chat/completions"
+        if stream:
+            body["stream_options"] = {"include_usage": True}
+    else:
+        path = "/v1/messages"
+        headers["anthropic-version"] = "2023-06-01"
+    req = urllib.request.Request(BASE + path, data=json.dumps(body).encode(), method="POST", headers=headers)
     t0 = time.time()
     try:
         with urllib.request.urlopen(req, timeout=120) as r:
@@ -60,16 +69,23 @@ def ask(model, stream=False, text="Reply with the single word: pong"):
     answer = ""
     if status == 200 and stream:
         for line in raw.splitlines():
-            if line.startswith("data:"):
+            if line.startswith("data:") and line[5:].strip() != "[DONE]":
                 try:
                     d = json.loads(line[5:])
                 except ValueError:
                     continue
-                if d.get("type") == "content_block_delta" and d.get("delta", {}).get("type") == "text_delta":
+                if ROUTE == "chat":
+                    for choice in d.get("choices") or []:
+                        answer += (choice.get("delta") or {}).get("content") or ""
+                elif d.get("type") == "content_block_delta" and d.get("delta", {}).get("type") == "text_delta":
                     answer += d["delta"].get("text", "")
     elif status == 200:
         try:
-            answer = "".join(b.get("text", "") for b in json.loads(raw).get("content", []) if b.get("type") == "text")
+            data = json.loads(raw)
+            if ROUTE == "chat":
+                answer = "".join((c.get("message") or {}).get("content") or "" for c in data.get("choices", []))
+            else:
+                answer = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
         except ValueError:
             pass
     time.sleep(1.5)     # the success/failure callbacks write the log line a moment after the response
@@ -98,7 +114,7 @@ def fallback_case(label, stream):
 def main():
     budget_case = "budget" in sys.argv[1:]
     status, answer, evs, raw = ask("qwen")
-    note("F1_qwen", "qwen alias, plain", "200, answer, served by qwen", "HTTP %s, %r, served by %s" % (status, answer[:30], models(evs)),
+    note("F1_qwen", "qwen alias, plain, route " + ROUTE, "200, answer, served by qwen", "HTTP %s, %r, served by %s" % (status, answer[:30], models(evs)),
          status == 200 and bool(answer) and any("qwen" in m for m in models(evs)))
     status, answer, evs, raw = ask("gpt-oss")
     note("F2_gpt_oss", "gpt-oss alias, plain", "200, answer, served by gpt-oss", "HTTP %s, %r, served by %s" % (status, answer[:30], models(evs)),
@@ -121,7 +137,7 @@ def main():
              "first on qwen: %s; %d of 6 spilled; served after a spill: %s" % (first_on_qwen, len(spills), [s[3] for s in spills][:2]),
              first_on_qwen and bool(spills) and all(s[1] == 200 and any("gpt-oss" in m for m in s[3]) for s in spills))
     os.makedirs("/logs", exist_ok=True)
-    with open("/logs/fallback-result.json", "w") as f:
+    with open("/logs/fallback-result%s.json" % ("-chat" if ROUTE == "chat" else ""), "w") as f:
         json.dump(rows, f, indent=1)
     print("%d cases, %d not as expected" % (len(rows), sum(1 for r in rows if r["verdict"] != "OK")))
 

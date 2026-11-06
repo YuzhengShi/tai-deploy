@@ -1,6 +1,6 @@
 # The gateway between Claude Code (Anthropic Messages API) and Cerebras (OpenAI chat completions) for the evaluation.
 # Two aliases, one per model under test (qwen falls back to gpt-oss). Every model slot Claude Code has (sonnet, haiku, opus, small-fast) is pointed at the alias
-# in TAi's .env, so no request carries a name this file does not know.
+# in TAi's .env, so no request carries a name this file does not know. The live deployment (deploy/cs6650) shares this file and adds a third alias, deepseek.
 model_list:
   - model_name: qwen                       # Nora's model, reasoning off (Nora's setting)
     litellm_params:
@@ -17,6 +17,47 @@ model_list:
       extra_body:
         reasoning_effort: "low"
         parallel_tool_calls: false
+
+  # DeepSeek's own API (platform.deepseek.com), for the live deployment: used only when TAi is told to (tai_live.sh model deepseek [--background],
+  # TAI_VOICE_MODEL=deepseek). It is in NO fallback chain below on purpose: a fallback would send students' words to a provider in another
+  # jurisdiction without anyone having decided that. The key arrives as DEEPSEEK_API_KEY from the gateway's env file (tai_credentials.sh deepseek);
+  # without it the gateway still starts and a request for this alias fails with 401.
+  - model_name: deepseek
+    litellm_params:
+      model: deepseek/deepseek-flash        # DeepSeek-V4.1-Flash, the id its /models lists (deepseek-chat / deepseek-reasoner are not on its price page any more)
+      api_base: https://api.deepseek.com    # pinned: LiteLLM's own default for this provider is the /beta address
+      api_key: os.environ/DEEPSEEK_API_KEY
+      extra_body:
+        thinking:
+          type: disabled                    # thinking is ON by default there, and with tools every later request must send the reasoning_content back
+                                            # (HTTP 400 otherwise); the text agent and the voice relay always send tools. Nothing else goes in extra_body:
+                                            # it reaches DeepSeek unchanged (drop_params does not touch it), so a field it rejects would fail every call
+
+  # z.ai (GLM-5.3-Flash) through the OpenAI chat completions endpoint of the GLM Coding Plan (https://api.z.ai/api/coding/paas/v4): `glm` is GLM-5.3-Flash as a thinking
+  # model (tai_live.sh models glm: the owner's token-consumption comparison with deepseek), `glm-vision` is the model that reads a student's pictures (TAI_VISION=1,
+  # docs/VISION.md). Like deepseek they are in NO fallback chain: a fallback would send students' words to another provider without anyone having decided that. The key
+  # arrives as ZAI_API_KEY from the gateway's env file (tai_credentials.sh zai); without it the gateway still starts and a request for these aliases fails with 401.
+  # Why this endpoint and not the Anthropic Messages one (https://api.z.ai/api/anthropic, which answers the same, with the same token use): THINKING. The docs say 5.3-Flash
+  # always thinks, but the API accepts `thinking: {type: disabled}` and then does not think (measured 2026-11-05 on the owner's key: the same Nora voice question took 57-86
+  # output tokens in 2.2-2.8 s, against 130-260 tokens in 3.6-5.5 s with thinking on). LiteLLM's anthropic/ provider drops "disabled" (it is Anthropic's default, so it sends
+  # nothing) and z.ai's default is ON, so through it the model always thought; here the field goes out unchanged in extra_body, as for deepseek, which is also why it is
+  # off: with tools every later request would have to send the thinking blocks back.
+  - model_name: glm
+    litellm_params:
+      model: openai/glm-5.3-flash
+      api_base: https://api.z.ai/api/coding/paas/v4
+      api_key: os.environ/ZAI_API_KEY
+      extra_body:
+        thinking:
+          type: disabled
+  - model_name: glm-vision                   # natively multimodal (docs.z.ai/guides/vlm/glm-5.3-flash: image, video, text, file in, text out); an alias of its own so that a
+    litellm_params:                          # different picture model can replace it without touching the thinking model
+      model: openai/glm-5.3-flash
+      api_base: https://api.z.ai/api/coding/paas/v4
+      api_key: os.environ/ZAI_API_KEY
+      extra_body:
+        thinking:
+          type: disabled
 
   # Test alias for eval/harness/fallback.py: a deployment that always fails (Cerebras answers 401) and falls back to gpt-oss as qwen does.
   - model_name: test-bad-key

@@ -16,15 +16,18 @@ stand-ins, and no real token or repository is used. The course material the know
 
 | File | What it is |
 | --- | --- |
-| `mock_llm.py` | A scripted Anthropic Messages API. A directive `MOCK:<name>` in a student's message picks a JSON script of fixed tool calls, sleeps, errors and answers, so a guard/resume/scheduling test has a ground truth that does not depend on a model's mood. It also reports what it was shown (message count, markers from earlier turns). |
+| `mock_llm.py` | A scripted Anthropic Messages API. A directive `MOCK:<name>` in a student's message picks a JSON script of fixed tool calls, sleeps, errors and answers, so a guard/resume/scheduling test has a ground truth that does not depend on a model's mood. It also reports what it was shown (message count, markers from earlier turns, `PLANTED-` markers in the system prompt or tools). A script names Claude Code's tools; when the client is pi the call is translated to pi's (`bash`, `read` with `path` ...). |
 | `mock_services.py` | Canvas (`/api/v1`) and GitHub (`/ghe/api/v3`) stand-ins with canaries in Bob's and Cy's data; every request is logged. |
 | `litellm/` | The gateway config (aliases `qwen` = reasoning off, `gpt-oss` = reasoning low; qwen falls back to gpt-oss) and a callback that strips replayed thinking blocks, logs the upstream status of every call and keeps qwen inside TAi's share of the tokens per minute (`test_budget.py` checks its arithmetic). |
-| `harness/tai.py` | The client the tests share: register a chat, send, long-poll the web channel's outbox, read transcripts/logs/SQLite/`docker ps`. |
+| `harness/tai.py` | The client the tests share: register a chat, send, long-poll the web channel's outbox, read transcripts/logs/SQLite/`docker ps`. Reads the session files of both harnesses: pi's are turned into Claude Code's row shape (`pi_rows`), so every check sees the same tool names and inputs. |
 | `harness/smoke.py` | One scripted message through the real orchestrator and an agent container, end to end. |
-| `harness/guards.py` | Item 2a, hooks and access control, with `--variant as-shipped` (the upstream runner, see `variants/`) / `current` (the repository's source as synced). |
+| `harness/guards.py` | Item 2a, hooks and access control, with `--variant as-shipped` (the upstream runner, see `variants/`; Claude harness only) / `current` (the repository's source as synced). Runs on whichever harness `stack.sh harness` says. |
+| `harness/pi_isolation.py` | pi's working directory is a folder the model writes in: plants extensions, skills, prompt templates, settings, an MCP server meant to replace the real one, `AGENTS.md`, `SYSTEM.md` there and checks nothing is loaded or run (the scripted model reports `PLANTED-` markers it was shown). |
+| `harness/cache_probe.py`, `cache_probe_tools.py`, `cache_new_sessions.py`, `rate_probe.py`, `cache_share.py`, `prompt_anatomy.py`, `use_image.py` | Where the tokens go (RESULTS.md, "Where the tokens go" and "Switching the harness to pi"): what a changing line does to Cerebras's prefix cache (alone, with tools in the request, and for the first call of new sessions on the real stack), what cached tokens cost the tokens-per-minute bucket, the weight of a first request by part; `use_image.py` points the stack at the image the harness runs on. |
 | `harness/resume.py` | Item 2b, resume across turns, containers, restarts, the session cap (RS3, with `TAI_MAX_TURNS_PER_SESSION=4`), and what the student sees when the model API fails (RS5). |
 | `harness/sched.py` | Item 3, scheduling; `--precompiled` runs it on `tai-agent:clean`, the image built from the Dockerfile without a cache, with no tsc at container start. |
-| `harness/fallback.py` | Does gpt-oss answer when qwen cannot (a failing deployment, plain and streaming) and does the qwen budget spill to gpt-oss, on the `/v1/messages` route Claude Code uses; read off the gateway's log. `stack.sh fallbacktest [budget]`. |
+| `harness/fallback.py` | Does gpt-oss answer when qwen cannot (a failing deployment, plain and streaming) and does the qwen budget spill to gpt-oss, on the `/v1/messages` route Claude Code uses and, with `chat`, on the `/v1/chat/completions` route pi uses; read off the gateway's log. `stack.sh fallbacktest [budget] [chat]`. The chat route found a real bug: Cerebras refuses a replayed gpt-oss turn that carries `reasoning_content` (HTTP 400), which `tai_callbacks.py` now strips. |
+| `harness/transcript.py`, `harness/gwlog.py` | What the check counts hide: every message of a conversation in order from either harness's session files (the lost-reply finding came from here), and the gateway's own one-line-per-call log (the 400 above came from here). |
 | `harness/leak_samples.py`, `harness/peek.py` | The student-visible text of the turns that leaked reasoning or tool markup (the samples `src/router.ts` is written against); a group's last tool calls. |
 | `harness/scenarios.py` | Item 1, `qwen` against `gpt-oss`: scripted student turns, automatable checks taken from the persona, a 30-turn session. |
 | `variants/` | `index.ts.as-shipped`: the agent runner exactly as upstream has it (the before of every guard measurement). The "after" is the repository's own `container/agent-runner/src/`, never a copy. |
@@ -40,9 +43,11 @@ stand-ins, and no real token or repository is used. The course material the know
     ./run.sh stack.sh mocks           # the scripted model and the Canvas/GitHub stand-ins
     ./run.sh stack.sh litellm         # the Cerebras gateway (reads the key from the world's .env on the box, never prints it)
     ./run.sh stack.sh orch start
+    ./run.sh stack.sh harness pi      # or claude: what runs the conversation in the agent container (pi is the default)
+    ./run.sh harness/use_image.py     # the orchestrator on tai-agent:clean, the image built from the Dockerfile (the old tai-agent:eval has no pi)
     ./run.sh harness/smoke.py
     ./run.sh harness/guards.py --variant as-shipped ; ./run.sh harness/guards.py --variant current
-    ./run.sh harness/resume.py ; ./run.sh harness/sched.py
+    ./run.sh harness/resume.py ; ./run.sh harness/sched.py ; ./run.sh harness/pi_isolation.py
     ./run.sh harness/scenarios.py qwen --runs 3 ; ./run.sh harness/scenarios.py gpt-oss --runs 3
     ./run.sh harness/scenarios.py qwen --long
 
@@ -79,5 +84,14 @@ on), and a qwen bucket is shared with anything else on the same account, so the 
 * `container/entrypoint.sh`, `Dockerfile`: the dist built into the image runs; `TAI_COMPILE_ON_START=1` compiles the mounted source.
 * `litellm/config.yaml`, `tai_callbacks.py`: qwen falls back to gpt-oss, and stays inside `TAI_QWEN_TPM_BUDGET`.
 * `src/config.ts`: `IDLE_TIMEOUT` 2 min, `CONTAINER_TIMEOUT` 15 min.
+
+## pi as the agent harness
+
+* `container/agent-runner/src/pi-runner.ts` (+ `pi-support.ts`, `pi-guards.ts`, `web-fetch.ts`, `prompt.ts`, `protocol.ts`, `mcp-servers.ts`): the same container
+  protocol as `index.ts`, the conversation run by pi (`@earendil-works/pi-coding-agent`) over the OpenAI API of the gateway. `TAI_HARNESS=pi|claude` (in `.env`,
+  read at every spawn; `src/container-runner.ts` passes it on and `container/entrypoint.sh` picks the runner) selects it; pi is the default.
+* `prompt.ts`: the persona first, what varies per student and per minute after it (Claude harness: at the end of the system prompt; pi: in front of the first
+  message of a run, so the system prompt is the same bytes for every student).
+* `Dockerfile`: ripgrep and fd (pi's `grep` and `find`).
 
 The settings are in `docs/SETTINGS.md`, the guards in `docs/SECURITY.md`.

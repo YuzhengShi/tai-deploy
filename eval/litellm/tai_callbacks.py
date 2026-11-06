@@ -1,13 +1,17 @@
 """LiteLLM callbacks for the TAi evaluation gateway.
 
-1. Strip the thinking blocks Claude Code replays in earlier assistant turns. Cerebras rejects the reasoning_content / thinking_blocks
-   fields LiteLLM would build from them (HTTP 400), which would end every tool loop on a reasoning model at its second request.
+1. Strip what clients replay of a reasoning model's earlier turns: the thinking blocks Claude Code sends on the Anthropic route, and the
+   reasoning_content / reasoning fields pi sends on the chat-completions route. Cerebras rejects them (HTTP 400, "messages.4.assistant.
+   reasoning_content: property ... is unsupported", seen when a gpt-oss answer was replayed to the next call), which would end every
+   tool loop on a reasoning model at its second request.
 2. Log the upstream result of every call to GATEWAY_LOG as one JSON line: time, model, seconds, tokens, and for a failure the HTTP
    status (a 429 from Cerebras shows up here, not as silent latency).
 3. Keep TAi inside its share of the qwen tokens-per-minute bucket it has with Nora (the same Cerebras account). The qwen alias may use
-   TAI_QWEN_TPM_BUDGET tokens in any 60 seconds (completed requests, prompt and completion; 0 = no limit); above that a new request is
-   sent to gpt-oss instead (an event "spill" in the log). Failures of qwen itself (a 429 because Nora used the bucket, a 5xx) are
-   handled by router_settings.fallbacks in config.yaml, not here.
+   TAI_QWEN_TPM_BUDGET tokens in any 60 seconds (0 = no limit); above that a new request is sent to gpt-oss instead (an event "spill" in
+   the log). What a request uses of the bucket is its UNCACHED prompt tokens plus its completion: Cerebras does not charge the cached
+   part of a prompt (harness/rate_probe.py: five calls with a 41,088-token cached prefix took 60 tokens each from the bucket), and most of
+   TAi's 33k-token prompt is cached. Failures of qwen itself (a 429 because Nora used the bucket, a 5xx) are handled by
+   router_settings.fallbacks in config.yaml, not here.
 """
 import collections
 import json
@@ -50,6 +54,11 @@ class Budget:
 BUDGETS = {"qwen": Budget(int(os.environ.get("TAI_QWEN_TPM_BUDGET", "90000")))}
 
 
+def budget_tokens(usage):
+    """What a completed request takes from Cerebras's tokens-per-minute bucket: the prompt tokens that were not a cache hit, and the completion."""
+    return max((usage.get("in") or 0) - (usage.get("cached") or 0), 0) + (usage.get("out") or 0)
+
+
 def _write(entry):
     entry["ts"] = round(time.time(), 3)
     try:
@@ -71,17 +80,33 @@ def _usage(response_obj):
     return {"in": get("prompt_tokens") or get("input_tokens"), "out": get("completion_tokens") or get("output_tokens"), "cached": cached}
 
 
+REPLAYED_REASONING_FIELDS = ("reasoning_content", "reasoning", "thinking_blocks")
+
+
+def strip_replayed_reasoning(messages):
+    """Remove the reasoning an assistant message carries from an earlier call: Anthropic thinking blocks in its content, and the
+    reasoning fields of the chat-completions format. Changes the messages in place, returns how many pieces it removed."""
+    stripped = 0
+    for msg in messages or []:
+        if not isinstance(msg, dict) or msg.get("role") != "assistant":
+            continue
+        content = msg.get("content")
+        if isinstance(content, list):
+            kept = [b for b in content if not (isinstance(b, dict) and b.get("type") in ("thinking", "redacted_thinking"))]
+            if len(kept) != len(content):
+                stripped += len(content) - len(kept)
+                msg["content"] = kept or [{"type": "text", "text": "."}]
+        for field in REPLAYED_REASONING_FIELDS:
+            if field in msg:
+                del msg[field]
+                stripped += 1
+    return stripped
+
+
 class TaiHandler(CustomLogger):
     async def async_pre_call_hook(self, user_api_key_dict, cache, data, call_type):
         try:
-            stripped = 0
-            for msg in data.get("messages") or []:
-                content = msg.get("content") if isinstance(msg, dict) else None
-                if msg.get("role") == "assistant" and isinstance(content, list):
-                    kept = [b for b in content if not (isinstance(b, dict) and b.get("type") in ("thinking", "redacted_thinking"))]
-                    if len(kept) != len(content):
-                        stripped += len(content) - len(kept)
-                        msg["content"] = kept or [{"type": "text", "text": "."}]
+            stripped = strip_replayed_reasoning(data.get("messages"))
             if stripped:
                 _write({"event": "stripped_thinking", "blocks": stripped})
             alias = data.get("model")
@@ -99,7 +124,7 @@ class TaiHandler(CustomLogger):
             _write({"event": "ok", "model": kwargs.get("model"), "seconds": round((end_time - start_time).total_seconds(), 2), **usage})
             for alias, marker in UNDERLYING.items():
                 if marker in str(kwargs.get("model")).lower():
-                    BUDGETS[alias].add((usage.get("in") or 0) + (usage.get("out") or 0))
+                    BUDGETS[alias].add(budget_tokens(usage))
         except Exception:
             pass
 

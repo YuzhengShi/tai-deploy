@@ -7,7 +7,10 @@
 #   stack.sh build            npm ci + tsc for the orchestrator (detached; read with: stack.sh logs build)
 #   stack.sh rebuild          tsc only, after a change to src/
 #   stack.sh backend NAME     write TAi's .env for the model under test: mock | qwen | gpt-oss (read at every container spawn)
-#   stack.sh mocks            start the scripted model and the Canvas/GitHub stand-ins
+#   stack.sh orchenv [K=V ...] set values in orch.env without restarting the orchestrator (no arguments: show it)
+#   stack.sh harness [NAME]   pi | claude: what runs the conversation in the agent container (TAI_HARNESS in .env, read at every container
+#                             spawn; pi is the default). Without a name: show it. `backend` keeps the choice.
+#   stack.sh mocks           start the scripted model and the Canvas/GitHub stand-ins
 #   stack.sh litellm          start the Cerebras gateway (its settings: ~/tai-eval/gateway.env, see gwenv below)
 #   stack.sh gwenv KEY VALUE  | --clear | (no args: show)   settings the gateway reads when it starts
 #   stack.sh fallbacktest     does gpt-oss answer when qwen cannot? (harness/fallback.py)
@@ -37,7 +40,8 @@ EOF
 write_env() {   # backend
   ensure_secrets
   . "$SECRETS"
-  local be="$1" url model
+  local be="$1" url model keep
+  keep="$(grep '^TAI_HARNESS=' "$T/.env" 2>/dev/null || true)"
   case "$be" in
     mock)    url="http://tai-mockllm:8000"; model="mock" ;;
     qwen)    url="http://tai-litellm:4000"; model="qwen" ;;
@@ -73,8 +77,12 @@ MS_PASSWORD=CANARY-MS_PASSWORD
 PIAZZA_EMAIL=CANARY-PIAZZA_EMAIL
 PIAZZA_PASSWORD=CANARY-PIAZZA_PASSWORD
 EOF
+    # pi talks the OpenAI API to the gateway; the scripted model only speaks Anthropic's
+    [ "$be" = "mock" ] && echo "TAI_LLM_API=anthropic-messages" >> "$T/.env"
+    [ -n "$keep" ] && echo "$keep" >> "$T/.env"
+    true
   )
-  echo "backend: $be -> $url, model alias $model"
+  echo "backend: $be -> $url, model alias $model${keep:+, $keep}"
 }
 
 start_mocks() {
@@ -110,7 +118,16 @@ start_litellm() {
   echo "tai-litellm did not come up; last log lines:"; docker logs --tail 8 tai-litellm 2>&1 | sed -E 's/csk-[A-Za-z0-9_-]+/csk-REDACTED/g' | cut -c1-200
 }
 
-orch_pid() { pgrep -f "node dist/index.js" | head -1; }
+# The pid of THIS stack's orchestrator. The live deployment (tai-live.service) runs the same command line from its own tree, so a
+# match on the command line alone would let `orch stop` / `restart` / `down` here kill the live orchestrator: the working directory decides.
+orch_pid() {
+  local p want
+  want="$(readlink -f "$T")"
+  for p in $(pgrep -f "node dist/index.js"); do
+    [ "$(readlink -f "/proc/$p/cwd" 2>/dev/null)" = "$want" ] && { echo "$p"; return 0; }
+  done
+  return 1
+}
 
 orch_stop() {
   local pid; pid="$(orch_pid)"
@@ -127,10 +144,10 @@ orch_start() {
   cd "$T" || return 1
   : > "$E/logs/orchestrator.log"
   # The harness swaps the agent-runner source (variants) and edits the hooks between runs, so containers compile the mounted source
-  # unless orch.env says TAI_COMPILE_ON_START=0 (the sched.py measurement of the precompiled start). The image is tai-agent:eval unless
+  # unless orch.env says TAI_COMPILE_ON_START=0 (the sched.py measurement of the precompiled start). The image is tai-agent:clean (built from the Dockerfile; tai-agent:eval has no pi) unless
   # orch.env names another (tai-agent:clean is the one built from the repository's Dockerfile without a cache).
   export TAI_COMPILE_ON_START="${TAI_COMPILE_ON_START-1}"
-  export CONTAINER_IMAGE="${CONTAINER_IMAGE:-tai-agent:eval}"
+  export CONTAINER_IMAGE="${CONTAINER_IMAGE:-tai-agent:clean}"
   TAI_CHANNELS=web setsid nohup node dist/index.js > "$E/logs/orchestrator.log" 2>&1 < /dev/null &
   for i in $(seq 1 20); do
     curl -fsS -m 2 http://127.0.0.1:8099/api/health >/dev/null 2>&1 && { echo "orchestrator up (pid $(orch_pid)), web channel on 127.0.0.1:8099"; return 0; }
@@ -151,6 +168,23 @@ case "${1:-status}" in
     setsid nohup bash -c "cd '$T' && npm run build && echo BUILD-OK; echo EXIT=\$?" > "$E/logs/build.log" 2>&1 < /dev/null &
     sleep 1; echo "orchestrator rebuild (tsc) started detached (log: stack.sh logs build)" ;;
   backend) write_env "${2:-mock}" ;;
+  harness)
+    case "${2:-}" in
+      pi|claude) { grep -v '^TAI_HARNESS=' "$T/.env" 2>/dev/null; echo "TAI_HARNESS=$2"; } > "$T/.env.new" && mv "$T/.env.new" "$T/.env" && chmod 600 "$T/.env"; echo "harness: $2" ;;
+      "") echo "harness: $(grep '^TAI_HARNESS=' "$T/.env" 2>/dev/null | cut -d= -f2- | grep . || echo 'pi (default)')" ;;
+      *) echo "stack.sh harness pi | claude" ;;
+    esac ;;
+  orchenv)
+    # set values in orch.env WITHOUT restarting the orchestrator (the harness's tai.orch_env restarts it): stack.sh orchenv KEY=VALUE ... ; no
+    # arguments: show the file. A harness run leaves its settings there (IDLE_TIMEOUT, TAI_COMPILE_ON_START, CONTAINER_IMAGE ...): reset them
+    # with this after a run, as the next start of the orchestrator reads them.
+    ensure_orch_env
+    shift
+    for kv in "$@"; do
+      k="${kv%%=*}"
+      { grep -v "^$k=" "$ORCH_ENV" 2>/dev/null; echo "$kv"; } > "$ORCH_ENV.new" && mv "$ORCH_ENV.new" "$ORCH_ENV"
+    done
+    tr '\n' ' ' < "$ORCH_ENV"; echo ;;
   mocks) start_mocks ;;
   litellm) start_litellm ;;
   orch)
@@ -174,9 +208,10 @@ case "${1:-status}" in
     else cat "$E/gateway.env" 2>/dev/null; fi ;;
   fallbacktest)
     # does gpt-oss answer when qwen cannot? (harness/fallback.py). `fallbacktest budget` adds the budget case: first
-    # `gwenv TAI_QWEN_TPM_BUDGET 100`, restart the gateway (`litellm`), and `gwenv --clear` afterwards
+    # `gwenv TAI_QWEN_TPM_BUDGET 100`, restart the gateway (`litellm`), and `gwenv --clear` afterwards. `fallbacktest chat` (or
+    # `fallbacktest budget chat`) uses the OpenAI chat-completions route, the one pi speaks; without it the Anthropic one of Claude Code.
     docker run --rm --network nanoclaw-net -e SECRETS_ENV=/secrets.env -v "$SECRETS:/secrets.env:ro" -v "$E/logs:/logs" -v "$T/eval/harness:/probe:ro" \
-      "$PY_IMAGE" python -u /probe/fallback.py "${2:-}" ;;
+      "$PY_IMAGE" python -u /probe/fallback.py "${2:-}" "${3:-}" ;;
   toolprobe)
     # empty-arguments tool calls: model or gateway? runs in a container on nanoclaw-net (it must reach tai-litellm by name); keys stay inside
     docker run --rm --network nanoclaw-net -e WORLD_ENV=/world.env -e SECRETS_ENV=/secrets.env -v "$HOME/cs6650-world/.env:/world.env:ro"       -v "$SECRETS:/secrets.env:ro" -v "$T/eval/harness:/probe:ro" "$PY_IMAGE" python -u /probe/toolcall_probe.py "${2:-qwen}" "${3:-8}" ;;
@@ -184,7 +219,7 @@ case "${1:-status}" in
     # TAi's own unit tests for the orchestrator (queue, db, ipc authorisation, container args, routing); the skills-engine tests are not about this.
     # Detached; read the per-file summary with: stack.sh unit-look
     rm -f "$E/logs/vitest.json"
-    setsid nohup bash -c "cd '$T' && timeout 900 npx vitest run src/ container/agent-runner/test --reporter=json --outputFile='$E/logs/vitest.json'" > "$E/logs/vitest.out" 2>&1 < /dev/null &
+    setsid nohup bash -c "cd '$T' && timeout 900 npx vitest run src/ container/agent-runner/test portal/web --reporter=json --outputFile='$E/logs/vitest.json'" > "$E/logs/vitest.out" 2>&1 < /dev/null &
     sleep 1; echo "unit tests started detached" ;;
   unit-look)
     [ -f "$E/logs/vitest.json" ] || { echo "not finished yet"; exit 0; }
@@ -215,8 +250,10 @@ PY
   status)
     echo "orchestrator: $( [ -n "$(orch_pid)" ] && echo "running pid $(orch_pid)" || echo stopped )"
     echo "web channel:  $(curl -fsS -m 2 http://127.0.0.1:8099/api/health 2>&1 | cut -c1-120)"
-    echo "containers:"; docker ps --format '  {{.Names}}  {{.Status}}' --filter "name=tai-" --filter "name=nanoclaw-"
-    echo "env backend:  $(grep -E '^(ANTHROPIC_BASE_URL|ANTHROPIC_MODEL)=' "$T/.env" 2>/dev/null | tr '\n' ' ')"
+    # this stack's containers only (the live deployment's are tai-live-... and tailive-...)
+    echo "containers:"; docker ps --format '  {{.Names}}  {{.Status}}' --filter "name=^tai-mockllm\$" --filter "name=^tai-mocks\$" --filter "name=^tai-litellm\$" --filter "name=^nanoclaw-"
+    echo "env backend:  $(grep -E '^(ANTHROPIC_BASE_URL|ANTHROPIC_MODEL|TAI_HARNESS|TAI_LLM_API)=' "$T/.env" 2>/dev/null | tr '\n' ' ')"
+    echo "orch.env:     $(tr '\n' ' ' < "$ORCH_ENV" 2>/dev/null)"
     echo "build:        $(tail -n 2 "$E/logs/build.log" 2>/dev/null | tr '\n' ' ' | cut -c1-160)" ;;
   *) echo "see the header of this file" ;;
 esac

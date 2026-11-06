@@ -86,11 +86,14 @@ def rs1_rs2_rs3_rs4(which):
         print("      (message number, n_messages, earlier markers) per message:", seen)
         print("      session id after each message:", [i[:8] if i else None for i in ids])
         reset_at = next((k for k, n, _m in seen if k > 1 and n == 1), None)
+        # The answer that reaches the cap retires the session: pi tells the host at once (the id in the database is empty after message
+        # `cap`), Claude Code when the next message arrives (the id is still the old one). Either way message cap+1 opens a new session.
+        before, after = ids[:cap - 1], ids[cap:cap + 3]
         rec("RS3", "%d messages in one warm container, TAI_MAX_TURNS_PER_SESSION=%d" % (cap + 4, cap),
             "history grows until the cap, a fresh session at message %d (n_messages 1, a new id in the database) and that message is answered" % (cap + 1),
-            "fresh session at message %s; ids: first %d messages one id: %s, message %d a new one: %s, then stable: %s" % (
-                reset_at, cap, len(set(ids[:cap])) == 1, cap + 1, ids[cap] != ids[0], len(set(ids[cap:])) == 1),
-            reset_at == cap + 1 and len(set(ids[:cap])) == 1 and ids[cap] != ids[0] and len(set(ids[cap:])) == 1)
+            "fresh session at message %s; ids: the first %d messages one id: %s, messages %d-%d a new one, stable: %s (id after message %d: %s)" % (
+                reset_at, cap - 1, len(set(before)) == 1, cap + 1, cap + 3, len(set(after)) == 1 and after[0] != before[0], cap, "cleared" if ids[cap - 1] is None else "kept"),
+            reset_at == cap + 1 and len(set(before)) == 1 and len(set(after)) == 1 and after[0] is not None and after[0] != before[0])
         summary = tai.get(F3, "competency/interaction-summary.md") or ""
         ours = [l for l in summary.splitlines() if l.startswith("- ")]
         rec("RS3b", "the runner's interaction summary after %d answers" % (cap + 4), "one line per answer, in competency/interaction-summary.md, with what the student said",

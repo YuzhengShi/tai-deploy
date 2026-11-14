@@ -431,6 +431,38 @@ Mouth, this PC, 12 agent-style sentences one at a time: **Piper `en_US-lessac-me
 
 Stage 2 is next (A13): set 3 with the frozen configuration, Flux and LabGPU on it, the speeds on the host with three streams at once, and the owner's ears on the samples.
 
+### 10.12 The local trial, stage 2 (2026-11-14 evening; A13)
+
+**(a) Set 3, the confirmation (160 utterances, 274 key-term instances; `eval/voice-lab/recognition3.json`, committed before any recognizer heard it; the configuration frozen as it stood after stage 1).** Flux (live settings and key terms), LabGPU and nova-3 ran on it from the host as on set 2 (one stream each); the local results were compared with them by `recognize.js compare`.
+
+| | WER | key terms | final after the end of speech, p50 / p90 |
+|---|---|---|---|
+| LabGPU | 4.92 % | 211 / 274 = 77.0 % | 1754 / 2130 ms |
+| Flux, live settings and key terms | 4.07 % | 237 / 274 = 86.5 % | 1533 / 1856 ms |
+| nova-3, key terms, `endpointing` 300 (reference; scored by a quick script with the same rules, `compare` was not run on it) | 1.68 % | 263 / 274 = 96.0 % | 576 / 1290 ms |
+| P, Parakeet raw | 4.24 % | 221 / 274 = 80.7 % | 820 / 961 ms (this PC; the host is faster) |
+| P + layer | 3.61 % | 228 / 274 = 83.2 % | the same |
+
+P raw against Flux: recall **-5.8 points [-9.7, -2.2]**, WER +0.17 [-0.89, +1.23]: **A13's clause does not hold for the raw model on set 3 (by 0.8 points; it held on set 2 at -4.8)**. P + layer against Flux: recall **-3.3 points [-7.3, +0.7]**, WER **-0.46 [-1.53, +0.56]**: **the clause holds** (the layer, exploratory on set 2, is confirmed on a set it was not shaped on), and for both the interval does not show non-inferiority at this n. Against LabGPU, the local recognizer is ahead: raw +3.6 points [-0.8, +8.2] (non-inferiority shown), with the layer **+6.2 points [+1.4, +11.1]** and WER -1.31 [-2.50, -0.19]. LabGPU against Flux repeats C6b: -9.5 points [-14.4, -4.7]. Explanation, read after the numbers and used for nothing: what P + layer still misses is names and one coined word: TAi (written "ty", 0 of 12; Flux 8 of 12, nova-3 9 of 12), Coady ("cody", 0 of 10, every recognizer but nova-3), goroutine ("gorotine", 0 of 10; Flux 6, LabGPU 7, nova-3 10), SQS run together ("sqsq", 8 of 14, the same as Flux), WaitGroup ("weight group", 6 of 10 with the layer, 0 without); the other 19 terms are at or near ten of ten. These are what a boosted vocabulary fixes (Flux and nova-3 are given the key terms); Parakeet has no such mechanism in sherpa-onnx, and a hand-written list of aliases ("cody", "ty") would be a product decision and a risk of changing real words.
+
+**(b) Speeds on the host (8 vCPUs, the live service idle, containers with low priority; the recognition and the synthesis ran in `python:3.12-slim` with sherpa-onnx 1.13.8; the same files as on the PC, checked by fingerprint).**
+
+| test | result | A13's line |
+|---|---|---|
+| ears, one stream, 4 threads, 128 clips of about 6 s | decode p50 519 ms, p90 621 ms (0.083 of the audio time); same accuracy as on the PC (3.88 %, 223 of 272) | at most 800 ms (p90) with three at once: see below |
+| ears, **three streams back to back** (saturating), 2 threads each | p90 928 to 1004 ms, max 1.2 s; the host averaged 5.95 busy cores | **not met** (the test keeps three decoders busy all the time) |
+| ears, **three simulated calls** (`eval/voice-local/calls_sim.py`: a student speaks in real time, decode, three agent sentences, the agent speaks, a pause; 180 s, 27 student turns) | decode after the end of speech p50 502, p90 554, max 634 ms | **met** |
+| mouth, Piper, one stream, 4 threads | first audio of a sentence p50 120, p90 162, max 209 ms; real-time factor 0.032 | at most 300 ms: met |
+| mouth, Piper, three streams at once, 2 threads each | p50 164, p90 232, max 329 ms; real-time factor 0.045 to 0.050 | at most 500 ms and 0.5: met |
+| mouth, Kokoro int8, one stream / three at once | first audio p50 2448 / 3004 ms, p90 3528 / 4456 ms; real-time factor 0.78 to 0.89 / 0.93 to 1.15 | **not met**: dropped |
+| host load of the three simulated calls (ears and Piper together) | 0.66 of 8 cores on average (the idle service and this run's other processes included) | under 4 of 8: met |
+
+The simulated calls were added after the saturating test, because that test is not "three calls' worth": nobody speaks three decoders' worth without a pause; both numbers are reported, and the ears' line is met only in the realistic one. In a real call the ears' delay after the end of speech is the engine's own pause rule plus this decode of the last segment, not of a whole sentence: the service being written cuts the audio at pauses and decodes the finished segments while the student goes on.
+
+**(c) The owner's ears** on the samples of `D:\tai-voice-local\samples` (Piper and Kokoro, and two of LabGPU's for reference): not yet given.
+
+**What this says.** Local ears (Parakeet-TDT-0.6B-v2 int8 with the key-term layer) hold A13's clause against Flux on both sets and are better than LabGPU's; they are fast enough at three simulated calls on this host. Local mouth: Piper is fast, with one voice; Kokoro is too slow on this CPU. LabGPU's own engine, Supertonic, was not tried (it is not downloaded: it needs the owner's approval). The one remaining question that numbers cannot answer is how Piper's voice sounds to the owner. Deploying needs the service that speaks LabGPU's two interfaces (docs/LOCAL_VOICE.md, being written), then the lab's two settings pointed at it, and the owner's word.
+
 ## 11. Amendments (changes to anything above after the commit that introduced it)
 
 **A1, 2026-11-14, made before any end-to-end number of the lab or of the live call on the test set existed (only the component probes of 10.1 were in): what a cut-in is, and which user line the end-of-turn wait is read from.**

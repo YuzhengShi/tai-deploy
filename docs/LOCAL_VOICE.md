@@ -242,7 +242,7 @@ The container's resident memory after 30 clips was 1.77 GiB, after the A14 runs 
 clip falls (0.57 MB, then 0.23 MB) and the service sits near 2.05 GiB, which is what the ONNX Runtime's arenas filling up to the longest inputs look like, not a leak that would end at the 4 GiB limit. A kill by the limit would be
 restarted by `--restart unless-stopped`; the log shows one warning line in the whole session, the start-up note that the service is bound to the container's own address and has no authentication.
 
-### 9.5 Putting it behind the lab (NOT done: every step that changes the live system waits for the owner's "部署")
+### 9.5 Putting it behind the lab (the plan; done on 2026-11-14 on the owner's "部署", see 9.6)
 
 Before anything: no call in the last 3 hours, not during class (Wednesday 15:15 to 17:15 Pacific), `TAI_VOICE_DAILY_MIN` back at 45, the rollback material made first (`orch.env` and the build, as for every deploy).
 
@@ -261,3 +261,22 @@ Before anything: no call in the last 3 hours, not during class (Wednesday 15:15 
    unit (`tai-live`) has no network restriction (`PrivateNetwork=no`, no `IPAddressDeny`, `RestrictAddressFamilies` empty: read on the host 2026-11-14), so it reaches 172.29.88.2 as the measuring client did.
 6. **A synthetic call through the lab's route** with the measuring client (one scenario), then the owner calls it himself; a window (`TAI_VOICE_DAILY_MIN` raised for its length and put back) only if he wants numbers.
 7. **Rollback**: restore `orch.env` from the rollback material, `restart`, `docker stop tai-local-voice`; nothing else was changed.
+
+### 9.6 Deployed (2026-11-14, 22:42 to 22:51 UTC, on the owner's "部署")
+
+The question he answered named these changes: a new container on an internal network, five lab settings, one restart (no call was on: the last lab call ended 18:47 UTC), the daily cap left at 45, no code deploy. Done in this order:
+
+- **Rollback material** first: `~/tai-live/rollback-pre-localvoice/` (`orch.env.before`, `DEPLOYED-before.json`, `docker-before.txt`, `ROLLBACK.txt`).
+- **Models** copied to `~/voice-local/` (886 MB; ten files compared with the PC's by SHA-256, all equal; `~/voice-local/FINGERPRINTS.txt` lists all 22).
+- **Image** `tai-local-voice:20261114`, also tagged `:live` (d38bb9463b8a), built from commit c3aa542 (`git archive` of the branch head into `~/voice-local/build`, which names the commit in `SHIPPED_FROM_COMMIT`); `:scratch` was not reused.
+- **Network** `tai-voice-net` (`--internal`, 172.29.88.0/24) and **container** `tai-local-voice` at 172.29.88.2 with the README's flags (read-only root, no capabilities, user 10001, 4 CPUs at most at low priority, 4 GB, `--restart unless-stopped`);
+  healthy 7 s after the start.
+- **`check_egress.sh all`** against `:live`: PASS (the control asked for Microsoft's collector, the shipped image and the running service asked for nothing).
+- **The lab's own `LabGPUMouth`** (Node 22.23.4 on the host) against the container: `af_bella` (style F1), `F2` and `M1` each spoke two sentences, first piece 0.3 to 0.6 s; `DrBerg` is refused by the lab itself.
+- **Five settings** in `orch.env` (`tai_live.sh set`): `TAI_VOICE_LAB_EARS_URL=ws://172.29.88.2:18800/v1/listen`, `TAI_VOICE_LAB_TTS_URL=http://172.29.88.2:18800`, `TAI_VOICE_LAB_SHADOW_EARS=none`,
+  `TAI_VOICE_LAB_EARS_FALLBACK=none`, `TAI_VOICE_LAB_MOUTH_FALLBACK=none`; then `tai_live.sh restart` (22:50:49 UTC), `status` and `check` fine; `voice lab` now reads "fallback ears none". The cap stays 45; release 3afd82d and its lab
+  code are unchanged (`TAI_VOICE_LAB_TEMPO=0`, `TAI_VOICE_LAB_AURA_SPEED_SCALE=0.85` as before).
+- **How the owner reaches it:** the page address with `?voice=lab` (and no `chain`): the call runs on the process settings, so ears and mouth are the local service, with no Flux shadow and no fallback (a failure of the service is a
+  failed call). The voice is style F1 (`af_bella`); another style is one setting, `TAI_VOICE_LAB_LABGPU_VOICE` (F1 to F5, M1 to M5, then `restart`).
+- **Still to come:** one synthetic call through the lab route with the measuring client, made after 00:01 UTC because the test identity has used 229 of today's minutes and the cap stays 45
+  (`~/voice-local/lv-verify.sh`, results in `~/voice-local/verify/<time>/`: the client's log, and what the container logged for the call).

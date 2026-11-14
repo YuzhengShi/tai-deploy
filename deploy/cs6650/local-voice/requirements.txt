@@ -1,0 +1,19 @@
+# The local-voice service: every package it runs on, at the version it was developed and tested with (2026-11-14, Python 3.12, Windows 11 and, for the tests that need no model, nothing else).
+#
+#   pip install --no-deps -r requirements.txt
+#
+# `--no-deps` because this file is a complete lock: everything the packages below need is listed here, and one of them must not bring its own dependencies along:
+#   * supertonic 1.0.0 declares numpy<2.0, soundfile and huggingface-hub. The numpy pin is a conservative one: the service and its tests run on numpy 2.5.4 (and the Supertonic backend was also run on
+#     numpy 1.26.4); soundfile is imported only by the package's save_audio() and huggingface-hub only by its download_model(), neither of which this service calls (it always passes
+#     auto_download=False), so a copy that has no code that can fetch a model is the safer one to ship. `pip check` therefore reports the three of them; that is expected.
+#   * sherpa-onnx brings its own ONNX Runtime (1.28.2, inside sherpa-onnx-core); onnxruntime below is the one the speech engine (supertonic) uses (1.32.0). Both are loaded in the one process. That works on
+#     Windows in either import order (tested); it is not tested on Linux, where the two libraries have different file names and are loaded from different folders.
+numpy==2.5.4
+websockets==17.4
+sherpa-onnx==1.13.8
+sherpa-onnx-core==1.13.8
+onnxruntime==1.32.0
+flatbuffers==25.12.19
+packaging==26.3
+protobuf==7.36.2
+supertonic==1.0.0

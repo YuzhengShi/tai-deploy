@@ -461,7 +461,25 @@ The simulated calls were added after the saturating test, because that test is n
 
 **(c) The owner's ears** on the samples of `D:\tai-voice-local\samples` (Piper and Kokoro, and two of LabGPU's for reference): not yet given.
 
-**What this says.** Local ears (Parakeet-TDT-0.6B-v2 int8 with the key-term layer) hold A13's clause against Flux on both sets and are better than LabGPU's; they are fast enough at three simulated calls on this host. Local mouth: Piper is fast, with one voice; Kokoro is too slow on this CPU. LabGPU's own engine, Supertonic, was not tried (it is not downloaded: it needs the owner's approval). The one remaining question that numbers cannot answer is how Piper's voice sounds to the owner. Deploying needs the service that speaks LabGPU's two interfaces (docs/LOCAL_VOICE.md, being written), then the lab's two settings pointed at it, and the owner's word.
+**What this says.** Local ears (Parakeet-TDT-0.6B-v2 int8 with the key-term layer) hold A13's clause against Flux on both sets and are better than LabGPU's; they are fast enough at three simulated calls on this host. Local mouth: Piper is fast, with one voice; Kokoro is too slow on this CPU. **The owner listened to the samples and answered "labgpu的声音最好，也清晰。Piper、Kokoro都不行"** (LabGPU's voice is the best and clear; Piper and Kokoro will not do), and approved the download of LabGPU's own engine, Supertonic: 10.13. Deploying needs the service that speaks LabGPU's two interfaces (docs/LOCAL_VOICE.md, being written), then the lab's two settings pointed at it, and the owner's word.
+
+### 10.13 Supertonic, the engine behind LabGPU's mouth, on our own CPU (2026-11-14 evening; A13)
+
+**Files.** `Supertone/supertonic` on Hugging Face (the English model, v1; code MIT, model OpenRAIL-M; 255 MB with the ten voice styles F1 to F5 and M1 to M5) and the Python package `supertonic==1.0.0` (MIT) with onnxruntime, in `D:\tai-voice-local\supertonic\v1`; the same files on the host in the scratch folder, the four model files with equal fingerprints. Never downloaded by the package itself (`auto_download=False`). LabGPU's adapter reports `engine: supertonic`, and its English voices `af_bella`, `af_heart` and `default` are one voice (10.1, P4).
+
+**Which style is LabGPU's.** Against LabGPU's recordings of the two listening sentences (mean 3.74 s, median pitch 203 Hz) the style **F1 at the package defaults (5 steps, speed 1.05)** is the closest by length and pitch (3.73 s, 198 Hz); F2 is nearer by the average spectrum (distance 2.33 against F1's 2.64) but shorter and higher (3.34 s, 227 Hz); the other eight are further off. This only narrows the choice; the owner's ear decides (both are in the samples).
+
+**Speed.** Whole sentence, the twelve sentences of `tts_bench.py`, F1.
+
+| where | streams x threads | steps | p50 / p90 / max (ms) | real-time factor p50 / p90 |
+|---|---|---|---|---|
+| PC (Ryzen 5 6600H) | 1 x 4 | 5 / 3 / 2 | 381 / 399 / - ; 304 / 374 / - ; 280 / 318 / - | 0.097 / 0.114 (5 steps) |
+| host | 1 x 4 | 5 | 421 / 457 / 617 | 0.092 / 0.113 |
+| host | 1 x 4 | 2 | 310 / 395 / 534 | 0.072 / 0.079 |
+| host | 3 x 2 | 5 | 235 to 342 / 305 to 418 / 524 to 659 | 0.054 to 0.075 / 0.069 to 0.095 |
+| host | 3 x 2 | 2 | 195 to 242 / 251 to 307 / 405 to 476 | 0.039 to 0.061 / 0.061 to 0.082 |
+
+The host's busy cores averaged 1.45 (three streams, 5 steps) and 1.16 (2 steps) over 41 and 37 s with the model loading included. Steps 3 was timed on the PC only. **Against A13's mouth clause** (first audio at most 300 ms at p90 alone and 500 ms with three at once; real-time factor at most 0.5): with three at once it is met (p90 at most 418 ms, factor at most 0.095); **alone it is not met as written** (p90 457 ms at 5 steps and 395 ms at 2 steps with 4 threads; with 2 threads the three-stream numbers suggest about 300 to 420 ms). Supertonic makes a whole sentence at once, so its "first audio" is the whole synthesis; LabGPU's GPU adapter gives the first byte at p50 115 ms and the whole sentence in 140 to 300 ms (10.1). The price of the voice on our own CPU is therefore about 0.2 to 0.3 s at the start of each answer. Against it stands the faster final text of the local ears (LabGPU's final comes p50 1.75 s after the end of speech; the local decode takes about 0.5 s on the host, plus the service's own pause rule, 10.12); the net of the two was not measured, and a window of the whole local chain against L is what would say.
 
 ## 11. Amendments (changes to anything above after the commit that introduced it)
 

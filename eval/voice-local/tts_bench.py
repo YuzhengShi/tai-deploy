@@ -16,7 +16,11 @@ import time
 import wave
 
 import numpy as np
-import sherpa_onnx
+
+try:
+    import sherpa_onnx
+except ImportError:      # st_bench.py imports only the sentence lists from this file
+    sherpa_onnx = None
 
 SENTENCES = [
     "Sure, let's start with what you already know about leader election.",

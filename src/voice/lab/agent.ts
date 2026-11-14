@@ -23,7 +23,7 @@ import { stretch } from './mouth/tempo.js';
 import { SentenceCutter } from './sentences.js';
 import { Speaker, wordsPlayed, type SpokenReport } from './speaker.js';
 import { think, ThinkError, type ToolDef } from './think.js';
-import { newTurnTrace, finishDerived, type TraceSink, type TurnTrace } from './trace.js';
+import { newTurnTrace, finishDerived, type RoundTrace, type TraceSink, type TurnTrace } from './trace.js';
 import { TurnTracker, type TurnParams } from './turn.js';
 import { MouthError, OUT_RATE, type Ears, type EarsHandlers, type LabClock, type Mouth, type TurnFields, type TurnProfile } from './types.js';
 import { Vad } from './vad.js';
@@ -77,6 +77,8 @@ interface Run {
   thinkSentAt: number;
   firstTokenAt: number | null;
   lastToolAnsweredAt: number | null;
+  /** The trace time (ms from the start of the call) at which the last function of the latest round answered; null when none did. */
+  lastAnswerRel: number | null;
   ttsSentAt: number | null;
   finished: boolean;
   toolsUsed: boolean;
@@ -644,6 +646,7 @@ export class LabAgent {
       thinkSentAt: 0,
       firstTokenAt: null,
       lastToolAnsweredAt: null,
+      lastAnswerRel: null,
       ttsSentAt: null,
       finished: false,
       toolsUsed: false,
@@ -707,6 +710,9 @@ export class LabAgent {
     run.thinkSentAt = this.clock();
     run.firstTokenAt = null;
     if (round === 0) run.trace.thinkSent = this.rel(run.thinkSentAt);
+    const roundRec: RoundTrace = { thinkSent: this.rel(run.thinkSentAt) };
+    if (round > 0 && run.lastAnswerRel !== null) roundRec.afterAnswerMs = roundRec.thinkSent - run.lastAnswerRel;
+    run.trace.rounds.push(roundRec);
     run.thinking = true;
     const result = await think({
       url: cfg.url,
@@ -720,6 +726,7 @@ export class LabAgent {
       fetchImpl: this.deps.fetchImpl,
       onText: (piece, at) => {
         if (run.firstTokenAt === null) run.firstTokenAt = at;
+        if (roundRec.firstToken === undefined) roundRec.firstToken = this.rel(at);
         if (run.trace.firstToken === undefined) run.trace.firstToken = this.rel(at);
         for (const s of cutter.push(piece)) speak(s);
       },
@@ -729,17 +736,20 @@ export class LabAgent {
     if (result.firstTokenAt !== null && run.firstTokenAt === null) run.firstTokenAt = result.firstTokenAt;
     for (const s of cutter.end()) speak(s);
     if (run.trace.firstToken === undefined && result.firstTokenAt !== null) run.trace.firstToken = this.rel(result.firstTokenAt);
+    if (roundRec.firstToken === undefined && result.firstTokenAt !== null) roundRec.firstToken = this.rel(result.firstTokenAt);
     return result.toolCalls;
   }
 
   private async runFunctions(run: Run, calls: Array<{ id: string; name: string; arguments: string }>): Promise<Map<string, string>> {
     const out = new Map<string, string>();
+    const recs: Array<TurnTrace['functions'][number]> = [];
     const waits = calls.map(
       (c) =>
         new Promise<void>((resolve) => {
           const startedAt = this.clock();
           const rec = { name: c.name, startedAt: this.rel(startedAt) } as TurnTrace['functions'][number];
           run.trace.functions.push(rec);
+          recs.push(rec);
           const timer = setTimeout(() => {
             this.pending.delete(c.id);
             out.set(c.id, JSON.stringify({ error: 'the function did not answer in time' }));
@@ -759,6 +769,8 @@ export class LabAgent {
     );
     this.send({ type: 'FunctionCallRequest', functions: calls.map((c) => ({ id: c.id, name: c.name, arguments: c.arguments || '{}', client_side: true })) });
     await Promise.race([Promise.all(waits), new Promise<void>((resolve) => run.controller.signal.addEventListener('abort', () => resolve(), { once: true }))]);
+    const answered = recs.map((r) => r.answeredAt).filter((t): t is number => t !== undefined);
+    run.lastAnswerRel = answered.length ? Math.max(...answered) : null;       // (the next request's `afterAnswerMs` counts from here: docs 9.4 C5, amendment A3)
     return out;
   }
 

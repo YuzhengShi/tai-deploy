@@ -468,6 +468,16 @@ describe('LabAgent: functions', () => {
     expect(lat).toHaveLength(1);                                                // one report, at the first audio of the answer ("Let me check." is the first sentence)
     expect(r.traces[0].functions[0].name).toBe('recall_memory');
     expect(r.traces[0].functions[0].answeredAt).toBeGreaterThan(r.traces[0].functions[0].startedAt);
+    // the trace holds every request of the turn, and the engine's own part of the round trip (C5, amendment A3: this is what the host runs read)
+    const rounds = r.traces[0].rounds;
+    expect(rounds).toHaveLength(2);
+    expect(rounds[0].thinkSent).toBe(r.traces[0].thinkSent);
+    expect(rounds[0].firstToken).toBeGreaterThanOrEqual(rounds[0].thinkSent);
+    expect(rounds[0].afterAnswerMs).toBeUndefined();
+    expect(rounds[1].firstToken).toBeGreaterThanOrEqual(rounds[1].thinkSent);
+    expect(rounds[1].afterAnswerMs).toBeGreaterThanOrEqual(0);
+    expect(rounds[1].afterAnswerMs).toBeLessThan(300);
+    expect(rounds[1].thinkSent - r.traces[0].functions[0].answeredAt!).toBeCloseTo(rounds[1].afterAnswerMs!, 5);
   });
 
   it('cancels a call that is still pending when the student talks over the agent, and takes it out of the history', async () => {

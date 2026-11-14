@@ -19,6 +19,16 @@ export interface BargeTrace {
   by: 'vad' | 'startOfTurn';
 }
 
+/** One request to the model within a turn (a turn with function calls has several). */
+export interface RoundTrace {
+  /** When the request went out, in milliseconds from the start of the call. */
+  thinkSent: number;
+  /** The first text of its answer. */
+  firstToken?: number;
+  /** Rounds after the first: the engine's own part of the function round trip (docs 9.4 C5, amendment A3), this request's `thinkSent` minus the moment the last function of the previous round answered. */
+  afterAnswerMs?: number;
+}
+
 export interface TurnTrace {
   sid: string;
   mode: string;
@@ -44,6 +54,8 @@ export interface TurnTrace {
   audioDone?: number;
   bargeIn?: BargeTrace;
   functions: Array<{ name: string; startedAt: number; answeredAt?: number }>;
+  /** Every request to the model of this turn, in order (the first round's `thinkSent` and `firstToken` are also the turn's own fields above). */
+  rounds: RoundTrace[];
   fillers: Array<{ text: string; injectedAt: number; audioAt?: number }>;
   fallbacks: string[];
   userText?: string;
@@ -55,7 +67,7 @@ export interface TurnTrace {
 }
 
 export function newTurnTrace(base: { sid: string; mode: string; ears: string; mouth: string; turn: number; at: string }): TurnTrace {
-  return { ...base, functions: [], fillers: [], fallbacks: [], derived: {} };
+  return { ...base, functions: [], rounds: [], fillers: [], fallbacks: [], derived: {} };
 }
 
 export function finishDerived(t: TurnTrace): void {

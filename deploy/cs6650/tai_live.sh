@@ -912,6 +912,8 @@ for label, key in (("end of speech to committed turn", "eotWait"), ("committed t
     v = [r["derived"][key] for r in rows if isinstance(r.get("derived", {}).get(key), (int, float))]
     plain = [r["derived"][key] for r in rows if isinstance(r.get("derived", {}).get(key), (int, float)) and not r.get("functions")]
     if v: print("  %-32s n=%d p50 %s p90 %s ms; turns with no function n=%d p50 %s p90 %s ms" % (label, len(v), pct(v, .5), pct(v, .9), len(plain), pct(plain, .5), pct(plain, .9)))
+over = [rd["afterAnswerMs"] for r in rows for rd in r.get("rounds", []) if isinstance(rd.get("afterAnswerMs"), (int, float))]
+if over: print("  %-32s n=%d p50 %s p90 %s ms (docs/VOICE_SELFBUILT.md C5, amendment A3: p90 <= 100)" % ("function answer to next request", len(over), pct(over, .5), pct(over, .9)))
 PY
       ;;
     *) die "tai_live.sh voice status|enable|disable|lab [N]" ;;

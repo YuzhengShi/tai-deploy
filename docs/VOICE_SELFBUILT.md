@@ -259,6 +259,19 @@ Entries are added as they happen, each with its date and method. Everything belo
 
 The pre-registered rule is "Qwen term recall >= Flux's **and** Qwen WER <= Flux WER + 2 points". WER passes (3.16 against 3.71); **term recall does not (60 against 63)**: so **C6 fails on the synthetic set, by the rule as written.** What each got wrong: Qwen "wait group" (twice, for `WaitGroup`), "EC two", "Teraform", "Dynamo DB", "SQSQ", "Lampport", "Cody" (twice, for Coady), "Amdal" and "Emdal", "GRPC"; Flux "weight group" (twice), "by us" for "buy us", "EC two" (twice), "SQ SQ", "Cody" (twice), "Amdell" and "Emdal", "back end", and once it ended a turn at the comma of "Can you say that again," (a cut-in by Flux itself, which C2 will see on the live side too). Against the nova-3 **without** keyterms of 2026-11-05 (WER 10.7 %, terms 13/16 on five sentences) Qwen looked far better; against Flux **with** the live keyterms the gap is gone on native synthetic voices. The claim that matters (Qwen3-ASR is stronger on Chinese-accented English) is not tested by this set and cannot be: it needs the owner's own voice (section 9.5), which is why the lab will run a **shadow recognizer** on his real calls (section 5.1) and put both texts of every turn into the trace.
 
+### 10.2 The lab's own client classes against the real services (2026-11-14, about 05:50 to 06:00 UTC, from the host, one stream at a time, synthetic audio)
+
+*Method.* The compiled `V1Ears`, `FluxEars`, `LabGPUMouth`, `AuraMouth` and `stretch` of this branch, shipped to `/tmp` on the host (removed afterwards) and run against LabGPU's adapters and Deepgram, with the audio played as the page sends it (40 ms frames, real time). The Deepgram key was read on the host by the script and never printed.
+
+| Part | Result |
+|---|---|
+| `V1Ears` -> `:8803` | 30 connect-and-close cycles: connect p50 4 ms, p90 5, max 9, **0 failures**. Six utterances played as 40 ms frames that the class regroups into the adapter's 20 ms frames: final at UE + 1212..1846 ms (p50 1526, p90 1678), the first partial that covers the speech at UE + 434..1105 ms, `down` never. |
+| `FluxEars` -> Deepgram | connect 274..284 ms; `StartOfTurn` 611..650 ms after the speech began (a barge-in on Flux's own signal is slower than the lab's VAD, which needs about 300 ms); finals at UE + 478, 1099 and 1472 ms (trigger `model`); **a `Configure` with `thresholds` (numbers) was accepted** ("Flux applied a Configure"), which settles the open point of P3. |
+| `LabGPUMouth` -> `:8805` | 104 sequential sentences, **0 errors**: first byte p50 116 ms, p90 127, max 147; whole sentence p50 134, p90 147. The 39-word passage: 2.69 words/s, CV 0.0 % over 5 runs; **after `stretch(1.28)`: 3.45 words/s**, CV 0.0 %, the stretch took p50 36 ms for 14.5 s of audio. |
+| `AuraMouth` -> Deepgram | `aura-2-thalia-en` at speed 1.2: 3.36..3.52 words/s, first byte 269..388 ms; `aura-2-mars-en` at 1.08 (the live interviewer's number): **3.00..3.17**; at 1.3: 3.51..3.74. So the interviewer control needs `TAI_VOICE_LAB_AURA_SPEED_SCALE` of about 1.2 to sit at the live pace (3.3 to 3.7): to be set after the live pace has been measured through a call. |
+
+Four listening samples (the same three sentences: LabGPU as it comes, LabGPU stretched to the live pace, Aura thalia, Aura mars) were made for the owner; naturalness is his call (C7).
+
 ## 11. Amendments (changes to anything above after the commit that introduced it)
 
 **A1, 2026-11-14, made before any end-to-end number of the lab or of the live call on the test set existed (only the component probes of 10.1 were in): what a cut-in is, and which user line the end-of-turn wait is read from.**

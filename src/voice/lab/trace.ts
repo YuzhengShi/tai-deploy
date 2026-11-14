@@ -29,7 +29,7 @@ export interface SpecTrace {
   /** 'flux': the ears' own eager end of turn; 'flux-shadow': the second recognizer's, beside LabGPU's. */
   source: 'flux' | 'flux-shadow';
   outcome: 'adopted' | 'dropped';
-  /** Why a request was dropped: 'resumed' (Flux's TurnResumed), 'speech' (the engine heard the student begin again), 'different words', 'history changed', 'failed', 'stale', 'replaced', 'busy', 'closed'. */
+  /** Why a request was dropped: 'resumed' (Flux's TurnResumed), 'start of turn' (Flux's StartOfTurn), 'speech' (the engine heard the student begin again), 'different words', 'history changed', 'failed', 'replaced' (a newer eager text), 'closed'. */
   why?: string;
   /** When it ended up (ms from the start of the call): the commit that adopted it, or the moment it was dropped. */
   endedAt: number;

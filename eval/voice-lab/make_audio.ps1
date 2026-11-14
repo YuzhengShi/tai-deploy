@@ -25,6 +25,8 @@ foreach ($group in @($set.turntaking.tuning, $set.turntaking.eval, $set.modes.in
 }
 Add-Text $set.bargein.ask
 foreach ($i in @($set.bargein.tuning) + @($set.bargein.eval)) { Add-Text $i }
+# round 2 (docs A12): the spoken requests of the tools set (they make the model call tools that take a while), when the test set has them
+foreach ($t in @($set.tools)) { if ($t) { Add-Text $t.text } }
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $sha = [System.Security.Cryptography.SHA1]::Create()

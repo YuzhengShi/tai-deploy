@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "note": "Round 2 of the voice lab (docs/VOICE_SELFBUILT.md amendments A8 to A12), written 2026-11-14 AFTER the round-1 results were known and BEFORE any round-2 run. What differs from testset.json (round 1, which stays as the frozen record): bargein.eval is replaced by twelve NEW interruptions, because the eight of round 1 were all looked at while the barge-in rule was analysed (section 9.3: an eval scenario that is looked at for tuning is replaced); bargein.tuning gets four more phrases, the only barge-in clips the new rule may be replayed and tuned on; and `tools` is new: eight spoken requests that make the model call tools that take a while, for C4 (fillers). Everything else (recognition, latency, turntaking, modes) is the round-1 text, unchanged. Spoken by Windows' own voices (David and Zira) through make_audio.ps1: synthetic native voices, so they say nothing about Chinese-accented English.",
+  "note": "Round 2 of the voice lab (docs/VOICE_SELFBUILT.md amendments A8 to A12), written 2026-11-14 AFTER the round-1 results were known and BEFORE any round-2 run. What differs from testset.json (round 1, which stays as the frozen record): bargein.eval is replaced by twelve NEW interruptions, because the eight of round 1 were all looked at while the barge-in rule was analysed (section 9.3: an eval scenario that is looked at for tuning is replaced); bargein.tuning gets four more phrases, the only barge-in clips the new rule may be replayed and tuned on; and `tools` is new: eight spoken requests that make the model call tools that take a while (course slides, Canvas pages, a code run, one public web page), for C4 (fillers); none names a tool that reads what students wrote (Piazza, the weekly look): S1. Everything else (recognition, latency, turntaking, modes) is the round-1 text, unchanged. Spoken by Windows' own voices (David and Zira) through make_audio.ps1: synthetic native voices, so they say nothing about Chinese-accented English.",
   "voices": [
     "Microsoft David Desktop",
     "Microsoft Zira Desktop"
@@ -858,11 +858,11 @@
   "tools": [
     {
       "id": "x01",
-      "text": "Search Piazza for posts about the Raft homework and tell me what people are asking."
+      "text": "Open the lecture slides about replication for me."
     },
     {
       "id": "x02",
-      "text": "Look up what Piazza says about load testing."
+      "text": "Read the Canvas syllabus page and tell me when the midterm mastery is."
     },
     {
       "id": "x03",
@@ -874,7 +874,7 @@
     },
     {
       "id": "x05",
-      "text": "Check my week: my GitHub commits, my Canvas deadlines and my Piazza posts."
+      "text": "Run a Go program that adds up the numbers from one to one hundred and tell me the answer."
     },
     {
       "id": "x06",

@@ -3,7 +3,7 @@
 // TAi's chunks without a seam, whatever their sizes.
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { createWarmer, followLevel, resample, rmsOf, startMessage, warmRequest } from './voice.js';
+import { createWarmer, followLevel, resample, rmsOf, startMessage, voiceSocketPath, warmRequest } from './voice.js';
 
 const sine = (n, rate, freq, amp = 1) => Float32Array.from({ length: n }, (_, i) => amp * Math.sin((2 * Math.PI * freq * i) / rate));
 
@@ -174,5 +174,17 @@ describe('the level the orb shows', () => {
     expect(followLevel(0.2, 7)).toBe(1);
     expect(followLevel(0.2, -3)).toBeLessThan(0.2);
     expect(followLevel(0, NaN)).toBe(0);
+  });
+});
+
+describe('the call\'s socket path', () => {
+  it('is api/voice, and api/voice-lab only when the page\'s address asks for the lab', () => {
+    expect(voiceSocketPath('')).toBe('api/voice');
+    expect(voiceSocketPath('?x=1')).toBe('api/voice');
+    expect(voiceSocketPath('?voice=lab')).toBe('api/voice-lab');
+    expect(voiceSocketPath('?a=b&voice=lab')).toBe('api/voice-lab');
+    expect(voiceSocketPath('?voice=labs')).toBe('api/voice');
+    expect(voiceSocketPath('?voice=')).toBe('api/voice');
+    expect(voiceSocketPath(undefined)).toBe('api/voice');
   });
 });

@@ -74,6 +74,8 @@ export interface PortalCore {
 export interface PortalVoice {
   /** The cookie is checked and so is Origin; the hub owns the socket from here. */
   upgrade(req: http.IncomingMessage, socket: Duplex, head: Buffer, user: PortalUser, query: URLSearchParams): void;
+  /** The voice lab's door (docs/VOICE_SELFBUILT.md): `/api/voice-lab`, the owner only, a self-built chain behind the same protocol. Optional: a voice side without it has no such route. */
+  upgradeLab?(req: http.IncomingMessage, socket: Duplex, head: Buffer, user: PortalUser, query: URLSearchParams): void;
   /** Deepgram's calls for the thinking step: no cookie, the bearer token is the check. */
   relay(req: http.IncomingMessage, res: http.ServerResponse): Promise<void>;
   isActive(folder: string): boolean;
@@ -1018,7 +1020,8 @@ export class Portal {
     };
     const voice = this.opts.voice;
     const url = new URL(req.url || '/', 'http://portal');
-    if (!voice || url.pathname !== '/api/voice') return refuse(404, 'Not Found');
+    const lab = url.pathname === '/api/voice-lab';
+    if (!voice || (url.pathname !== '/api/voice' && !(lab && voice.upgradeLab))) return refuse(404, 'Not Found');
     const origin = req.headers.origin;
     const allowed = this.opts.origin ? origin === this.opts.origin : !origin || origin === `http://${req.headers.host}`;
     if (!allowed) return refuse(403, 'Forbidden');
@@ -1026,8 +1029,10 @@ export class Portal {
     if (!session) return refuse(401, 'Unauthorized');
     const user = this.opts.users.find(session.email);
     if (!user) return refuse(403, 'Forbidden');
+    if (lab && user.role !== 'owner') return refuse(403, 'Forbidden');
     if (!this.voiceLimit.allow(user.folder)) return refuse(429, 'Too Many Requests');
     this.opts.core.ensureStudent(user);
+    if (lab) return voice.upgradeLab!(req, socket, head, user, url.searchParams);
     voice.upgrade(req, socket, head, user, url.searchParams);
   }
 

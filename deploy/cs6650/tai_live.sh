@@ -27,6 +27,7 @@
 #   bash deploy/cs6650/tai_live.sh gateway                        (re)create the gateway container (tai-live-litellm) and rebuild .env
 #   bash deploy/cs6650/tai_live.sh course 260797                  the Canvas course TAi reads (this term's), then: tai_credentials.sh --check
 #   bash deploy/cs6650/tai_live.sh voice status|enable|disable    voice calls and the mock interview (needs the Deepgram key: tai_credentials.sh deepgram)
+#   bash deploy/cs6650/tai_live.sh voice lab [N]                  the voice lab (docs/VOICE_SELFBUILT.md, TAI_VOICE_LAB=1): its settings and the last N turns of its calls with the waits, p50/p90 at the end
 #   bash deploy/cs6650/tai_live.sh notify status|vapid [--force]  notifications that reach a closed page (docs/NOTIFICATIONS.md). status: is it on (TAI_NOTIFY), is there a
 #                                                                 VAPID key, whether e-mail is configured (TAI_NOTIFY_EMAIL, TAI_SMTP_*, the password: yes or no), how many browsers are subscribed (counts only). vapid: makes the key pair here
 #                                                                 on the host when there is none (the private key to the file TAI_VAPID_KEY_FILE names, mode
@@ -876,7 +877,44 @@ voice_cmd() {
       ;;
     enable) set_cmd TAI_VOICE=1 ;;
     disable) set_cmd TAI_VOICE=0 ;;
-    *) die "tai_live.sh voice status|enable|disable" ;;
+    lab)
+      # the voice lab (docs/VOICE_SELFBUILT.md): is it on, and the per-turn trace of its calls (one line a turn; p50 and p90 of the waits at the end). No words are read from it but the first 80
+      # characters the owner said in a turn: the endpoint is his alone.
+      local n="${2:-12}" file="$T/data/voice-lab/turns.jsonl" setting
+      case "$n" in ''|*[!0-9]*) die "tai_live.sh voice lab [N]   the last N turns of the lab's calls (default 12)" ;; esac
+      setting() { grep -m1 "^$1=" "$L/orch.env" 2>/dev/null | cut -d= -f2- | tr -d '"' | grep . || echo "$2"; }
+      echo "lab:        $(setting TAI_VOICE_LAB off | sed 's/^1$/on/')  ears $(setting TAI_VOICE_LAB_EARS 'labgpu (default)')  mouth $(setting TAI_VOICE_LAB_MOUTH 'labgpu (default)')  fallback ears $(setting TAI_VOICE_LAB_EARS_FALLBACK 'flux (default)')"
+      [ -s "$file" ] || { echo "trace:      none yet ($file)"; return 0; }
+      python3 - "$file" "$n" <<'PY'
+import json, sys
+rows = []
+with open(sys.argv[1], encoding="utf-8") as handle:
+    for line in handle:
+        try:
+            rows.append(json.loads(line))
+        except ValueError:
+            pass
+def pct(values, p):
+    values = sorted(values)
+    return values[int((len(values) - 1) * p)] if values else None
+last = rows[-int(sys.argv[2]):]
+print("trace:      %d turn(s) in all; the last %d (ms: eot = end of speech to the committed turn, total = committed turn to first audio, whole = end of speech to first audio)" % (len(rows), len(last)))
+for r in last:
+    d = r.get("derived", {})
+    extra = []
+    if r.get("bargeIn"): extra.append("barge-in by %s, %d sentence(s) spoken" % (r["bargeIn"].get("by"), len(r["bargeIn"].get("spoken", []))))
+    for f in r.get("functions", []): extra.append("%s %s ms" % (f.get("name"), (f.get("answeredAt") or 0) - f.get("startedAt", 0)))
+    if r.get("fillers"): extra.append("%d filler(s)" % len(r["fillers"]))
+    if r.get("shadow"): extra.append("%s heard: %s" % (r["shadow"].get("ears"), json.dumps(" / ".join(f.get("text", "") for f in r["shadow"].get("finals", [])))[:90]))
+    if r.get("fallbacks"): extra.append("fallbacks " + ",".join(r["fallbacks"]))
+    print("  %s %s %-9s %s+%s #%-2s eot %5s total %5s whole %5s  %s%s" % (r.get("at", "")[11:19], r.get("sid", ""), r.get("mode", ""), r.get("ears", ""), r.get("mouth", ""), r.get("turn", ""), d.get("eotWait", "-"), d.get("total", "-"), d.get("fromSpeechEnd", "-"), json.dumps(r.get("userText", ""))[:60], ("  [" + "; ".join(extra) + "]") if extra else ""))
+for label, key in (("end of speech to committed turn", "eotWait"), ("committed turn to first audio", "total"), ("end of speech to first audio", "fromSpeechEnd")):
+    v = [r["derived"][key] for r in rows if isinstance(r.get("derived", {}).get(key), (int, float))]
+    plain = [r["derived"][key] for r in rows if isinstance(r.get("derived", {}).get(key), (int, float)) and not r.get("functions")]
+    if v: print("  %-32s n=%d p50 %s p90 %s ms; turns with no function n=%d p50 %s p90 %s ms" % (label, len(v), pct(v, .5), pct(v, .9), len(plain), pct(plain, .5), pct(plain, .9)))
+PY
+      ;;
+    *) die "tai_live.sh voice status|enable|disable|lab [N]" ;;
   esac
 }
 

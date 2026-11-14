@@ -20,6 +20,8 @@ import { RateLimiter, loadSecret } from '../portal/auth.js';
 import { clipActivity, clipSpeech } from '../portal/history.js';
 import type { ActivityType, HistoryStore } from '../portal/history.js';
 import { VOICE_ENV_KEYS, VoiceConfig, chatCompletionsUrl, loadVoiceConfig } from './config.js';
+import { LabEngine, type LabEngineDeps } from './lab/engine.js';
+import { loadLabConfig, type LabConfig } from './lab/config.js';
 import type { ChatLine } from './context-builder.js';
 import { InterviewTokenInfo, verifyInterviewToken } from './interview-token.js';
 import { RelayTokens, createRelay, newSessionId } from './relay.js';
@@ -41,6 +43,11 @@ import { CallSlots, VoiceUsage } from './usage.js';
 export interface VoiceHub {
   /** The portal has authenticated the cookie and checked Origin; `query` is the upgrade URL's search params. The hub owns the socket from here. */
   upgrade(req: http.IncomingMessage, socket: Duplex, head: Buffer, user: Caller, query: URLSearchParams): void;
+  /**
+   * The voice lab (docs/VOICE_SELFBUILT.md): the same upgrade for `/api/voice-lab`, for the owner only, onto a self-built chain instead of Deepgram's Voice Agent. Refuses (404) unless the hub was
+   * started with TAI_VOICE_LAB=1, and (403) anyone but the owner. The browser protocol is the same; the session is the same session.
+   */
+  upgradeLab?(req: http.IncomingMessage, socket: Duplex, head: Buffer, user: Caller, query: URLSearchParams): void;
   /** POST /voice-llm/v1/chat/completions: Deepgram's calls for the Think step. No cookie; the bearer token is the check. Streams the answer. */
   relay(req: http.IncomingMessage, res: http.ServerResponse): Promise<void>;
   /** The deep link /interview/<token> that start_mock_interview returns: who and what it is for, or null (bad, expired). */
@@ -136,6 +143,8 @@ export interface VoiceDeps {
   timing?: Partial<VoiceTiming>;
   deepgramUrl?: string;
   fetchImpl?: typeof fetch;
+  /** Tests: other ears and mouths than the real ones for the voice lab's stand-in (src/voice/lab/engine.ts). */
+  labFactories?: LabEngineDeps['factories'];
 }
 
 const FOLDER = /^[A-Za-z0-9_-]{1,64}$/;
@@ -236,7 +245,9 @@ export function createVoiceHub(deps: VoiceDeps): VoiceHub | null {
     return null;
   }
   if (config.think === 'relay' && !config.llmKey) deps.log.warn({}, 'voice: TAI_VOICE_LLM_KEY is empty: the relay calls the gateway without a key');
-  return new Hub(deps, config, tokens, base, origin);
+  // the voice lab reads the process environment only (orch.env); with TAI_VOICE_LAB unset it is `enabled: false` and nothing of it is built
+  const lab = loadLabConfig((k) => env[k], (message) => deps.log.warn({}, `voice lab: ${message}`));
+  return new Hub(deps, config, tokens, base, origin, lab);
 }
 
 class Hub implements VoiceHub {
@@ -255,6 +266,9 @@ class Hub implements VoiceHub {
   private readonly env: Record<string, string | undefined>;
   /** What a note about the student's screen is made from (screen.ts): the page's views, the documents service, the student's chat objects. */
   private readonly screen: ScreenSources;
+  /** The lab's stand-in (src/voice/lab), when TAI_VOICE_LAB=1: starting, then ready. Null otherwise (and then nothing of the lab exists). */
+  private lab: Promise<LabEngine | null> | null = null;
+  private labEngine: LabEngine | null = null;
   private closed = false;
 
   constructor(
@@ -263,6 +277,7 @@ class Hub implements VoiceHub {
     private readonly tokens: RelayTokens,
     private readonly base: string,
     private readonly origin: string,
+    labConfig?: LabConfig,
   ) {
     this.now = deps.now ?? Date.now;
     this.env = deps.env ?? process.env;
@@ -302,6 +317,39 @@ class Hub implements VoiceHub {
       },
       onClaimDropped: (sid) => this.bySid.get(sid)?.onClaimDropped(),
     });
+    if (labConfig?.enabled) this.startLab(labConfig);
+  }
+
+  /** The lab needs the relay (its think step is the relay's): a hub on Deepgram's own model has no lab. */
+  private startLab(cfg: LabConfig): void {
+    if (this.config.think !== 'relay') {
+      this.deps.log.warn({}, 'voice lab: TAI_VOICE_LAB=1 needs TAI_VOICE_THINK=relay: the lab is off');
+      return;
+    }
+    const c = this.config;
+    this.lab = LabEngine.start({
+      config: cfg,
+      profiles: {
+        chat: { eotThreshold: c.eotThreshold, eotTimeoutMs: c.eotTimeoutMs },
+        interview: { eotThreshold: c.interviewEotThreshold, eotTimeoutMs: c.interviewEotTimeoutMs },
+        talk: { eotThreshold: c.talkEotThreshold, eotTimeoutMs: c.talkEotTimeoutMs },
+      },
+      relay: this.relayHandler,
+      deepgramKey: () => this.deepgramKey(),
+      log: this.deps.log,
+      traceFile: cfg.traceFile || path.join(this.deps.dataDir, 'voice-lab', 'turns.jsonl'),
+      fetchImpl: this.deps.fetchImpl,
+      factories: this.deps.labFactories,
+    }).then(
+      (engine) => {
+        this.labEngine = engine;
+        return engine;
+      },
+      (err: Error) => {
+        this.deps.log.error({ err: err.message }, 'voice lab: the stand-in could not start: the lab is off');
+        return null;
+      },
+    );
   }
 
   private deepgramKey(): string {
@@ -428,9 +476,28 @@ class Hub implements VoiceHub {
     }
   }
 
-  private onConnection(ws: WebSocket, user: Caller): void {
+  upgradeLab(req: http.IncomingMessage, socket: Duplex, head: Buffer, user: Caller, _query: URLSearchParams): void {
+    socket.on('error', () => undefined);
+    try {
+      // with the flag off there is no lab: the route does not exist; for anyone but the owner it exists and is not theirs
+      if (this.closed || !this.lab) return refuseUpgrade(socket, 404, 'Not Found');
+      if (req.headers.origin !== this.origin) return refuseUpgrade(socket, 403, 'Forbidden');
+      if (!user || user.role !== 'owner') return refuseUpgrade(socket, 403, 'Forbidden');
+      if (!FOLDER.test(user.folder) || typeof user.jid !== 'string' || !user.jid) return refuseUpgrade(socket, 403, 'Forbidden');
+      this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, user, true));
+    } catch (err) {
+      this.deps.log.warn({ err: (err as Error).message }, 'voice lab: upgrade failed');
+      try {
+        socket.destroy();
+      } catch {
+        /* gone */
+      }
+    }
+  }
+
+  private onConnection(ws: WebSocket, user: Caller, lab = false): void {
     ws.on('error', (err) => this.deps.log.debug({ folder: user.folder, err: err.message }, 'voice: browser socket error'));
-    const conn: { session: VoiceSession | null; started: boolean } = { session: null, started: false };
+    const conn: { session: VoiceSession | null; started: boolean; lab: boolean } = { session: null, started: false, lab };
     const textLimit = new RateLimiter(30, 60_000, this.now);
     const frameLimit = new RateLimiter(240, 60_000, this.now);
     // the page reports the whole view at most every 0.8 s (about 75 a minute at the most); this allows for a little more than that
@@ -525,8 +592,11 @@ class Hub implements VoiceHub {
     }
   }
 
-  private start(ws: WebSocket, conn: { session: VoiceSession | null }, user: Caller, msg: Record<string, unknown>): void {
+  private start(ws: WebSocket, conn: { session: VoiceSession | null; lab?: boolean }, user: Caller, msg: Record<string, unknown>): void {
     const resume = msg.resume === true;
+    // a call on the lab's chain: its stand-in must be up (it starts with the hub, a moment after the service does)
+    const engine = conn.lab ? this.labEngine : null;
+    if (conn.lab && !engine && !resume) return this.refuse(ws, 'not-configured', 'The voice lab is not ready.');
     const existing = this.byFolder.get(user.folder);
     if (existing && !existing.ended) {
       if (resume) {
@@ -558,7 +628,8 @@ class Hub implements VoiceHub {
       talk = topic ? { topic } : {};
     }
 
-    if (!this.deepgramKey()) return this.refuse(ws, 'not-configured', 'Voice calls are not set up on this server.');
+    // (a lab call may run on LabGPU's services alone: whatever of Deepgram's it uses, the stand-in checks for itself)
+    if (!engine && !this.deepgramKey()) return this.refuse(ws, 'not-configured', 'Voice calls are not set up on this server.');
     const remaining = this.config.dailyMin * 60 - this.usage.usedSeconds(user.folder);
     if (remaining < 60) {
       return this.refuse(ws, 'budget', `You have used today's ${this.config.dailyMin} minutes of voice calls. The chat is still open.`);
@@ -581,9 +652,10 @@ class Hub implements VoiceHub {
           groupsDir: this.deps.groupsDir,
           dataDir: this.deps.dataDir,
           templateFile: this.deps.templateFile ?? path.join(this.deps.groupsDir, 'global', 'COMPETENCY_TEMPLATE.md'),
-          deepgramUrl: this.deps.deepgramUrl ?? this.config.deepgramUrl,
-          deepgramKey: () => this.deepgramKey(),
-          relay: this.config.think === 'relay' ? { url: `${this.base}/voice-llm/v1/chat/completions`, tokens: this.tokens } : null,
+          // a lab call connects to the stand-in with a token of its own (never the Deepgram key) and its think requests go to the loopback door of this hub's relay
+          deepgramUrl: engine ? engine.agentUrl : (this.deps.deepgramUrl ?? this.config.deepgramUrl),
+          deepgramKey: engine ? () => engine.token : () => this.deepgramKey(),
+          relay: this.config.think === 'relay' ? { url: engine ? engine.relayUrl : `${this.base}/voice-llm/v1/chat/completions`, tokens: this.tokens } : null,
           // the student's own host from their last call when it is still up and bound as they are now, else a new one
           spawnToolHost: (folder) => this.toolHosts.acquire(folder, this.bindingOf(user)),
           appendChat: this.deps.appendChat,
@@ -643,6 +715,8 @@ class Hub implements VoiceHub {
     ]);
     // the hosts kept for next calls go with the service (the calls above have given theirs back by now, and none is kept from here on)
     await Promise.race([this.toolHosts.closeAll(), new Promise((resolve) => setTimeout(resolve, 10_000).unref?.())]);
+    // the lab's stand-in goes after the calls that used it
+    if (this.lab) await Promise.race([this.lab.then((engine) => engine?.close()), new Promise((resolve) => setTimeout(resolve, 5_000).unref?.())]);
     this.usage.flush();
     try {
       this.wss.close();

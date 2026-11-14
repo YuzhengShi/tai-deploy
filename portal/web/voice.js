@@ -330,6 +330,18 @@ export function resample(rs, input, step) {
  * The first message of a call (docs/VOICE.md, "Browser protocol"): what kind it is, the interview link's token or the topic of a "talk it
  * through" call, and `resume` for a dropped connection that is taken up again (which says nothing but that: the call already has its kind).
  */
+/**
+ * The path of the call's socket under the page's base: `api/voice`, or `api/voice-lab` when the page's address has `?voice=lab` (the owner's hidden way to a call on the self-built
+ * chain: docs/VOICE_SELFBUILT.md; the server answers 404 where there is no lab and 403 to anyone but the owner, so the parameter does nothing for a student).
+ */
+export function voiceSocketPath(search = '') {
+  try {
+    return new URLSearchParams(search).get('voice') === 'lab' ? 'api/voice-lab' : 'api/voice';
+  } catch {
+    return 'api/voice';
+  }
+}
+
 export function startMessage({ mode, token = '', topic = '' }, resume = false) {
   const hello = { type: 'start', mode };
   if (resume) hello.resume = true;
@@ -569,7 +581,7 @@ export function createCall({ toast, onChange, onSpeaking = () => undefined, onSc
   }
 
   function connect(c, resume) {
-    const url = new URL('api/voice', document.baseURI);   // wss://host/tai/api/voice behind the proxy: the page's own origin and base path
+    const url = new URL(voiceSocketPath(typeof location === 'undefined' ? '' : location.search), document.baseURI);   // wss://host/tai/api/voice behind the proxy: the page's own origin and base path
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     let ws;
     try {

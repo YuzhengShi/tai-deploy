@@ -758,6 +758,7 @@ not parse falls back to its default with a warning):
 | `TAI_VOICE_DEEPGRAM_URL` | `wss://agent.deepgram.com/v1/agent/converse` | tests point it elsewhere |
 | `TAI_VOICE_MUTE_HANDOFF` | on | `0`: the model's reply after `start_interview`, `end_interview` and `end_session` is not silenced |
 | `TAI_VOICE_RELAY_DUMP` | off | an absolute path: the relay appends one JSON line per Think request (a diagnostic with the student's words) |
+| `TAI_VOICE_LAB` and `TAI_VOICE_LAB_*` | off | the **voice lab** (docs/VOICE_SELFBUILT.md): a call on a self-built chain (LabGPU's recognizer and synthesizer behind a stand-in for Deepgram's agent protocol) at `/api/voice-lab`, for the owner only, an experiment with criteria written first. `1` turns it on; nothing of it exists otherwise (the route answers 404). `tai_live.sh voice lab` reads its trace |
 | `TAI_VOICE_TRACE` | off | `1`: every event Deepgram sends (but the latency reports and the history) is logged with the call's state (what showed that the live protocol sends no `AgentStartedSpeaking`); it logs the first 50 characters of what is said, so only while looking |
 
 ## Tests

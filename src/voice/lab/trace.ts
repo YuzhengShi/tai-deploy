@@ -1,0 +1,99 @@
+/**
+ * The per-turn trace of the voice lab (docs/VOICE_SELFBUILT.md section 6): one JSON line per turn with the moments the engine saw, in milliseconds from the start of the call, so that
+ * the owner's real calls can be read the way he reads transcripts, and so that a number in the report can be traced to the step that made it (the recognizer's final, the first model
+ * token, the first byte of the synthesis, the first audio out). It holds the owner's own words (the first 80 characters of what he said) because the endpoint is his alone, and no secret.
+ * Writing it never fails a call: an error is a warning, once.
+ */
+import fs from 'fs';
+import path from 'path';
+
+import type { VoiceLog } from '../types.js';
+
+export interface BargeTrace {
+  /** The first loud frame of the student's speech, the moment the engine was sure (240 ms of it), and when the last audio went out. */
+  onset: number;
+  confirmed: number;
+  audioStopped: number;
+  /** What had been spoken of the answer: the sentences that began, each with the fraction played. */
+  spoken: Array<{ words: number; played: number }>;
+  by: 'vad' | 'startOfTurn';
+}
+
+export interface TurnTrace {
+  sid: string;
+  mode: string;
+  ears: string;
+  mouth: string;
+  /** 1-based, in the call. 0 is the greeting. */
+  turn: number;
+  /** Wall clock of the commit (ISO), for finding the turn in a journal. */
+  at: string;
+  speechStart?: number;
+  speechEnd?: number;
+  earsPartialFirst?: number;
+  earsFinal?: number;
+  /** The end of turn: the student's words handed to the model. */
+  commit?: number;
+  commitReason?: string;
+  thinkSent?: number;
+  firstToken?: number;
+  firstSentence?: number;
+  ttsSent?: number;
+  ttsFirstByte?: number;
+  firstAudioOut?: number;
+  audioDone?: number;
+  bargeIn?: BargeTrace;
+  functions: Array<{ name: string; startedAt: number; answeredAt?: number }>;
+  fillers: Array<{ text: string; injectedAt: number; audioAt?: number }>;
+  fallbacks: string[];
+  userText?: string;
+  /** What the shadow recognizer heard of the same speech (its finals that arrived since the speech began), with their times: for comparing recognizers on real calls. */
+  shadow?: { ears: string; finals: Array<{ text: string; at: number }> };
+  agentWords?: number;
+  /** What the report reads: the end-of-turn wait (commit - speechEnd), Deepgram's `total` (commit to first audio), and the whole wait from the end of speech. */
+  derived: { eotWait?: number; total?: number; fromSpeechEnd?: number };
+}
+
+export function newTurnTrace(base: { sid: string; mode: string; ears: string; mouth: string; turn: number; at: string }): TurnTrace {
+  return { ...base, functions: [], fillers: [], fallbacks: [], derived: {} };
+}
+
+export function finishDerived(t: TurnTrace): void {
+  if (t.commit !== undefined && t.speechEnd !== undefined) t.derived.eotWait = Math.round(t.commit - t.speechEnd);
+  if (t.commit !== undefined && t.firstAudioOut !== undefined) t.derived.total = Math.round(t.firstAudioOut - t.commit);
+  if (t.speechEnd !== undefined && t.firstAudioOut !== undefined) t.derived.fromSpeechEnd = Math.round(t.firstAudioOut - t.speechEnd);
+}
+
+export interface TraceSink {
+  write(turn: TurnTrace): void;
+}
+
+export const nullSink: TraceSink = { write: () => undefined };
+
+/** Appends lines to `file` (directory made 0700, file 0600). The numbers are rounded to whole milliseconds on the way out. */
+export function fileSink(file: string, log: VoiceLog): TraceSink {
+  let warned = false;
+  let ready = false;
+  const round = (_k: string, v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : v);
+  return {
+    write(turn) {
+      try {
+        if (!ready) {
+          fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+          ready = true;
+        }
+        fs.appendFile(file, JSON.stringify(turn, round) + '\n', { mode: 0o600 }, (err) => {
+          if (err && !warned) {
+            warned = true;
+            log.warn({ err: err.message }, 'voice lab: the trace could not be written');
+          }
+        });
+      } catch (err) {
+        if (!warned) {
+          warned = true;
+          log.warn({ err: (err as Error).message }, 'voice lab: the trace could not be written');
+        }
+      }
+    },
+  };
+}

@@ -809,6 +809,20 @@ describe('LabAgent: the eager end of turn (A10)', () => {
     expect(r.relay.requests).toHaveLength(1);
   }, 60_000);
 
+  it('a course term that LabGPU writes in two pieces (A10a: "map reduce" for MapReduce) is the same words as the one piece Flux writes', async () => {
+    const r = await rig({ chain: 'h' });
+    const { labgpu, flux } = await afterSpeech(r);
+    r.relay.script = () => [{ text: 'It splits the work.' }];
+    flux.eager('How does MapReduce split the work?');
+    await r.until(() => r.relay.requests.length === 1);
+    await r.feed(100, 0);
+    labgpu.partial('How does map reduce split the work?');
+    await r.until(() => r.of('AgentAudioDone').length === 2);
+    expect(r.relay.requests).toHaveLength(1);
+    expect(r.of('ConversationText').find((m) => m.role === 'user')?.content).toBe('How does map reduce split the work?');     // the chat keeps LabGPU's own words
+    expect(r.traces.find((t) => t.turn === 1)!.specs![0]).toMatchObject({ outcome: 'adopted' });
+  }, 60_000);
+
   it('Flux taking the turn back (TurnResumed) drops the request without a word to the page; the next turn asks as usual', async () => {
     const r = await rig({ chain: 'h' });
     const { labgpu, flux } = await afterSpeech(r);

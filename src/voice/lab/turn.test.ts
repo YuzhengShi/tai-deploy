@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { TurnTracker, judgeTurnText, type TurnParams, type VadView } from './turn.js';
+import { TurnTracker, judgeTurnText, wordKey, type TurnParams, type VadView } from './turn.js';
 
 describe('judgeTurnText', () => {
   it('complete: what students ask, as the adapter writes it', () => {
@@ -63,6 +63,24 @@ describe('judgeTurnText', () => {
     expect(judgeTurnText('Hmm')).toBe('filler');
     expect(judgeTurnText('啊。')).toBe('filler');              // what the adapter wrote for "uh, so"
     expect(judgeTurnText('Ah, so.')).not.toBe('filler');       // "so" is a word: it is a dangling one
+  });
+});
+
+describe('wordKey: the same words, as two recognizers may write them', () => {
+  it('ignores case, punctuation and the spaces between words, so that a term in two pieces is the same term', () => {
+    expect(wordKey('What is a mutex?')).toBe(wordKey('what is a MUTEX'));
+    expect(wordKey('How does MapReduce handle failures?')).toBe(wordKey('How does map reduce handle failures.'));
+    expect(wordKey('Add to the WaitGroup first.')).toBe(wordKey('Add to the wait group first'));
+    expect(wordKey('Is DynamoDB consistent?')).toBe(wordKey('Is dynamo DB consistent?'));
+    expect(wordKey("It's fine.")).toBe(wordKey("it's fine"));
+  });
+
+  it('keeps different words different: a changed letter, a missing word, a number spelled out', () => {
+    expect(wordKey('What is a mutex?')).not.toBe(wordKey('What is a mutual?'));
+    expect(wordKey('What is a mutex?')).not.toBe(wordKey('What is mutex?'));
+    expect(wordKey('Start the EC2 server')).not.toBe(wordKey('Start the ec two server'));
+    expect(wordKey('')).toBe('');
+    expect(wordKey('Um.')).toBe('um');
   });
 });
 

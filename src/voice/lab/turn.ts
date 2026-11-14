@@ -53,8 +53,12 @@ const ANSWER_VERBS = new Set(['think', 'guess', 'hope', 'believe', 'suppose', 'e
 
 const wordsOf = (text: string): string[] => text.toLowerCase().match(/[a-z0-9']+/g) ?? [];
 
-/** The words of a text, lower case, without punctuation, as one string: two recognizers heard "the same words" when their keys are equal ("What is a mutex?" and "what is a mutex" are). */
-export const wordKey = (text: string): string => wordsOf(text).join(' ');
+/**
+ * The words of a text, lower case, without punctuation and without the spaces between them, as one string: two recognizers heard "the same words" when their keys are equal ("What is a mutex?"
+ * and "what is a mutex" are). The spaces are left out because the recognizers write a course term in different pieces: round 2's recognition set had LabGPU's adapter write "map reduce" for
+ * MapReduce (5 of 10), "wait group" for WaitGroup (10 of 10), "dynamo db", "far gate" for what Flux, given the live key terms, writes as one word (amendment A10a).
+ */
+export const wordKey = (text: string): string => wordsOf(text).join('');
 
 /** Is this text a finished turn, a half-said one, only a filler, or nothing? Pure, tested on real texts (the adapter's own output is in the tests). */
 export function judgeTurnText(text: string): TurnVerdict {

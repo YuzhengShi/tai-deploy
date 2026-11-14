@@ -8,7 +8,7 @@ import { WebSocketServer, type WebSocket as ServerSocket } from 'ws';
 
 import { analyzeLogs, callFacts, parseRawLog, type RawCall } from './analyze.js';
 import type { CallClient } from './client.js';
-import { answeredAfter, callUrl, eventLine, makeCallId, runCall, type RawLine, type RunResult, type RunTiming, type ScenarioLine } from './run.js';
+import { answerCapFor, answeredAfter, callUrl, DEFAULT_TIMING, eventLine, makeCallId, runCall, type RawLine, type RunResult, type RunTiming, type ScenarioLine } from './run.js';
 import { AudioLibrary, planSet, type ScenarioPlan, type ScenarioSpec, type TestSet } from './scenario.js';
 
 // ---------------------------------------------------------------- generated audio and a mini test set
@@ -56,7 +56,9 @@ const MINI: TestSet = {
   bargein: { ask: 'tell me everything', afterFirstAudioMs: 200, tuning: [], eval: ['hold on'] },
   modes: { interview: { eval: [] }, talk: { eval: [] } },
 };
-const SPEECH: Record<string, number> = { 'hello there': 640, 'what is raft': 640, 'seg one': 640, 'seg two': 640, 'tell me everything': 640, 'hold on': 1280 };
+/** round 2's shape: the same, with a `tools` list (the set of the `tool` class) */
+const MINI_TOOLS: TestSet = { ...MINI, tools: [{ id: 'x01', text: 'search it' }, { id: 'x02', text: 'run it' }] };
+const SPEECH: Record<string, number> = { 'hello there': 640, 'what is raft': 640, 'seg one': 640, 'seg two': 640, 'tell me everything': 640, 'hold on': 1280, 'search it': 640, 'run it': 640 };
 const LEAD_MS = 120; // 3 frames: with the 640-sample margin the speech starts and ends on a frame boundary
 
 // Several calls run at the same time in this file (they are real-time and mostly waiting), so every test cleans up after itself.
@@ -88,7 +90,7 @@ function library(): AudioLibrary {
 const plans = (set: Parameters<typeof planSet>[1], ts: TestSet = MINI): ScenarioPlan[] => planSet(ts, set, library(), 0, LEAD_MS);
 
 /** The waits of a call, short: the scripted server below is quick. */
-const FAST: Partial<RunTiming> = { readyTimeoutMs: 1500, greetingWaitMs: 800, greetingEndMs: 1500, answerCapMs: 2500, settleMs: 60, quietCapMs: 1500, closeWaitMs: 800 };
+const FAST: Partial<RunTiming> = { readyTimeoutMs: 1500, greetingWaitMs: 800, greetingEndMs: 1500, answerCapMs: 2500, toolAnswerCapMs: 6000, settleMs: 60, quietCapMs: 1500, closeWaitMs: 800 };
 
 // ---------------------------------------------------------------- a scripted server: it hears the microphone and answers on a fixed rhythm
 
@@ -105,6 +107,11 @@ interface Script {
   tool: (turn: number) => boolean;
   /** a tool turn begins with this much speech ("one sec"), 60 ms after the commit, and goes back to `working` (0: none) */
   fillerMs: number;
+  /**
+   * a tool turn begins with a spoken line instead: `ms` of speech `atMs` after the commit that ends in `listening` (the status of the line that is all a student has heard), and the look-up is only
+   * shown (`working`) `workingAfterMs` after that, with no `working` before it; the answer comes after `thinkMs + toolMs` as for any tool turn
+   */
+  leadIn?: { atMs: number; ms: number; workingAfterMs: number };
   /** how long the answer is */
   answerMs: (turn: number) => number;
   /** from the first loud frame while the agent speaks to its agent_interrupted */
@@ -248,8 +255,12 @@ async function scripted(base: Partial<Script> = {}): Promise<Scripted> {
         send({ type: 'transcript', role: 'user', text: `turn ${turn}`, mode: 'conversational' });
         send({ type: 'status', state: 'thinking' });
         const tool = cfg.tool(turn);
-        if (tool) pending.push(setTimeout(() => send({ type: 'status', state: 'working' }), 40));
-        if (tool && cfg.fillerMs > 0) pending.push(setTimeout(() => speak(cfg.fillerMs, 'one sec', 'working'), 60));
+        const leadIn = tool ? cfg.leadIn : undefined;
+        if (leadIn) {
+          pending.push(setTimeout(() => speak(leadIn.ms, 'let me check', 'listening'), leadIn.atMs));
+          pending.push(setTimeout(() => send({ type: 'status', state: 'working' }), leadIn.atMs + leadIn.ms + leadIn.workingAfterMs));
+        } else if (tool) pending.push(setTimeout(() => send({ type: 'status', state: 'working' }), 40));
+        if (tool && !leadIn && cfg.fillerMs > 0) pending.push(setTimeout(() => speak(cfg.fillerMs, 'one sec', 'working'), 60));
         pending.push(
           setTimeout(() => {
             if (tool) send({ type: 'status', state: 'thinking' });
@@ -556,9 +567,94 @@ describe.concurrent('runCall: calls that go wrong', () => {
   });
 });
 
+// ---------------------------------------------------------------- the `tool` class and a route with a query
+
+describe('runCall: scenarios of the `tool` class (the `tools` set) and a route with a query', () => {
+  it('gives a `tool` scenario its own, longer cap for the answer: a look-up that outlasts the usual cap is answered, and the same delay on a latency scenario is a timeout', async () => {
+    await withServer({ tool: () => true, toolMs: 1300 }, async (server) => {
+      const timing = { answerCapMs: 700, toolAnswerCapMs: 5000 };
+      const tool = await call(server, plans('tools', MINI_TOOLS).slice(0, 1), { set: 'tools', timing });
+      const line = scn(tool, 'x01');
+      expect(line).toMatchObject({ class: 'tool', set: 'tools', wait: 'answered', settled: true });
+      expect(line.end - line.ueSentAt!).toBeGreaterThan(1500); // it waited for the look-up: the answer began about 1.7 s after the end of speech
+      const facts = callFacts(parsed(tool)).trials[0];
+      expect([facts.class, facts.tool, facts.answered, facts.incomplete]).toEqual(['tool', true, true, false]);
+      expect(facts.latencyMs!).toBeGreaterThan(1200);
+      // the same delay on a latency scenario is cut at the usual cap
+      const plain = await call(server, plans('latency').slice(0, 1), { timing });
+      expect(scn(plain, 'l01').wait).toBe('timeout');
+    });
+  }, 15_000);
+
+  it('honours the cap it is given: a look-up that outlasts `toolAnswerCapMs` is a timeout, and the scenario is not held for it any longer', async () => {
+    await withServer({ tool: () => true, toolMs: 3000 }, async (server) => {
+      const r = await call(server, plans('tools', MINI_TOOLS).slice(0, 1), { set: 'tools', timing: { toolAnswerCapMs: 1000, quietCapMs: 600 } });
+      const line = scn(r, 'x01');
+      expect(line.wait).toBe('timeout');
+      expect(line.settled).toBe(false);
+      expect(line.end - line.ueSentAt!).toBeLessThan(2800); // about 1 s of cap and 0.6 s of quiet wait, not the 3.4 s the answer takes
+    });
+  }, 12_000);
+
+  it('holds a `tool` scenario open through a look-up that goes on after a spoken line and `listening`, longer than the usual quiet wait: the next scenario must not play over its answer', async () => {
+    // a line is said and the status goes to `listening`, `working` follows 100 ms later, and the answer comes 2.3 s after the commit: the first `listening` is not the end of the turn
+    await withServer({ tool: () => true, leadIn: { atMs: 100, ms: 80, workingAfterMs: 100 }, toolMs: 2000 }, async (server) => {
+      const timing = { answerCapMs: 600, quietCapMs: 500, settleMs: 500, toolAnswerCapMs: 6000 };
+      const r = await call(server, plans('tools', MINI_TOOLS).slice(0, 1), { set: 'tools', timing });
+      const line = scn(r, 'x01');
+      expect(line.wait).toBe('answered'); // the spoken line and the `listening` after it
+      expect(line.settled).toBe(true); // and quiet only after the real answer
+      expect(line.end - line.ueSentAt!).toBeGreaterThan(2500);
+      const audio = parsed(r).audio;
+      const last = audio[audio.length - 1];
+      expect(last.t).toBeLessThan(line.end); // the answer is inside the scenario's window
+      expect(last.t - line.ueSentAt!).toBeGreaterThan(2000);
+      // the same turn on a latency scenario is cut at the usual caps (answered at the first `listening`, quiet wait of 0.5 s): the contrast
+      const plain = await call(server, plans('latency').slice(0, 1), { timing });
+      expect(scn(plain, 'l01').settled).toBe(false);
+    });
+  }, 20_000);
+
+  it('reserves the look-up\'s own cap of the call\'s time before it begins a `tool` scenario, where any other scenario needs 12 s', async () => {
+    await withServer({ maxSeconds: 30 }, async (server) => {
+      const tools = plans('tools', MINI_TOOLS).slice(0, 1);
+      const long = await call(server, tools, { set: 'tools', timing: { toolAnswerCapMs: 40_000 } });
+      expect(long.started).toBe(true);
+      expect(long.played).toBe(0);
+      expect(long.reason).toBe('time-limit');
+      expect(endLine(long).skipped).toEqual(['x01']);
+      const short = await call(server, tools, { set: 'tools', timing: { toolAnswerCapMs: 5000 } });
+      expect(short.played).toBe(1);
+      expect(short.reason).toBe('done');
+      const plain = await call(server, plans('latency').slice(0, 1), { timing: { toolAnswerCapMs: 40_000 } });
+      expect(plain.played).toBe(1); // 12 s of the 30, whatever the cap of the tool class
+    });
+  }, 15_000);
+
+  it('keeps the query of a route all the way: the server sees /api/voice-lab?chain=h, and the log header records the whole route and the caps in force', async () => {
+    await withServer({}, async (server) => {
+      const r = await call(server, plans('latency').slice(0, 1), { path: 'api/voice-lab?chain=h', timing: { toolAnswerCapMs: 4321 } });
+      expect(r.reason).toBe('done');
+      expect(server.paths).toEqual(['/api/voice-lab?chain=h']);
+      const header = parsed(r).header;
+      expect(header.path).toBe('api/voice-lab?chain=h');
+      expect(header.timing).toMatchObject({ toolAnswerCapMs: 4321, answerCapMs: 2500 });
+    });
+  }, 10_000);
+});
+
 // ---------------------------------------------------------------- helpers
 
 describe('the pieces of a call', () => {
+  it('gives class `tool` its own answer cap (90 s by default, in the timing object beside the others, overridable like them) and every other class the usual one', () => {
+    expect(DEFAULT_TIMING.toolAnswerCapMs).toBe(90_000);
+    expect(DEFAULT_TIMING.answerCapMs).toBe(25_000);
+    expect(answerCapFor('tool', DEFAULT_TIMING)).toBe(90_000);
+    for (const cls of ['latency', 'pause', 'short', 'filler', 'bargein'] as const) expect(answerCapFor(cls, DEFAULT_TIMING)).toBe(25_000);
+    expect(answerCapFor('tool', { ...DEFAULT_TIMING, toolAnswerCapMs: 5 })).toBe(5);
+    expect(answerCapFor('latency', { ...DEFAULT_TIMING, toolAnswerCapMs: 5 })).toBe(25_000);
+  });
+
   it('has answered when an agent frame came at or after a moment and a status listening came after that frame', () => {
     const client = {
       audio: [{ t: 50, seq: 3, bytes: 1920 }],
@@ -578,6 +674,14 @@ describe('the pieces of a call', () => {
     expect(callUrl({ socket: '/run/portal.sock' }, '/api/voice-lab')).toBe('ws+unix:/run/portal.sock:/api/voice-lab');
     expect(callUrl({ url: 'ws://127.0.0.1:3000' }, 'api/voice')).toBe('ws://127.0.0.1:3000/api/voice');
     expect(callUrl({ url: 'ws://host/tai/' }, '/api/voice-lab')).toBe('ws://host/tai/api/voice-lab');
+    // the query of a lab chain stays on the route, for a portal socket and for a base address alike
+    expect(callUrl({ socket: '/run/portal.sock' }, 'api/voice-lab?chain=h')).toBe('ws+unix:/run/portal.sock:/api/voice-lab?chain=h');
+    expect(callUrl({ socket: '/run/portal.sock' }, '/api/voice-lab?chain=fd')).toBe('ws+unix:/run/portal.sock:/api/voice-lab?chain=fd');
+    expect(callUrl({ url: 'ws://127.0.0.1:3000/' }, 'api/voice-lab?chain=c')).toBe('ws://127.0.0.1:3000/api/voice-lab?chain=c');
+    expect(callUrl({ url: 'ws://host/tai' }, '/api/voice?chain=d')).toBe('ws://host/tai/api/voice?chain=d');
+    // and the socket library reads such an address the way the portal's socket needs: the socket path before the colon, the route and its query after it
+    const parsedUrl = new URL(callUrl({ socket: '/run/portal.sock' }, 'api/voice-lab?chain=h'));
+    expect((parsedUrl.pathname + parsedUrl.search).split(':')).toEqual(['/run/portal.sock', '/api/voice-lab?chain=h']);
     expect(() => callUrl({}, 'api/voice')).toThrow(/no target/);
   });
 

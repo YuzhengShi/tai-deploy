@@ -2,12 +2,17 @@
  * The voice lab's measuring client, on the command line (runs on the host, next to the portal socket):
  *
  *   node dist/voice/lab/measure/cli.js run --socket <portal socket> | --url <ws://host:port> --origin <https origin> --users <users.json>
- *        --secret <portal secret file> --email <allowlisted address> --chain <label> --set <latency|pause|short|filler|bargein|interview|talk|tuning>
- *        --audio <dir of make_audio.ps1> [--path api/voice|api/voice-lab] [--testset <file>] [--runs 3] [--mode chat|interview|talk]
+ *        --secret <portal secret file> --email <allowlisted address> --chain <label> --set <latency|pause|short|filler|bargein|interview|talk|tuning|tools>
+ *        --audio <dir of make_audio.ps1> [--path <route>] [--testset <file>] [--runs 3] [--mode chat|interview|talk]
  *        [--out <dir>] [--voice-offset 0] [--gap-ms 4000]
- *   node dist/voice/lab/measure/cli.js interleave <the same connection flags> --a-chain <label> --b-chain <label> [--a-path api/voice] [--b-path api/voice-lab]
- *        (calls alternate A, B, A, B ... in one process; the raw logs go to <out>/<a-chain> and <out>/<b-chain>)
+ *   node dist/voice/lab/measure/cli.js interleave <the same connection flags> --a-chain <label> --b-chain <label> [--a-path <route>] [--b-path <route>]
+ *        [--c-chain <label> --c-path <route>] [--d-chain <label> --d-path <route>] [--e-chain <label> --e-path <route>]
+ *        (calls rotate A, B, C, D, E (as many as are given) within each round, in one process; the raw logs go to <out>/<label> of each chain)
  *   node dist/voice/lab/measure/cli.js analyze --a <dir of chain A's raw logs> --b <dir of chain B's> [--json] [--tuning]
+ *
+ * A <route> is `api/voice` (today's call; the default of run's --path and of --a-path) or `api/voice-lab` (the lab; the default of --b-path), optionally followed by `?chain=d|h|fd|c`
+ * (the lab's chain of that call, docs A10) and nothing else: any other query, a fragment or any other path is refused before a call is made.
+ * The `tools` set exists only in a test set that has a `tools` list (eval/voice-lab/testset2.json).
  *
  * It signs a session cookie for the allowlisted address the way the portal does (a fresh one for each call) and plays calls as the owner would.
  * Every call is real: it costs the chain's minutes and counts against that account's daily voice budget. Exit codes: 0 done, 2 usage, 1 anything else.
@@ -21,18 +26,34 @@ import { mintCookie } from '../../smoke-client.js';
 import { sleep } from './client.js';
 import { analyzeDirs, renderReport } from './analyze.js';
 import { runCall, type RunOptions, type RunResult, type RunTiming } from './run.js';
-import { AudioLibrary, FROZEN_TESTSET, isLabSet, loadTestSet, modeForSet, planSet, type CallMode, type LabSet } from './scenario.js';
+import { AudioLibrary, FROZEN_TESTSET, isLabSet, LAB_SETS, loadTestSet, modeForSet, planSet, type CallMode, type LabSet } from './scenario.js';
 
-const ROUTES = ['api/voice', 'api/voice-lab'] as const;
+/**
+ * The chains a lab call can be asked for with `?chain=` (docs A10): the same four names as src/voice/lab/config.ts (a test pins that they agree). They are pinned here, not imported, so that
+ * what this client will ask for does not move with the server's code.
+ */
+export const LAB_CHAINS = ['d', 'h', 'fd', 'c'] as const;
+/**
+ * A route as the flags take it: the live route as it is, or the lab's with at most `?chain=<name>`. No other query, no fragment, nothing after it (anchored at both ends). The live route takes no
+ * chain: the hub ignores a query there, so a chain asked for on it would be a live call under another chain's label.
+ */
+const ROUTE_PATTERN = new RegExp(`^(?:api/voice|api/voice-lab(?:\\?chain=(?:${LAB_CHAINS.join('|')}))?)$`);
+/** The chains of `interleave`, in the order a round plays them: A and B are required (live and lab by default), C to E are optional. */
+const SLOTS = ['a', 'b', 'c', 'd', 'e'] as const;
+const DEFAULT_ROUTE = { a: 'api/voice', b: 'api/voice-lab' } as const;
 
 export const USAGE = [
   'usage:',
   '  cli run --socket <portal socket> | --url <ws://host:port> --origin <https origin> --users <users.json> --secret <portal secret file> --email <address>',
-  '          --chain <label> --set latency|pause|short|filler|bargein|interview|talk|tuning --audio <dir> [--path api/voice|api/voice-lab] [--testset <file>]',
+  `          --chain <label> --set ${LAB_SETS.join('|')} --audio <dir> [--path <route>] [--testset <file>]`,
   '          [--runs 3] [--mode chat|interview|talk] [--out <dir>] [--voice-offset 0] [--gap-ms 4000]',
-  '  cli interleave <the connection flags of run> --a-chain <label> --b-chain <label> [--a-path api/voice] [--b-path api/voice-lab]',
-  '          (A, B, A, B ... in one process; raw logs in <out>/<a-chain> and <out>/<b-chain>)',
+  '  cli interleave <the connection flags of run> --a-chain <label> --b-chain <label> [--a-path <route>] [--b-path <route>]',
+  '          [--c-chain <label> --c-path <route>] [--d-chain <label> --d-path <route>] [--e-chain <label> --e-path <route>]',
+  '          (calls rotate A, B, C, D, E (as many as are given) within each round; a chain from C on needs both its flags;',
+  '          labels must differ; raw logs in <out>/<label> of each chain)',
   '  cli analyze --a <dir of chain A raw logs> --b <dir of chain B raw logs> [--json] [--tuning]',
+  `  <route>: api/voice (default of run's --path and of --a-path) or api/voice-lab (default of --b-path), optionally followed by ?chain=${LAB_CHAINS.join('|')} and nothing else`,
+  '  --set tools needs a test set that has a `tools` list (eval/voice-lab/testset2.json)',
   'exit codes: 0 done, 2 usage, 1 anything else',
 ].join('\n');
 
@@ -47,7 +68,7 @@ interface Parsed {
 const COMMON_VALUES = ['socket', 'url', 'origin', 'users', 'secret', 'email', 'audio', 'testset', 'set', 'runs', 'out', 'voice-offset', 'mode', 'gap-ms'];
 const ALLOWED: Record<string, { values: string[]; flags: string[] }> = {
   run: { values: [...COMMON_VALUES, 'chain', 'path'], flags: [] },
-  interleave: { values: [...COMMON_VALUES, 'a-chain', 'b-chain', 'a-path', 'b-path'], flags: [] },
+  interleave: { values: [...COMMON_VALUES, ...SLOTS.flatMap((s) => [`${s}-chain`, `${s}-path`])], flags: [] },
   analyze: { values: ['a', 'b'], flags: ['json', 'tuning'] },
 };
 
@@ -89,9 +110,13 @@ function integer(p: Parsed, name: string, fallback: number, min: number, max: nu
   return n;
 }
 
-function route(value: string, name: string): string {
+/**
+ * A route flag's value: `api/voice` or `api/voice-lab` (leading slashes dropped, as before), then at most `?chain=d|h|fd|c`. Whatever else is in it (another query or an extra parameter, a fragment, a
+ * path beyond the route, an unknown chain, a space or a line end) is refused, so that nothing a call is made on can be anything but the two routes with a documented chain.
+ */
+export function route(value: string, name: string): string {
   const clean = value.replace(/^\/+/, '');
-  if (!(ROUTES as readonly string[]).includes(clean)) throw new UsageError(`--${name} must be api/voice or api/voice-lab`);
+  if (!ROUTE_PATTERN.test(clean)) throw new UsageError(`--${name} must be api/voice or api/voice-lab, optionally followed by ?chain=${LAB_CHAINS.join('|')} and nothing else`);
   return clean;
 }
 
@@ -131,7 +156,7 @@ function common(p: Parsed): RunConfig {
   const url = p.values.get('url');
   if (!socket && !url) throw new UsageError('--socket (or --url) is required');
   const setName = need(p, 'set');
-  if (!isLabSet(setName)) throw new UsageError(`--set must be one of latency, pause, short, filler, bargein, interview, talk, tuning (got ${setName})`);
+  if (!isLabSet(setName)) throw new UsageError(`--set must be one of ${LAB_SETS.join(', ')} (got ${setName})`);
   const natural = modeForSet(setName);
   const asked = p.values.get('mode');
   if (asked !== undefined && asked !== 'chat' && asked !== 'interview' && asked !== 'talk') throw new UsageError('--mode is chat, interview or talk');
@@ -209,7 +234,13 @@ function loadScenarios(conf: RunConfig, out: (t: string) => void, err: (t: strin
   const { testset, fingerprint } = loaded;
   const frozen = fingerprint.sha256 === FROZEN_TESTSET.sha256 && fingerprint.blob === FROZEN_TESTSET.blob;
   if (frozen) out(`test set: the frozen one of docs/VOICE_SELFBUILT.md 9.7 (sha256 ${fingerprint.sha256.slice(0, 12)}, blob ${fingerprint.blob.slice(0, 12)})`);
-  else err(`WARNING: the test set ${conf.testset} is NOT the frozen one (sha256 ${fingerprint.sha256.slice(0, 12)}, blob ${fingerprint.blob.slice(0, 12)}; frozen ${FROZEN_TESTSET.sha256.slice(0, 12)}, ${FROZEN_TESTSET.blob.slice(0, 12)}): the results are not criterion results`);
+  else {
+    // a different test set (round 2's, say) is not an error: the run goes on, says so on both streams with the whole fingerprint (a driver may keep only one of them), and every raw log's header carries it
+    out(`test set: ${conf.testset} is not the frozen round-1 set of docs/VOICE_SELFBUILT.md 9.7 (version ${testset.version}): sha256 ${fingerprint.sha256}, blob ${fingerprint.blob}`);
+    err(
+      `WARNING: the test set ${conf.testset} is NOT the frozen one (the frozen round-1 set is sha256 ${FROZEN_TESTSET.sha256.slice(0, 12)}, blob ${FROZEN_TESTSET.blob.slice(0, 12)}; this one is sha256 ${fingerprint.sha256}, blob ${fingerprint.blob}): its results are not round-1 results`,
+    );
+  }
   let plans;
   try {
     plans = planSet(testset, conf.set, new AudioLibrary(conf.audio), conf.voiceOffset, leadMs);
@@ -234,16 +265,59 @@ async function cmdRun(p: Parsed, env: CliEnv, out: (t: string) => void, err: (t:
   return 0;
 }
 
+interface InterleaveChain {
+  /** a, b, c, d or e: the flags it was given by and its place in a round */
+  slot: (typeof SLOTS)[number];
+  label: string;
+  route: string;
+}
+
+/**
+ * The chains of an `interleave`, in the order of a round. A and B are required, with the live route and the lab route as their defaults; C, D and E are optional and a chain given needs both its flags
+ * (`--c-chain` and `--c-path`), with no gap (D needs C: the order of a round is the order of the letters). The labels are folder names under `--out`, so two that differ only in case are one
+ * folder on some systems: they must differ as written and as lower case.
+ */
+function interleaveChains(p: Parsed): InterleaveChain[] {
+  const chains: InterleaveChain[] = [];
+  let gap: (typeof SLOTS)[number] | null = null;
+  for (const slot of SLOTS) {
+    const label = p.values.get(`${slot}-chain`);
+    const given = p.values.get(`${slot}-path`);
+    if (slot === 'a' || slot === 'b') {
+      chains.push({ slot, label: need(p, `${slot}-chain`), route: route(given ?? DEFAULT_ROUTE[slot], `${slot}-path`) });
+      continue;
+    }
+    if (label === undefined && given === undefined) {
+      if (gap === null) gap = slot;
+      continue;
+    }
+    if (label === undefined) throw new UsageError(`--${slot}-path needs --${slot}-chain (a chain given needs both its flags)`);
+    if (given === undefined) throw new UsageError(`--${slot}-chain needs --${slot}-path (a chain given needs both its flags)`);
+    if (gap !== null) throw new UsageError(`--${slot}-chain is given without --${gap}-chain: the chains are A, B, C, D, E in that order, with no gap`);
+    chains.push({ slot, label, route: route(given, `${slot}-path`) });
+  }
+  for (let i = 0; i < chains.length; i++) {
+    for (let j = i + 1; j < chains.length; j++) {
+      const x = chains[i];
+      const y = chains[j];
+      if (x.label.toLowerCase() === y.label.toLowerCase()) throw new UsageError(`--${x.slot}-chain and --${y.slot}-chain must differ${x.label === y.label ? '' : ' (the labels are folder names: they must not differ only in case)'}`);
+    }
+  }
+  return chains;
+}
+
+/** "L (api/voice) and D (api/voice-lab)", or "A (x), B (y) and C (z)": the chains of an interleave as one phrase. */
+function describeChains(chains: InterleaveChain[]): string {
+  const parts = chains.map((c) => `${c.label} (${c.route})`);
+  return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
 async function cmdInterleave(p: Parsed, env: CliEnv, out: (t: string) => void, err: (t: string) => void): Promise<number> {
   const conf = common(p);
-  const chains = [
-    { label: need(p, 'a-chain'), route: route(p.values.get('a-path') ?? 'api/voice', 'a-path') },
-    { label: need(p, 'b-chain'), route: route(p.values.get('b-path') ?? 'api/voice-lab', 'b-path') },
-  ];
-  if (chains[0].label === chains[1].label) throw new UsageError('--a-chain and --b-chain must differ');
+  const chains = interleaveChains(p);
   checkCookie(conf);
   const { plans, fingerprint } = loadScenarios(conf, out, err, env.leadMs);
-  out(`interleave: ${chains[0].label} (${chains[0].route}) and ${chains[1].label} (${chains[1].route}), set ${conf.set} (${plans.length} scenarios, mode ${conf.mode}), ${conf.runs} round(s), logs in ${conf.out}/<chain>`);
+  out(`interleave: ${describeChains(chains)}, set ${conf.set} (${plans.length} scenarios, mode ${conf.mode}), ${conf.runs} round(s), logs in ${conf.out}/<chain>`);
   for (let run = 1; run <= conf.runs; run++) {
     for (const chain of chains) {
       const result = await callWithRepeat(conf, { chain: chain.label, path: chain.route, mode: conf.mode, set: conf.set, scenarios: plans, run, target: { socket: conf.socket, url: conf.url }, origin: conf.origin, outDir: path.join(conf.out, chain.label), testset: fingerprint, timing: env.timing }, env);

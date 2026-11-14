@@ -11,11 +11,15 @@ import path from 'path';
 import { parseWav } from '../../smoke-client.js';
 import { SAMPLES_PER_MS, sampleCount, silence, trimToSpeech } from './wav.js';
 
-/** The groups of scenarios a `--set` can name (the documented ones, and no others). */
-export const LAB_SETS = ['latency', 'pause', 'short', 'filler', 'bargein', 'interview', 'talk', 'tuning'] as const;
+/**
+ * The groups of scenarios a `--set` can name (the documented ones, and no others). `tools` is round 2's (docs A12): spoken requests that make the model run a look-up that takes a while,
+ * played in conversation mode; only a test set that has a `tools` list (eval/voice-lab/testset2.json) can be asked for it.
+ */
+export const LAB_SETS = ['latency', 'pause', 'short', 'filler', 'bargein', 'interview', 'talk', 'tuning', 'tools'] as const;
 export type LabSet = (typeof LAB_SETS)[number];
 export type CallMode = 'chat' | 'interview' | 'talk';
-export type ScenarioClass = 'latency' | 'pause' | 'short' | 'filler' | 'bargein';
+/** `tool` is the class of the `tools` set's scenarios: one spoken request, then a wait for an answer that can take a minute (run.ts gives it its own cap). */
+export type ScenarioClass = 'latency' | 'pause' | 'short' | 'filler' | 'bargein' | 'tool';
 
 export function isLabSet(value: string): value is LabSet {
   return (LAB_SETS as readonly string[]).includes(value);
@@ -50,6 +54,8 @@ export interface TestSet {
   turntaking: { tuning: ScenarioSpec[]; eval: ScenarioSpec[] };
   bargein: { ask: string; afterFirstAudioMs: number; tuning: string[]; eval: string[] };
   modes: { interview: { eval: ScenarioSpec[] }; talk: { eval: ScenarioSpec[] } };
+  /** Round 2's `tools` prompts: spoken requests that make the model call tools that take a while (absent from round 1's file, which is the frozen one). */
+  tools?: Array<{ id: string; text: string }>;
 }
 
 export interface Fingerprint {
@@ -89,6 +95,15 @@ function checkScenarios(list: unknown, where: string): ScenarioSpec[] {
   return list as ScenarioSpec[];
 }
 
+/** A `tools` list, when the file has one: a list of { id, text } with both strings non-empty. A file without it is fine (it only cannot be asked for the `tools` set). */
+function checkTools(list: unknown): void {
+  if (!Array.isArray(list)) fail('tools is not a list of { id, text }');
+  for (const t of list as unknown[]) {
+    const entry = t as { id?: unknown; text?: unknown } | null;
+    if (!entry || typeof entry !== 'object' || typeof entry.id !== 'string' || !entry.id || typeof entry.text !== 'string' || !entry.text) fail('tools has an entry without an id or a text');
+  }
+}
+
 /** Reads and checks the test set; returns it with the fingerprints of the file as read (the caller says whether they are the frozen ones). */
 export function loadTestSet(file: string): { testset: TestSet; fingerprint: Fingerprint } {
   const text = fs.readFileSync(file, 'utf8');
@@ -107,6 +122,7 @@ export function loadTestSet(file: string): { testset: TestSet; fingerprint: Fing
   checkScenarios(raw.modes?.talk?.eval, 'modes.talk.eval');
   const b = raw.bargein;
   if (!b || typeof b.ask !== 'string' || !Array.isArray(b.tuning) || !Array.isArray(b.eval) || typeof b.afterFirstAudioMs !== 'number') fail('bargein is incomplete');
+  if (raw.tools !== undefined) checkTools(raw.tools);
   return { testset: raw, fingerprint };
 }
 
@@ -129,6 +145,10 @@ export function scenariosFor(ts: TestSet, set: LabSet): ScenarioSpec[] {
       return ts.modes.talk.eval;
     case 'tuning':
       return [...ts.turntaking.tuning, ...bargeIn('tb', ts.bargein.tuning)];
+    case 'tools':
+      // one spoken request each, in the file's order; a test set without the list (round 1's) cannot be asked for it, and a run of no scenarios would only burn a call
+      if (!ts.tools || ts.tools.length === 0) return fail('asked for the set tools, but this test set has no `tools` prompts (round 2 adds them: eval/voice-lab/testset2.json)');
+      return ts.tools.map((t) => ({ id: t.id, class: 'tool' as const, segments: [{ text: t.text }] }));
   }
 }
 

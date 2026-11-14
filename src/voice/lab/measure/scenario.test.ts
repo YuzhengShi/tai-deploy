@@ -72,6 +72,8 @@ const MINI: TestSet = {
   bargein: { ask: 'tell me everything', afterFirstAudioMs: 500, tuning: ['wait stop'], eval: ['hold on', 'excuse me'] },
   modes: { interview: { eval: [pause('i-p1', 'pause', 'seg one', 'seg two', 700)] }, talk: { eval: [pause('k-p1', 'pause', 'seg one', 'seg two', 900)] } },
 };
+/** round 2's shape: the same, with a `tools` list */
+const TOOLS: TestSet = { ...MINI, tools: [{ id: 'x01', text: 'search it' }, { id: 'x02', text: 'run it' }] };
 
 /** What each text is as audio: [samples of silence before, of speech, of silence after]; the same for both voices. */
 const SHAPES: Record<string, [number, number, number]> = {
@@ -86,6 +88,8 @@ const SHAPES: Record<string, [number, number, number]> = {
   'hold on': [1000, 1920, 1000],
   'excuse me': [1000, 2560, 500],
   'wait stop': [700, 1600, 700],
+  'search it': [500, 3200, 400],
+  'run it': [500, 2560, 400],
 };
 
 const dirs: string[] = [];
@@ -247,9 +251,51 @@ describe('the test set', () => {
     expect(bargeIn.every((s) => s.class === 'bargein' && s.segments.length === 1 && s.segments[0].text === testset.bargein.ask && !!s.interruption)).toBe(true);
     expect(bargeIn[0].interruption).toBe('Sorry, hold on a second.');
     expect(testset.bargein.afterFirstAudioMs).toBe(2000);
-    // the evaluation sets never contain a tuning scenario
+    // the evaluation sets never contain a tuning scenario (`tools` is round 2's set: this file, round 1's, has none, see the tests of its own below)
+    const tuningIds = new Set(scenariosFor(testset, 'tuning').map((s) => s.id));
+    for (const set of LAB_SETS.filter((s) => s !== 'tuning' && s !== 'tools')) for (const s of scenariosFor(testset, set)) expect(tuningIds.has(s.id)).toBe(false);
+    expect(() => scenariosFor(testset, 'tools')).toThrow(/asked for the set tools, but this test set has no `tools` prompts/);
+  });
+
+  it('keeps the frozen fingerprint of round 1 as the document gives it (round 2\'s test set is another file with another one)', () => {
+    expect(FROZEN_TESTSET).toEqual({ sha256: '89b4b8d2a10568988e21841fa8d15f118914ece03e73e0f13aff141d1edf7612', blob: '5066b76d5863429013bebd953f4305b5771f834b' });
+  });
+
+  it('loads round 2\'s file, which is not the frozen one, and holds the eight `tools` prompts x01 to x08 as scenarios of class `tool`', () => {
+    const real2 = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../eval/voice-lab/testset2.json');
+    const { testset, fingerprint } = loadTestSet(real2);
+    expect(fingerprint.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(fingerprint.blob).toMatch(/^[0-9a-f]{40}$/);
+    expect(fingerprint.sha256).not.toBe(FROZEN_TESTSET.sha256);
+    expect(fingerprint.blob).not.toBe(FROZEN_TESTSET.blob);
+    const tools = scenariosFor(testset, 'tools');
+    expect(tools.map((s) => s.id)).toEqual(['x01', 'x02', 'x03', 'x04', 'x05', 'x06', 'x07', 'x08']);
+    expect(tools.every((s) => s.class === 'tool' && s.segments.length === 1 && s.segments[0].text.length > 0 && s.segments[0].pauseAfterMs === undefined && s.interruption === undefined)).toBe(true);
+    expect(modeForSet('tools')).toBe('chat');
+    // every set can be asked of it, and no scenario of an evaluation set is a tuning one
+    for (const set of LAB_SETS) expect(scenariosFor(testset, set).length).toBeGreaterThan(0);
     const tuningIds = new Set(scenariosFor(testset, 'tuning').map((s) => s.id));
     for (const set of LAB_SETS.filter((s) => s !== 'tuning')) for (const s of scenariosFor(testset, set)) expect(tuningIds.has(s.id)).toBe(false);
+  });
+
+  it('reads a `tools` list when the file has one, loads a file that has none, and refuses a list that is not one of { id, text }', () => {
+    const dir = tmp();
+    const file = path.join(dir, 'ts.json');
+    const write = (extra: Record<string, unknown>) => fs.writeFileSync(file, JSON.stringify({ ...MINI, ...extra }));
+    fs.writeFileSync(file, JSON.stringify(MINI));
+    expect(loadTestSet(file).testset.tools).toBeUndefined(); // round 1's shape still loads
+    write({ tools: [{ id: 'x01', text: 'search it' }] });
+    expect(loadTestSet(file).testset.tools).toEqual([{ id: 'x01', text: 'search it' }]);
+    write({ tools: [] });
+    expect(loadTestSet(file).testset.tools).toEqual([]); // a list, if an empty one: asking for the set is what fails (below)
+    for (const notAList of ['search it', {}, null, 7]) {
+      write({ tools: notAList });
+      expect(() => loadTestSet(file), JSON.stringify(notAList)).toThrow(/test set: tools is not a list of \{ id, text \}/);
+    }
+    for (const badEntry of [null, 'text only', 4, {}, { id: 'x01' }, { text: 'a' }, { id: 3, text: 'a' }, { id: 'x01', text: 4 }, { id: '', text: 'a' }, { id: 'x01', text: '' }]) {
+      write({ tools: [{ id: 'x00', text: 'fine' }, badEntry] });
+      expect(() => loadTestSet(file), JSON.stringify(badEntry)).toThrow(/test set: tools has an entry without an id or a text/);
+    }
   });
 
   it('is read with a BOM, and refused with a plain reason when it is broken', () => {
@@ -265,6 +311,42 @@ describe('the test set', () => {
     expect(() => loadTestSet(file)).toThrow(/without id, class or segments/);
     fs.writeFileSync(file, JSON.stringify({ ...MINI, bargein: { ask: 'x' } }));
     expect(() => loadTestSet(file)).toThrow(/bargein is incomplete/);
+  });
+});
+
+describe('the `tools` set', () => {
+  it('is one single-segment scenario of class `tool` per prompt, in the file\'s own order, played in conversation mode', () => {
+    expect(scenariosFor(TOOLS, 'tools')).toEqual([
+      { id: 'x01', class: 'tool', segments: [{ text: 'search it' }] },
+      { id: 'x02', class: 'tool', segments: [{ text: 'run it' }] },
+    ]);
+    expect(scenariosFor({ ...TOOLS, tools: [...TOOLS.tools!].reverse() }, 'tools').map((s) => s.id)).toEqual(['x02', 'x01']);
+    expect(modeForSet('tools')).toBe('chat');
+  });
+
+  it('cannot be asked of a test set with no `tools` list, or an empty one: a plain error that says where the prompts are, and the other sets are untouched', () => {
+    expect(() => scenariosFor(MINI, 'tools')).toThrow(/test set: asked for the set tools, but this test set has no `tools` prompts \(round 2 adds them: eval\/voice-lab\/testset2\.json\)/);
+    expect(() => scenariosFor({ ...MINI, tools: [] }, 'tools')).toThrow(/no `tools` prompts/);
+    expect(scenariosFor(MINI, 'latency')).toHaveLength(3);
+    expect(scenariosFor(TOOLS, 'latency')).toHaveLength(3);
+    expect(scenariosFor(TOOLS, 'tuning').every((s) => s.class !== 'tool')).toBe(true);
+  });
+
+  it('is planned as audio with the voices alternating by position, like every set, and a missing clip fails before any call', () => {
+    const lib = new AudioLibrary(audioDir());
+    const plans = planSet(TOOLS, 'tools', lib);
+    expect(plans.map((p) => [p.id, p.position, p.voice, p.class, p.set])).toEqual([
+      ['x01', 0, 'Voice A', 'tool', 'tools'],
+      ['x02', 1, 'Voice B', 'tool', 'tools'],
+    ]);
+    expect(plans.every((p) => p.interruption === undefined && p.built.speech.length === 1)).toBe(true);
+    expect(plans[0].built.speech[0].text).toBe('search it');
+    expect(planSet(TOOLS, 'tools', lib, 1).map((p) => p.voice)).toEqual(['Voice B', 'Voice A']);
+    const dir = audioDir();
+    const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8').replace(/^﻿/, ''));
+    delete manifest['Voice B|run it'];
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
+    expect(() => planSet(TOOLS, 'tools', new AudioLibrary(dir))).toThrow(/no audio for "Voice B\|run it"/);
   });
 });
 
@@ -287,13 +369,13 @@ describe('voices and plans', () => {
   });
 
   it('knows its sets and the mode each is played in', () => {
-    expect([...LAB_SETS]).toEqual(['latency', 'pause', 'short', 'filler', 'bargein', 'interview', 'talk', 'tuning']);
+    expect([...LAB_SETS]).toEqual(['latency', 'pause', 'short', 'filler', 'bargein', 'interview', 'talk', 'tuning', 'tools']);
     expect(LAB_SETS.every(isLabSet)).toBe(true);
     expect(isLabSet('all')).toBe(false);
     expect(isLabSet('')).toBe(false);
     expect(modeForSet('interview')).toBe('interview');
     expect(modeForSet('talk')).toBe('talk');
-    for (const s of ['latency', 'pause', 'short', 'filler', 'bargein', 'tuning'] as const) expect(modeForSet(s)).toBe('chat');
+    for (const s of ['latency', 'pause', 'short', 'filler', 'bargein', 'tuning', 'tools'] as const) expect(modeForSet(s)).toBe('chat');
   });
 
   it('plans every scenario of a set as audio with its voice, in order', () => {

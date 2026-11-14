@@ -541,6 +541,12 @@ export interface ChainData {
 }
 
 const CHAT_CLASSES = new Set<ScenarioClass>(['latency', 'pause', 'short', 'filler']);
+/**
+ * The classes whose turns C1's tool-turn line is taken from: the conversation classes, and `tool`, the prompts of round 2's `tools` set (docs A12), which exist to make the model run a look-up.
+ * Only that one line is keyed on it. A `tool` prompt is no plain turn, no cut-in trial, no barge-in and no interview or talk-through trial: every other pool names its classes (or uses CHAT_CLASSES,
+ * which does not hold `tool`), so a `tools` log changes no other number of the report.
+ */
+const TOOL_LINE_CLASSES = new Set<ScenarioClass>(['latency', 'pause', 'short', 'filler', 'tool']);
 const num = (values: Array<number | null>): number[] => values.filter((v): v is number => v !== null);
 
 /** The turn latency of a trial for the percentiles: its value, or Infinity when it never got an answer (never silently dropped). */
@@ -584,13 +590,13 @@ function c0(a: ChainData, b: ChainData): Criterion {
 function c1(a: ChainData, b: ChainData): Criterion {
   const pool = (d: ChainData, classes: Set<ScenarioClass>, mode: CallMode) => d.trials.filter((t) => !t.incomplete && t.mode === mode && classes.has(t.class) && !t.early);
   const plain = (d: ChainData) => pool(d, new Set<ScenarioClass>(['latency']), 'chat').filter((t) => !t.tool);
-  const tool = (d: ChainData) => pool(d, CHAT_CLASSES, 'chat').filter((t) => t.tool);
+  const tool = (d: ChainData) => pool(d, TOOL_LINE_CLASSES, 'chat').filter((t) => t.tool);
   const interviewTool = (d: ChainData) => pool(d, new Set<ScenarioClass>(['pause']), 'interview').filter((t) => t.tool);
   const lat = (ts: TrialFacts[]) => ts.map(latencyOf);
   const checks = [
     quantileCheck({ id: 'C1.plain.p50', label: 'plain turns (latency prompts), p50', a: lat(plain(a)), b: lat(plain(b)), p: 0.5, tolerance: TOLERANCE.plainP50Ms, minimum: MINIMUM.plainTurns, rule: 'B p50 <= A p50 + 300 ms' }),
     quantileCheck({ id: 'C1.plain.p90', label: 'plain turns (latency prompts), p90', a: lat(plain(a)), b: lat(plain(b)), p: 0.9, tolerance: TOLERANCE.plainP90Ms, minimum: MINIMUM.plainTurns, rule: 'B p90 <= A p90 + 600 ms' }),
-    quantileCheck({ id: 'C1.tool.p50', label: 'tool turns (conversation), p50', a: lat(tool(a)), b: lat(tool(b)), p: 0.5, tolerance: TOLERANCE.toolP50Ms, minimum: MINIMUM.toolTurns, rule: 'B p50 <= A p50 + 300 ms' }),
+    quantileCheck({ id: 'C1.tool.p50', label: 'tool turns (conversation and the `tools` set), p50', a: lat(tool(a)), b: lat(tool(b)), p: 0.5, tolerance: TOLERANCE.toolP50Ms, minimum: MINIMUM.toolTurns, rule: 'B p50 <= A p50 + 300 ms' }),
     quantileCheck({ id: 'C1.interviewTool.p50', label: 'interview answers that start a look-up, p50', a: lat(interviewTool(a)), b: lat(interviewTool(b)), p: 0.5, tolerance: TOLERANCE.toolP50Ms, minimum: MINIMUM.interviewToolTurns, rule: 'B p50 <= A p50 + 300 ms' }),
   ];
   const info: Criterion['info'] = [];
@@ -606,6 +612,23 @@ function c1(a: ChainData, b: ChainData): Criterion {
   const earlyLatency = (d: ChainData) => d.trials.filter((t) => !t.incomplete && t.mode === 'chat' && t.class === 'latency' && t.early).length;
   info.push(infoRow('latency prompts answered before UE + 300 ms (left out of the latency; no turn latency is defined for them)', 'count', earlyLatency(a), earlyLatency(b), a.trials.length, b.trials.length));
   info.push(infoRow('parts of the latency (recognizer final, first token, first sentence, TTS first byte)', 'count', null, null, 0, 0, 'server-side: in the lab trace (turns.jsonl), not visible to a client'));
+  // the `tools` set's prompts that the tool line above does not hold (only when a log has any, so that the report of a round-1 directory stays as it was): a prompt is a tool turn by 9.2 only when a
+  // `working` status came before the first agent audio; one that did not (the model answered without a look-up, or said a line first and began the look-up after it, or never answered) is a plain turn by
+  // that rule, but not one of the latency prompts the plain line is made of, so it would be in no line at all without this row
+  const toolPrompts = (d: ChainData) => d.trials.filter((t) => !t.incomplete && t.mode === 'chat' && t.class === 'tool');
+  const leftOut = (d: ChainData) => toolPrompts(d).filter((t) => !t.tool || t.early);
+  if (toolPrompts(a).length || toolPrompts(b).length) {
+    info.push(
+      rateInfo(
+        'tool prompts left out of the tool line (the `tools` set): not a tool turn by 9.2 (no `working` before the first agent audio, or no answer), or answered before UE + 300 ms',
+        leftOut(a).length,
+        toolPrompts(a).length,
+        leftOut(b).length,
+        toolPrompts(b).length,
+        'counted in no latency line: not as plain turns (the plain line is the latency prompts) and not as cut-ins (C2 is the pause and filler scenarios)',
+      ),
+    );
+  }
   return { id: 'C1', title: 'End of speech to first audio', verdict: rollUp(checks), checks, info };
 }
 
@@ -818,7 +841,7 @@ export const DEFINITIONS: string[] = [
   'Times are milliseconds on the client\'s one monotonic clock; a difference is B (the lab) minus A (live). UE is the send time of the frame that carries the last speech sample of the last segment (exact to one frame); a frame is sent when it is due, 40 ms apart.',
   'Call start is the moment `start` was sent (the socket\'s connect time is not in it; it is in the log). Greeting audio is the first binary frame of the call. A call that never got greeting audio counts as an infinite greeting time in the p50.',
   'Turn latency is the first agent audio frame at or after UE minus UE. A turn is a tool turn when a `status working` arrived between UE and that frame, a plain turn otherwise. A turn whose answer never came counts as an infinite latency in its class (it is never dropped); a latency prompt answered before UE + 300 ms has no turn latency and is counted apart.',
-  'The plain-turn criterion uses the 10 latency prompts only (the document\'s 30 turns). Tool turns are all conversation turns (latency, pause, short, filler) that started a look-up. "Interview answers with evaluate_answer" cannot be seen from a client (the browser protocol carries no function names): the proxy is a tool turn in a call started in interview mode.',
+  'The plain-turn criterion uses the 10 latency prompts only (the document\'s 30 turns). Tool turns are all conversation turns (latency, pause, short, filler, and the `tool` prompts of the `tools` set of round 2) that started a look-up; a `tool` prompt that did not (no `working` before its first agent audio) is counted in no latency line and is reported in its own row. "Interview answers with evaluate_answer" cannot be seen from a client (the browser protocol carries no function names): the proxy is a tool turn in a call started in interview mode.',
   'End-of-turn (EOT) latency (amendment A1) is the arrival of the first `transcript` event with role user AT OR AFTER UE, minus UE: a line that arrived before UE belongs to a fragment. A scenario with no such line has no EOT latency and counts as not committed: it is reported (and warned about), it counts as a too-long wait (amendment A4: the page never learned that the turn ended), and for the short scenarios C2 also requires a line in every trial.',
   'Cut-in (amendment A1; pause and filler scenarios, and the interview and talk-through ones): an agent audio frame that arrives before UE + 300 ms, UE being the end of the last segment. Not counted: the greeting, a filler the session injects while a function runs (a run of speech that follows a `working` status), and any run of speech that began before the scenario did (a late answer). More than one user turn is no longer a cut-in: those scenarios are reported as split lines (k/n, with the cut-in rates, never pass/fail): the lab may commit early and take the commit back before any audio when the student goes on. The window of a scenario runs from its first frame to the moment the next one begins (after the answer and 1.5 s of quiet).',
   'Barge-in: the onset is the send time of the frame that carries the first speech sample of the interruption. The stop time is the first `agent_interrupted` at or after it; the audio stop is the last agent frame between the onset and the first user transcript after it (0 when none): later frames answer the interruption. No `agent_interrupted` is an infinite stop time. An interruption over an agent that was not audible at the onset (playout clock: audio received so far, played back to back; audio that ended less than 150 ms earlier still counts) is not a barge-in and is counted apart.',
@@ -849,7 +872,7 @@ export function analyzeLogs(rawA: RawCall[], rawB: RawCall[], options: AnalyzeOp
   const prints = [...new Set(all.map((c) => c.header.testset?.sha256).filter((s): s is string => !!s))];
   const frozen = prints.length === 1 && prints[0] === FROZEN_SHA256;
   if (prints.length === 0) warnings.push('no raw log carries a test-set fingerprint: it cannot be said that the frozen test set was used');
-  else if (!frozen) warnings.push(`the test set of these logs is NOT the frozen one of docs 9.7 (sha256 ${prints.map((p) => p.slice(0, 12)).join(', ')}, frozen ${FROZEN_SHA256.slice(0, 12)}): do not read this as a criterion result`);
+  else if (!frozen) warnings.push(`the test set of these logs is NOT the frozen one of docs 9.7 (the frozen round-1 set is sha256 ${FROZEN_SHA256.slice(0, 12)}; these logs carry sha256 ${prints.join(', ')}): do not read this as a round-1 criterion result`);
   if (options.tuning) warnings.push('TUNING LOGS ONLY: these numbers tune the end-of-turn and barge-in parameters and are not a criterion result');
   if (ua.length === 0) warnings.push('chain A (live) has no usable call: nothing can be compared');
   if (ub.length === 0) warnings.push('chain B (lab) has no usable call: nothing can be compared');
@@ -967,7 +990,9 @@ export function renderReport(r: Report): string {
   out.push('');
   out.push(`Generated ${r.generated}. Chain A = ${r.a.label} (today's call, "live"), chain B = ${r.b.label} (the lab). A difference is B minus A. Criteria of docs/VOICE_SELFBUILT.md 9.4 that a client can measure: C0, C1, C2, C3, C10 (C4 to C9 and C11 are measured elsewhere; the verdict of 9.6 also needs the owner's real calls).`);
   out.push('');
-  out.push(`Test set: ${r.testset.fingerprints.length ? r.testset.fingerprints.map((p) => p.slice(0, 16)).join(', ') : 'unknown'} (${r.testset.frozen ? 'the frozen one of 9.7' : 'NOT the frozen one'}).`);
+  // the whole sha256 when it is not the frozen one (that is the value a later round records for its own test set); the frozen one is known by its first characters
+  const shownPrint = (p: string): string => (r.testset.frozen ? p.slice(0, 16) : p);
+  out.push(`Test set: ${r.testset.fingerprints.length ? r.testset.fingerprints.map(shownPrint).join(', ') : 'unknown'} (${r.testset.frozen ? 'the frozen one of 9.7' : `NOT the frozen one: not the frozen round-1 set of 9.7, sha256 ${FROZEN_SHA256.slice(0, 12)}`}).`);
   out.push('');
   for (const s of [r.a, r.b]) {
     const modes = (['chat', 'interview', 'talk'] as const).filter((m) => s.byMode[m]).map((m) => `${s.byMode[m]} ${m}`).join(', ');

@@ -718,6 +718,120 @@ describe('C1, end of speech to first audio', () => {
   });
 });
 
+describe('the `tools` set (class `tool`, round 2)', () => {
+  /** A call of the `tools` set: n prompts of class `tool`, each a tool turn (a `working` status before the first audio) with this latency, unless `over` says otherwise. */
+  const toolsCall = (chain: string, minute: number, n: number, latency: number, over: (i: number) => Partial<Omit<TurnSpec, 'at'>> = () => ({})): RawCall =>
+    chatCall(chain, lat(n, latency).map((l, i) => ({ id: `x0${i + 1}`, cls: 'tool' as const, latency: l, tool: true, ...over(i) })), { set: 'tools', minute });
+  /** the tool line's row, or the row of the `tool` prompts it leaves out */
+  const leftOutRow = (r: Report) => r.criteria[1].info.find((i) => i.label.startsWith('tool prompts left out of the tool line'));
+
+  it('counts the `tool` prompts in C1\'s tool-turn line (n >= 15), judges them at +300 ms, and pools them with the tool turns of the conversation classes', () => {
+    const live = [toolsCall(A, mA(0), 8, 3000), toolsCall(A, mA(1), 8, 3000)];
+    const r = analyzeLogs(live, [toolsCall(B, mB(0), 8, 3300), toolsCall(B, mB(1), 8, 3300)]);
+    expect(check(r, 'C1.tool.p50')).toMatchObject({ a: 3000, b: 3300, diff: 300, nA: 16, nB: 16, verdict: 'PASS' });
+    expect(check(r, 'C1.tool.p50').label).toContain('the `tools` set'); // the line says what it is made of
+    expect(check(analyzeLogs(live, [toolsCall(B, mB(0), 8, 3301), toolsCall(B, mB(1), 8, 3301)]), 'C1.tool.p50').verdict).toBe('FAIL');
+    expect(check(analyzeLogs(live, [toolsCall(B, mB(0), 7, 3000), toolsCall(B, mB(1), 7, 3000)]), 'C1.tool.p50')).toMatchObject({ nB: 14, verdict: 'INSUFFICIENT' }); // never a pass on 14
+    // the tool turns of the other sets (here four pause scenarios of another session) are in the same line
+    const pausesA = chatCall(A, lat(4, 3000).map((latency, k) => ({ id: `e-p${k}`, cls: 'pause' as const, latency, tool: true })), { minute: mA(2) });
+    const pausesB = chatCall(B, lat(4, 3000).map((latency, k) => ({ id: `e-p${k}`, cls: 'pause' as const, latency, tool: true })), { minute: mB(2) });
+    const pooled = analyzeLogs([...live, pausesA], [toolsCall(B, mB(0), 6, 3000), toolsCall(B, mB(1), 6, 3000), pausesB]);
+    expect(check(pooled, 'C1.tool.p50')).toMatchObject({ nA: 20, nB: 16, verdict: 'PASS' });
+    // a prompt that began a look-up and was never answered is an infinite latency in that line (never dropped), as for every class
+    const stuck = analyzeLogs(live, [toolsCall(B, mB(0), 8, 3000, (i) => (i < 5 ? { latency: null, eot: null } : {})), toolsCall(B, mB(1), 8, 3000, (i) => (i < 4 ? { latency: null, eot: null } : {}))]);
+    expect(check(stuck, 'C1.tool.p50')).toMatchObject({ nB: 16, bCensored: true, verdict: 'FAIL' }); // 9 of 16: the median is a turn with no answer
+  });
+
+  it('is no plain turn, no cut-in, no barge-in and no mode trial: a `tools` log, however bad, moves none of the other lines of the report', () => {
+    const calls = (chain: string, minute: (i: number) => number) => [
+      ...latencyChain(chain, minute, lat(30, 1000)),
+      chatCall(chain, lat(30, 0).map((_, i) => ({ id: `e-p${i}`, cls: 'pause' as const })), { minute: minute(3) }),
+      chatCall(chain, lat(30, 0).map((_, i) => ({ id: `e-s${i}`, cls: 'short' as const })), { minute: minute(4) }),
+    ];
+    // very slow, one with agent audio before the end of speech (a cut-in if it counted), one with no answer and no look-up, one with two user lines
+    const nasty = (chain: string, minute: number) => toolsCall(chain, minute, 8, 40_000, (i) => (i === 0 ? { early: -700 } : i === 1 ? { latency: null, eot: null, tool: false } : i === 2 ? { extraTranscript: -1000 } : {}));
+    const base = analyzeLogs(calls(A, mA), calls(B, mB));
+    const withTools = analyzeLogs([...calls(A, mA), nasty(A, mA(5))], [...calls(B, mB), nasty(B, mB(5))]);
+    for (const id of ['C1.plain.p50', 'C1.plain.p90', 'C2.cutin', 'C2.toolong', 'C2.short', 'C3.interrupted.p50', 'C3.audioStop.p90', 'C10.interview.cutin', 'C10.talk.cutin']) {
+      const x = check(base, id);
+      const y = check(withTools, id);
+      expect([id, y.a, y.b, y.nA, y.nB, y.verdict]).toEqual([id, x.a, x.b, x.nA, x.nB, x.verdict]);
+    }
+    expect(check(withTools, 'C2.cutin')).toMatchObject({ nA: 30, nB: 30, bRate: { k: 0, n: 30 } }); // the 30 pause scenarios: the tool prompt with audio before the end of speech is no cut-in
+    expect(check(withTools, 'C2.short').nB).toBe(30); // only the 30 short scenarios
+    expect(check(withTools, 'C2.toolong')).toMatchObject({ nB: 60, bRate: { k: 0, n: 60 } }); // pause and short: the tool prompt that was never committed is no too-long wait
+    expect(check(withTools, 'C3.falseBarge').b).toBe(0); // (its denominator, the agent's turns outside scripted speech, does grow: the tool answers are agent turns)
+    const row = (r: Report, label: string) => r.criteria.flatMap((c) => c.info).find((i) => i.label.startsWith(label))!;
+    for (const label of [
+      'end-of-turn latency (transcript after UE), chat turns, p50',
+      'end-of-turn latency (transcript after UE), chat turns, p90',
+      'plain turns of all conversation scenarios (latency, pause, short, filler), p50',
+      'plain turns of all conversation scenarios (latency, pause, short, filler), p90',
+      'turns with no answer',
+      'latency prompts answered before UE + 300 ms',
+      'split lines, pause and filler scenarios',
+      'not committed: no user line at or after UE (pause, short, filler)',
+    ]) {
+      const x = row(base, label);
+      const y = row(withTools, label);
+      expect([label, y.a, y.b]).toEqual([label, x.a, x.b]);
+    }
+    // what the tool prompts do change is the tool line and the row that accounts for the ones it leaves out: 6 of the 8 are tool turns of the line (the early one and the one with no look-up are not)
+    expect(check(withTools, 'C1.tool.p50')).toMatchObject({ nA: 6, nB: 6, a: 40_000, b: 40_000 });
+    expect(check(base, 'C1.tool.p50')).toMatchObject({ nA: 0, nB: 0, verdict: 'NO DATA' });
+    expect(leftOutRow(withTools)).toMatchObject({ aRate: { k: 2, n: 8 }, bRate: { k: 2, n: 8 } });
+  });
+
+  it('puts a `tool` prompt that is not a tool turn by 9.2 in one row of its own: no `working` before the first audio, a spoken line before the look-up, no answer and no look-up, or an answer before UE + 300 ms', () => {
+    const turns = (chain: string, minute: number) =>
+      toolsCall(chain, minute, 6, 3000, (i) => [{}, { tool: false }, { tool: 3500 }, { latency: null, eot: null, tool: false }, { early: 100 }, { latency: null, eot: null }][i]);
+    const r = analyzeLogs([turns(A, mA(0))], [turns(B, mB(0))]);
+    // x01 is a tool turn; x02 had no look-up; x03 said a line first (first audio at UE + 3000, `working` at UE + 3500: a plain turn by the rule); x04 was never answered and had no look-up;
+    // x05 was answered at UE + 100; x06 began a look-up and was never answered (an infinite latency of the tool line, not left out)
+    expect(check(r, 'C1.tool.p50')).toMatchObject({ nA: 2, nB: 2, bCensored: false }); // x01, and x06 as an infinite latency: the median of two is the smaller
+    const row = leftOutRow(r)!;
+    expect([row.aRate!.k, row.aRate!.n, row.bRate!.k, row.bRate!.n]).toEqual([4, 6, 4, 6]);
+    expect(row.note).toMatch(/counted in no latency line/);
+    expect(renderReport(r)).toMatch(/\| tool prompts left out of the tool line \(the `tools` set\): .* \| 4\/6 = 66\.7 % \[30\.0, 90\.3\] \| 4\/6 = 66\.7 % \[30\.0, 90\.3\] \| 6 \/ 6 \|/);
+    // the unanswered prompt without a look-up is not in the "no answer" row of the conversation classes either
+    const unanswered = r.criteria[1].info.find((i) => i.label.startsWith('turns with no answer'))!;
+    expect([unanswered.a, unanswered.b]).toEqual([0, 0]);
+  });
+
+  it('adds no row to a report with no `tool` prompt in it (a round-1 directory reads as it did)', () => {
+    const r = analyzeLogs(latencyChain(A, mA, lat(30, 1000)), latencyChain(B, mB, lat(30, 1000)));
+    expect(leftOutRow(r)).toBeUndefined();
+    expect(renderReport(r)).not.toContain('tool prompts left out');
+  });
+
+  it('reads logs of the `tools` set as evaluation logs (never as tuning), counts the set, and takes any labels: a chain called FD against L, or H against C', () => {
+    const r = analyzeLogs([toolsCall('L', 0, 8, 3000)], [toolsCall('FD', 1, 8, 3000)]);
+    expect([r.a.label, r.b.label]).toEqual(['L', 'FD']);
+    expect(r.a.bySet).toEqual({ tools: 1 });
+    expect(r.excluded.otherSets).toBe(0);
+    expect(r.warnings.join(' ')).not.toMatch(/both directories hold chain/);
+    expect(renderReport(r)).toMatch(/- Chain FD: 1 call\(s\) \(1 chat; sets: tools 1\), 8 scenarios/);
+    const labels = analyzeLogs([toolsCall('H', 0, 8, 3000)], [toolsCall('C', 1, 8, 3000)]);
+    expect([labels.a.label, labels.b.label]).toEqual(['H', 'C']);
+    expect(check(labels, 'C1.tool.p50')).toMatchObject({ nA: 8, nB: 8, a: 3000, b: 3000 });
+    const tuning = analyzeLogs([toolsCall('L', 0, 8, 3000)], [toolsCall('FD', 1, 8, 3000)], { tuning: true });
+    expect(tuning.a.calls).toBe(0);
+    expect(tuning.excluded.otherSets).toBe(2);
+  });
+
+  it('says in the warning and in the report line that a test set is not the frozen round-1 one, with its whole sha256; the frozen one is still known by its first characters', () => {
+    const sha = 'ab'.repeat(32);
+    const testset = { sha256: sha, blob: 'a'.repeat(40) };
+    const other = analyzeLogs([new CallBuilder(A, { testset }).build()], [new CallBuilder(B, { testset }).build()]);
+    expect(other.warnings.join(' ')).toMatch(/NOT the frozen one of docs 9\.7 \(the frozen round-1 set is sha256 89b4b8d2a105; these logs carry sha256 ab/);
+    expect(other.warnings.join(' ')).toContain(`these logs carry sha256 ${sha})`);
+    expect(other.warnings.join(' ')).toContain('do not read this as a round-1 criterion result');
+    expect(renderReport(other)).toContain(`Test set: ${sha} (NOT the frozen one: not the frozen round-1 set of 9.7, sha256 89b4b8d2a105).`);
+    const frozen = analyzeLogs([new CallBuilder(A).build()], [new CallBuilder(B).build()]);
+    expect(renderReport(frozen)).toContain('Test set: 89b4b8d2a1056898 (the frozen one of 9.7).');
+  });
+});
+
 describe('C2, turn-taking in conversation', () => {
   /** n trials of a class, the first `cut` of them cut in on (agent audio in the pause, and the line of a commit that was taken back) */
   const trials = (cls: 'pause' | 'filler' | 'short', n: number, cut = 0, over: Partial<TurnSpec> = {}): Array<Omit<TurnSpec, 'at'>> =>

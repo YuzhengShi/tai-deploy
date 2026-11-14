@@ -3,7 +3,7 @@
  *
  * `runCall` connects, sends `start` in the mode under test, waits for `ready` and for the greeting to end, then plays the scenarios one after
  * the other: the scenario's audio into the microphone stream, silence until the agent has answered (an agent audio frame after the end of
- * speech, then `status listening`) or 25 s have passed, then 1.5 s of quiet (and `listening`) before the next one. A barge-in scenario plays the
+ * speech, then `status listening`) or 25 s have passed (90 s for a `tool` scenario of the `tools` set, whose look-up can take a minute), then 1.5 s of quiet (and `listening`) before the next one. A barge-in scenario plays the
  * question, waits for the agent to be audible `afterFirstAudioMs` after the first frame of its answer and puts the interruption into the
  * stream there. It hangs up with `end` and writes the raw log: JSON lines, one file per call. The raw log is the evidence: `analyze.ts` reads
  * nothing else, so everything it needs is in the lines below (their types are exported from here and are all the analysis imports of this file).
@@ -26,8 +26,9 @@ export interface CallHeader {
   v: number;
   /** unique per attempt; names the file */
   callId: string;
-  /** the label of the chain under test (L, D, C ...) */
+  /** the label of the chain under test (L, D, H, FD, C ...) */
   chain: string;
+  /** the whole route the call was made on, with its query when it had one (`api/voice-lab?chain=h`) */
   path: string;
   mode: CallMode;
   /** the set the scenarios came from (latency, pause, ..., tuning) */
@@ -188,6 +189,12 @@ export interface RunTiming {
   greetingEndMs: number;
   /** no answer within this long of the end of speech: the scenario goes on (docs 9.2: 25 s) */
   answerCapMs: number;
+  /**
+   * the same for a scenario of class `tool` (the `tools` set, docs A12): a request that makes the model run a look-up that takes a while (a code run takes up to a minute, and the first
+   * look-up of a call can wait 30 s or more for its tool host). Also how long the quiet wait of such a scenario reaches, counted from the end of speech, and what a `tool` scenario reserves
+   * of the call's time before it begins.
+   */
+  toolAnswerCapMs: number;
   /** quiet time (status listening, no agent audio) required before the next scenario (docs 9.2: 1.5 s more silence) */
   settleMs: number;
   /** how long to wait for the quiet to be reached before going on anyway */
@@ -201,10 +208,16 @@ export const DEFAULT_TIMING: RunTiming = {
   greetingWaitMs: 6_000,
   greetingEndMs: 20_000,
   answerCapMs: 25_000,
+  toolAnswerCapMs: 90_000,
   settleMs: 1_500,
   quietCapMs: 20_000,
   closeWaitMs: 10_000,
 };
+
+/** How long a scenario of this class waits for its answer: the usual cap, or a `tool` scenario's own longer one. */
+export function answerCapFor(cls: ScenarioClass, timing: RunTiming): number {
+  return cls === 'tool' ? timing.toolAnswerCapMs : timing.answerCapMs;
+}
 
 export interface RunTarget {
   /** the portal's unix socket (on the host) */
@@ -213,7 +226,7 @@ export interface RunTarget {
   url?: string;
 }
 
-/** The URL of the call's WebSocket: ws+unix:<socket>:/<path> or <base>/<path>. */
+/** The URL of the call's WebSocket: ws+unix:<socket>:/<path> or <base>/<path>. The route may end in a query (`api/voice-lab?chain=h`): it is kept as it is. */
 export function callUrl(target: RunTarget, route: string): string {
   const clean = route.replace(/^\/+/, '');
   if (target.socket) return `ws+unix:${target.socket}:/${clean}`;
@@ -223,7 +236,7 @@ export function callUrl(target: RunTarget, route: string): string {
 
 export interface RunOptions {
   chain: string;
-  /** the portal route, api/voice (live) or api/voice-lab */
+  /** the portal route, api/voice (live) or api/voice-lab, optionally with `?chain=d|h|fd|c` (the lab's chain of this call, docs A10) */
   path: string;
   mode: CallMode;
   /** the label of the set the scenarios belong to */
@@ -310,15 +323,15 @@ export function answeredAfter(client: CallClient, from: number): boolean {
 
 /**
  * Quiet: the agent's last status is `listening` (or it has none) and no agent audio arrived for `settleMs` (counted from `since` at the earliest).
- * True when it is reached, false when `quietCapMs` pass or the call closes first.
+ * True when it is reached, false when `capMs` (`quietCapMs`, unless the caller says otherwise) pass or the call closes first.
  */
-function settle(client: CallClient, timing: RunTiming, since: number): Promise<boolean> {
+function settle(client: CallClient, timing: RunTiming, since: number, capMs: number = timing.quietCapMs): Promise<boolean> {
   const quiet = (): boolean => {
     const last = client.audio.length ? client.audio[client.audio.length - 1].t : -Infinity;
     const status = lastStatus(client);
     return (status === null || status === 'listening') && client.now() - Math.max(last, since) >= timing.settleMs;
   };
-  return client.waitFor(quiet, timing.quietCapMs, 25);
+  return client.waitFor(quiet, capMs, 25);
 }
 
 export function makeCallId(chain: string, set: string, run: number, attempt: number, wall: string): string {
@@ -332,8 +345,9 @@ interface ScenarioOutcome {
   closed: boolean;
 }
 
-async function waitAnswer(client: CallClient, from: number, timing: RunTiming): Promise<WaitResult> {
-  const cap = Math.max(0, timing.answerCapMs - (client.now() - from));
+/** Waits for the answer to speech that ended at `from`, until `capMs` have passed since then (the class's cap, see `answerCapFor`). */
+async function waitAnswer(client: CallClient, from: number, capMs: number): Promise<WaitResult> {
+  const cap = Math.max(0, capMs - (client.now() - from));
   const ok = await client.waitFor(() => answeredAfter(client, from), cap);
   return ok ? 'answered' : client.closed ? 'closed' : 'timeout';
 }
@@ -395,7 +409,7 @@ async function interrupt(client: CallClient, plan: ScenarioPlan, ueSentAt: numbe
     line.wait = 'closed';
     return line;
   }
-  line.wait = await waitAnswer(client, line.endSentAt, timing);
+  line.wait = await waitAnswer(client, line.endSentAt, timing.answerCapMs);
   return line;
 }
 
@@ -451,9 +465,14 @@ async function playScenario(client: CallClient, plan: ScenarioPlan, timing: RunT
     line.wait = bi.wait ?? (bi.skipped === 'closed' ? 'closed' : 'timeout');
     if (bi.endSentAt !== null) since = bi.endSentAt;
   } else {
-    line.wait = await waitAnswer(client, ueSentAt, timing);
+    line.wait = await waitAnswer(client, ueSentAt, answerCapFor(plan.class, timing));
   }
-  if (!client.closed) line.settled = await settle(client, timing, since);
+  if (!client.closed) {
+    // `listening` can come in the middle of a look-up (a spoken line before the call, say) and the look-up go on for a minute: a `tool` scenario's quiet wait reaches to the end of its own cap,
+    // counted from the end of speech, so that the next scenario does not play over the answer
+    const quietCap = plan.class === 'tool' ? Math.max(timing.quietCapMs, timing.toolAnswerCapMs - (client.now() - ueSentAt)) : timing.quietCapMs;
+    line.settled = await settle(client, timing, since, quietCap);
+  }
   line.end = round2(client.now());
   return { line, closed: client.closed };
 }
@@ -568,7 +587,8 @@ export async function runCall(opts: RunOptions): Promise<RunResult> {
             break;
           }
           const streamMs = plan.built.pcm.length / 32;
-          const needed = streamMs + (plan.interruption ? 24_000 : 12_000);
+          // what the scenario may still take after its stream: a barge-in has two answers, a `tool` scenario waits as long as its cap allows
+          const needed = streamMs + (plan.interruption ? 24_000 : plan.class === 'tool' ? timing.toolAnswerCapMs + timing.settleMs : 12_000);
           if (Number.isFinite(maxSeconds) && maxSeconds > 0 && client.now() - readyAt + needed > maxSeconds * 1000) {
             skipped = opts.scenarios.slice(i).map((p) => p.id);
             reason = 'time-limit';

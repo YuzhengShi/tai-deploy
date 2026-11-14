@@ -222,7 +222,9 @@ and 0.4 s and 0.8 s with three at once, at the median. `smoke.py` (three clips i
 comes 3.3 s after the start of the audio (the interim).
 
 **The mouth** (`smoke.py`, 5 steps, 2 threads per engine, three engines): first byte one at a time median 480 to 496 ms (max 1.03 to 1.08 s); three requests at once 0.8 to 1.5 s. A13's lines (300 ms alone, 500 ms with three at
-once) are not met; LabGPU's GPU adapter is at 115 ms (10.1). The knobs, `ST_STEPS` and `TTS_THREADS`, are in section 5.
+once) are not met; LabGPU's GPU adapter is at 115 ms (10.1). `docs/VOICE_SELFBUILT.md` 10.13 found the three-at-once line met with three staggered component streams (each one sentence after the other, p90 at most 418 ms);
+three requests at the same instant through the service is the harsher case, and a likely cause of the difference is the 4-CPU cap against three engines of 2 threads (not tested). The knobs, `ST_STEPS` and `TTS_THREADS`,
+are in section 5.
 
 **Load and memory.** The host's busy cores averaged 1.87 of 8 over the one-stream run and 3.43 of 8 over the three-stream run (the whole host, the live service's own use included): under A13's 4. The container's
 memory settles near 2.05 GiB (9.4).
@@ -245,12 +247,17 @@ restarted by `--restart unless-stopped`; the log shows one warning line in the w
 Before anything: no call in the last 3 hours, not during class (Wednesday 15:15 to 17:15 Pacific), `TAI_VOICE_DAILY_MIN` back at 45, the rollback material made first (`orch.env` and the build, as for every deploy).
 
 1. **Models** to a durable folder outside the release tree (a deploy replaces `~/tai-live/tai`): `~/voice-local/models/parakeet-tdt-0.6b-v2-int8` and `~/voice-local/supertonic/v1`, copied from the scratch folder, fingerprints checked against the PC's.
-2. **Image**: `docker build -t tai-local-voice:YYYYMMDD -t tai-local-voice:live deploy/cs6650/local-voice` (the layers are cached from the scratch build; the previous tag stays for the rollback).
+2. **Image**: the live tree (release 3afd82d) does not contain `deploy/cs6650/local-voice`, so ship the folder from the branch head to `~/voice-local/build` and build from it:
+   `docker build -t tai-local-voice:YYYYMMDD -t tai-local-voice:live ~/voice-local/build` (the pip layer is cached from the scratch build, so it takes seconds). Never retag `tai-local-voice:scratch`: it was built before the last
+   edits (the warning text of `server.py`, the tests). The previous `:live` tag, if any, stays for the rollback.
 3. **Network and container** as in the README (`tai-voice-net`, 172.29.88.2, the hardening flags, `--restart unless-stopped`); wait for `/health` from the host.
 4. **`check_egress.sh all`** against `tai-local-voice:live`: it must print PASS (the control asks, the shipped image and the running service do not).
 5. **Lab settings** (orch.env, with `tai_live.sh set`, then `restart` with no call on): `TAI_VOICE_LAB_EARS_URL=ws://172.29.88.2:18800/v1/listen` and `TAI_VOICE_LAB_TTS_URL=http://172.29.88.2:18800`. For calls that
    keep the audio and the text inside, also `TAI_VOICE_LAB_SHADOW_EARS=none`, `TAI_VOICE_LAB_EARS_FALLBACK=none` and `TAI_VOICE_LAB_MOUTH_FALLBACK=none` (strict: a failure of the service is a failed call; with the fallbacks left on a
    failure is hidden and the audio goes to Deepgram, which makes a judgement of the local chain meaningless). The voice is `TAI_VOICE_LAB_LABGPU_VOICE` (default `af_bella` = style F1; `F2` is the other candidate). `?chain=d|h|fd|c`
-   routes keep their Deepgram parts whatever is set; `TAI_VOICE_LAB_TEMPO` stays 0.
+   routes keep their Deepgram parts whatever is set; `TAI_VOICE_LAB_TEMPO` stays 0. **The URLs are global:** pointing them at the service turns the LabGPU parts of the `?chain=d|h|fd` routes into the local service as
+   well (d becomes local ears and mouth with the Flux shadow and fallbacks, h the same with the eager end of turn, fd Flux ears and the local mouth; c, Flux and Aura, is unchanged), so after this change the round-2 chain
+   labels no longer mean what they meant in 10.10 of `docs/VOICE_SELFBUILT.md`. The route without a chain, `api/voice-lab`, runs on the process settings and is the one that is local in the strict sense. The installed
+   unit (`tai-live`) has no network restriction (`PrivateNetwork=no`, no `IPAddressDeny`, `RestrictAddressFamilies` empty: read on the host 2026-11-14), so it reaches 172.29.88.2 as the measuring client did.
 6. **A synthetic call through the lab's route** with the measuring client (one scenario), then the owner calls it himself; a window (`TAI_VOICE_DAILY_MIN` raised for its length and put back) only if he wants numbers.
 7. **Rollback**: restore `orch.env` from the rollback material, `restart`, `docker stop tai-local-voice`; nothing else was changed.

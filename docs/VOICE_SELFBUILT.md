@@ -379,6 +379,58 @@ The owner put his reason for the whole experiment in his own words while round 2
 
 **At the scale of the course** (an assumption, since no student has used voice yet: about 10 students, 30 to 60 minutes a week, 14 weeks, so 70 to 140 hours): $270 to $550 a semester at $3.90/h, $27 to $55 at fd's $0.39/h. What "free" does not remove: LabGPU's adapter decodes one stream at a time, Nora shares it, the host lets three calls run at once (C9 was never run), there is one English voice, and the adapter takes no key terms (C6b).
 
+### 10.10 Round 2 results: the measurement window (2026-11-14, 17:00:01 to 18:47:32 UTC; A12 to A12e)
+
+**What ran.** Deploy 16:49:44 UTC (release commit `3afd82d`), `TAI_VOICE_DAILY_MIN` 300 for the window and back at 45 at 18:49 (a restart with no call on). The test identity's sessions, the chains interleaved in the order L, D, H, FD, C: latency (four rounds, the fourth by A12d), bargein (L, D, FD; two rounds), tools (L, D, H; two rounds). Calls: L 8, D 8, H 6, FD 6, C 4, every one ended "done" and none repeated; the day's minutes of the test identity went from 124.1 to 229.4 (about 105 in the window). The first round's labels were checked as A12a says: every turn carried its chain, ears and mouth, h, fd and c showed adopted eager requests, nothing fell back. Not run: the turn-taking regression (A12b), FD in the tools session (A12e); so C2 and C10 are not evaluated, and the tool's rows for C1, C2 and C10 read "INSUFFICIENT" only because the parts that were not run have no data.
+
+**C1, plain turns of the latency set (client clock; L 39 turns, the others 40; the minimum is 30).** All eight checks are inside the tolerances (p50 at most +300 ms, p90 at most +600 ms).
+
+| chain | p50 ms (L 2069) | difference, 95 % interval | p90 ms (L 2596) | difference, 95 % interval |
+|---|---|---|---|---|
+| D | 2293 | +224 [+46, +410] | 2770 | +174 [-196, +438] |
+| H | 1849 | -220 [-439, +46] | 2388 | -208 [-579, +217] |
+| FD | 1591 | -478 [-575, -79] | 2421 | -175 [-567, +98] |
+| C | 1891 | -177 [-340, +66] | 2331 | -265 [-551, +67] |
+
+D is distinguishably slower at p50 (the interval is above zero) but inside the tolerance; FD is distinguishably faster at p50. Tool turns (D and H against L, 17 and 16 turns): p50 L 4580 ms, D 4307 (-274 [-1140, +614]), H 4544 (-36 [-1094, +407]), inside the tolerance and not distinguishable; FD and C had none (not in that session). The first three rounds alone (A12d) read: L 2080, D +213, H -127, FD -442, C -189 at p50, with L at 29 plain turns, below the minimum.
+
+**C3, 24 interruptions per chain (false barge-ins counted over the agent turns with a silent student).**
+
+| | L | D | FD |
+|---|---|---|---|
+| agent_interrupted after the onset, p50 / p90 (ms) | 344 / 464 | 178 / 217 | 179 / 296 |
+| last agent audio frame after the onset, p90 (ms) | 412 | 190 | 197 |
+| false barge-ins | 0 of 121 | 0 of 120 | 0 of 94 |
+
+PASS for D and FD on all four checks. D's p90 is distinguishably faster than L's (-247 [-300, -84]); FD's is not distinguishable (-168 [-287, +228]). H and C were not in the session. The one scenario per FD call that the client counted as "not answered" (11 of 12 answered, twice) was an answer longer than the client's 25 s wait: in the raw log of the first, the agent's answer to the interruption began at 209.6 s and ended at 234.9 s, and the transcript is there.
+
+**C4, fillers (the lab's trace, d and h).** d: 33 turns with a function, 8 fillers, injection to first audio p50 10 ms and p90 10 ms (limit 300), none without audio; functions of 2 s or more: 4 turns, every one with a filler; of 1.2 s or less: 29 turns, none with a filler; over 7 s: 4 turns, every one with a second line. h: 16 turns with a function, 4 fillers, p50 9 and p90 10 ms; 2 turns of 2 s or more, both with a filler; 14 of 1.2 s or less, none with one; 2 over 7 s, both with a second line. PASS for both. (L's own fillers, seen from the client: 5 of 16 tool turns, first audio p50 197 and p90 469 ms after the moment due; the client cannot see why a wait was long, so nothing is claimed about L's missing ones.)
+
+**C12.** (a) Functions started before their turn's commit: 0 in 588 turns. (b) No repaired request and no failed think step in the lab's journal lines of the window (65 lines, the tool host starting or being reused). (c) 183 eager requests over the 187 turns of h, fd and c (0.98 a turn, the limit being 1.5): 171 adopted, 6 dropped on `TurnResumed`, 6 on the engine's own speech detection; the model had been asked p50 400 ms and p90 800 ms before the turn was confirmed.
+
+**Incidents and caveats.** One Deepgram `THINK_REQUEST_FAILED` (502 Bad Gateway) at 17:00:23, in the first L call, while its tool host took 19 s to start; the edge's socat logged a broken pipe in the same second; it is the only one in the ten days of retained journal (the 20 earlier lines with that code were the lab's own history defect of the morning). One "post-call write failed" per call (the test identity has no chats row; known, harmless). Nora's container opens one short connection to `:8803` about every 110 s (a probe, not a session): 30 of the sampler's 3,156 samples (1.0 %); flagged turns d 5 of 106, h 7 of 56, fd 9 of 91, c 1 of 40; the p50 of the whole wait with and without them differs by at most 4 ms, the end-of-turn wait p50 by at most 18 ms, and at p90 only h's whole wait differs (5193 against 4849 ms over 7 flagged turns, tool turns included).
+
+**Verdict by component (A8, read with A12b and A12e; provisional: synthetic voices, small n).** *Orchestration* (our turn-taking, barge-in, fillers and functions, FD and C against L): C1 passes (FD faster at p50, C and H inside the tolerance), C3 passes for FD, C4 passes on d and h (the same engine and mouth), C12 passes; turn-taking (C2, C10) and FD's own tool turns were not measured in round 2: **at parity or better where it was measured.** *Mouth* (LabGPU's TTS in d, h and FD): fast (fillers 10 ms after injection) and no failure seen; its voice, its pace and how it holds with several calls at once (C9) are not measured, and it has one voice. *Ears* (LabGPU's recognizer): worse than Flux's and slower (10.8, C6b). *Whole chain d, as it stands:* C1 (+224 ms at p50), C3, C4 and C12 pass, C6 fails: **"does not (provisional)" because of LabGPU's ears alone**, and no longer because of the latency or the barge-in. *FD* keeps Flux's ears, so C6 does not apply to it.
+
+### 10.11 The local trial, stage 1 (this PC, 2026-11-14 evening; A13, A13a, A13b)
+
+The owner's question and approval are in A13. Files on `D:\tai-voice-local` (outside the repository), run with `eval/voice-local/asr_bench.py` and `tts_bench.py`; scoring by `recognize.js compare` on the host, the same scorer as C6b. Only accuracy is read from the PC.
+
+| set 2 (128 utterances, 272 key-term instances) | WER | key terms | against Flux (87.1 %, 3.73 %) |
+|---|---|---|---|
+| Z, streaming Zipformer, raw | 24.17 % | 83 / 272 = 30.5 % | far outside |
+| Z + layer | 21.95 % | 98 / 272 = 36.0 % | far outside |
+| Z + hotwords (score 3) | 21.23 % | 130 / 272 = 47.8 % | far outside |
+| Z + hotwords + layer | 15.31 % | 169 / 272 = 62.1 % | recall -25.0 points [-31.0, -18.8], WER +11.59: fails |
+| **P, Parakeet-TDT-0.6B-v2 int8, raw** | **3.89 %** | **224 / 272 = 82.4 %** | recall **-4.8 points [-9.0, -0.7]**, WER **+0.16 [-0.84, +1.16]**: A13's clause holds on the point estimates; the interval of the recall difference does not show non-inferiority at this n |
+| P + layer (exploratory, A13) | 2.89 % | 234 / 272 = 86.0 % | recall -1.1 points [-5.5, +3.3], WER -0.84 [-1.72, +0.05] |
+
+For comparison, LabGPU raw has 5.96 % and 74.3 % on this set and Flux 3.73 % and 87.1 % (10.8). On set 1 (52 utterances, used only to choose the hotword score): Z 20.72 % and 38.9 %, with hotwords at score 3 and the layer 13.75 % and 69.4 %; P 3.12 % and 84.7 %, with the layer 2.14 % and 88.9 %. **P passes stage 1** (raw by 0.2 points of recall, with the layer comfortably); **Z fails** and is dropped. Speed on this PC (informational, 4 threads, Ryzen 5 6600H): P decodes a clip of about 6 s in p50 676 ms and p90 813 ms (decode time over audio time 0.114); Z's tail after the last chunk is about 70 ms.
+
+Mouth, this PC, 12 agent-style sentences one at a time: **Piper `en_US-lessac-medium`**: first audio of a sentence p50 289 ms and p90 424 ms with 4 threads (real-time factor 0.081; with 1 thread 565 and 778 ms, 0.154). **Kokoro int8 multi-lang v1.1**: a real-time factor of 2.0 to 2.5 on this CPU (6.6 to 8.1 s for a sentence): too slow here; the host's AMX and VNNI may change that, and it is re-tested there. sherpa-onnx 2.0.1 no longer phonemizes Piper voices itself, so the mouth runs in a second environment with 1.13.8. Listening samples (Piper, and Kokoro's three English voices at speeds 1.0 and 1.2) are in `D:\tai-voice-local\samples`.
+
+Stage 2 is next (A13): set 3 with the frozen configuration, Flux and LabGPU on it, the speeds on the host with three streams at once, and the owner's ears on the samples.
+
 ## 11. Amendments (changes to anything above after the commit that introduced it)
 
 **A1, 2026-11-14, made before any end-to-end number of the lab or of the live call on the test set existed (only the component probes of 10.1 were in): what a cut-in is, and which user line the end-of-turn wait is read from.**

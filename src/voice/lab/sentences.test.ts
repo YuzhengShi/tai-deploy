@@ -268,6 +268,63 @@ describe('SentenceCutter: the end of the stream', () => {
   });
 });
 
+describe('SentenceCutter: a short first sentence (firstMinWords)', () => {
+  function runFirst(pieces: string[], firstMinWords = 1): string[] {
+    const cutter = new SentenceCutter({ firstMinWords });
+    const out: string[] = [];
+    for (const piece of pieces) out.push(...cutter.push(piece));
+    out.push(...cutter.end());
+    return out;
+  }
+
+  it('releases a one-word opener as soon as it is complete, and joins later short sentences as before', () => {
+    const c = new SentenceCutter({ firstMinWords: 1 });
+    expect(c.push('Right')).toEqual([]);
+    expect(c.push('. ')).toEqual(['Right.']);
+    expect(c.push("Let's begin the demo now. ")).toEqual(["Let's begin the demo now."]);
+    expect(c.push('Okay. ')).toEqual([]); // not the first any more: held for the sentence after it
+    expect(c.push('Good. ')).toEqual([]);
+    expect(c.end()).toEqual(['Okay. Good.']);
+  });
+
+  it('is the default behaviour when the option is not given', () => {
+    expect(run(['Right. Let\'s begin the demo now. '])).toEqual(["Right. Let's begin the demo now."]);
+    expect(runFirst(['Right. Let\'s begin the demo now. '])).toEqual(['Right.', "Let's begin the demo now."]);
+  });
+
+  it('needs the given number of words with a letter in them', () => {
+    expect(runFirst(['Good question. Raft elects a leader. '], 2)).toEqual(['Good question.', 'Raft elects a leader.']);
+    expect(runFirst(['Right. Raft elects a leader. '], 2)).toEqual(['Right. Raft elects a leader.']);
+  });
+
+  it('does not take a list marker or a bare number for a sentence', () => {
+    expect(runFirst(['1. First, we elect a leader. '])).toEqual(['1. First, we elect a leader.']);
+    expect(runFirst(['42. That is the answer. '])).toEqual(['42. That is the answer.']);
+    expect(runFirst(['... Right. Next we go on. '])).toEqual(['... Right.', 'Next we go on.']);
+  });
+
+  it('still keeps an abbreviation, an initial or "No. 5" together', () => {
+    expect(runFirst(['Dr. Coady wrote it. '])).toEqual(['Dr. Coady wrote it.']);
+    expect(runFirst(['No. 5 is next. '])).toEqual(['No. 5 is next.']);
+    expect(runFirst(['No. I mean the other one. '])).toEqual(['No.', 'I mean the other one.']);
+  });
+
+  it('is ready for a new stream after end(): the next stream gets a short first sentence again', () => {
+    const c = new SentenceCutter({ firstMinWords: 1 });
+    expect(c.push('Right. Then we go on. ')).toEqual(['Right.', 'Then we go on.']);
+    expect(c.end()).toEqual([]);
+    expect(c.push('Sure. And then more. ')).toEqual(['Sure.', 'And then more.']);
+  });
+
+  it('gives the same sentences however the text arrives', () => {
+    const text = "Right. Good question. Raft elects a leader by votes. Okay. 1. First, we count them. Then we're done.";
+    const expected = runFirst([text]);
+    expect(expected[0]).toBe('Right.');
+    expect(runFirst(text.split(''))).toEqual(expected);
+    for (let seed = 300; seed < 340; seed++) expect(runFirst(randomly(text, seed, 1 + (seed % 23))), `seed ${seed}`).toEqual(expected);
+  });
+});
+
 describe('SentenceCutter: what it does not cut', () => {
   const cases: Array<[string, string]> = [
     ['an abbreviation', 'Ask Dr. Who about it later today'],

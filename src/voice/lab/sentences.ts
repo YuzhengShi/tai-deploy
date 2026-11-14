@@ -12,6 +12,10 @@
  * or a name ("1.2", "v1.9.1", "main.go", "sync.Mutex": no space follows), or an ellipsis that goes on in lower case. A sentence of fewer than three words
  * ("Okay.") is not worth a request of its own and is joined to the next one, unless the stream has ended.
  *
+ * The one exception is the first sentence of a stream when `firstMinWords` is given: it is the sentence the listener waits for, so a short opener ("Right.",
+ * "Good question.") goes out as soon as it is complete instead of waiting for the end of the sentence after it (a few hundred milliseconds of silence). It must
+ * hold that many words that have a letter in them, so a list marker ("1.") is still joined to what follows.
+ *
  * Known limit: it cuts at terminators only. Text without them (list items on separate lines that have no full stops) waits for `end()`.
  */
 
@@ -39,6 +43,19 @@ function wordCount(text: string): number {
   return n;
 }
 
+const HAS_LETTER = /\p{L}/u;
+/** Words with at least one letter in them: "1." and "..." are not words here. */
+function letterWordCount(text: string): number {
+  let n = 0;
+  for (const token of text.split(/\s+/)) if (HAS_LETTER.test(token)) n++;
+  return n;
+}
+
+export interface SentenceCutterOptions {
+  /** The first sentence of a stream is released with this many words that hold a letter, instead of three. Not given: it is cut like every other sentence. */
+  firstMinWords?: number;
+}
+
 /** The word right before position `at` (a dot), and the word before that one. */
 function wordsBefore(s: string, at: number): { word: string; previous: string } {
   const floor = Math.max(0, at - LOOK_BACK);
@@ -58,6 +75,10 @@ export class SentenceCutter {
   private buf = '';
   /** Where the search for the next terminator goes on: everything before it has been judged. */
   private scan = 0;
+  /** How many sentences this stream has returned so far. */
+  private released = 0;
+
+  constructor(private readonly options: SentenceCutterOptions = {}) {}
 
   /** Adds text; returns the sentences that are complete now, trimmed. The text after the last cut stays until more arrives or `end()`. */
   push(text: string): string[] {
@@ -73,6 +94,7 @@ export class SentenceCutter {
     if (HAS_WORD.test(rest)) out.push(rest);
     this.buf = '';
     this.scan = 0;
+    this.released = 0;
     return out;
   }
 
@@ -114,11 +136,14 @@ export class SentenceCutter {
         continue;
       }
       const sentence = s.slice(0, c);
-      if (wordCount(sentence) < MIN_WORDS) {
+      const firstMin = this.released === 0 ? this.options.firstMinWords : undefined;
+      const tooShort = firstMin !== undefined ? letterWordCount(sentence) < firstMin : wordCount(sentence) < MIN_WORDS;
+      if (tooShort) {
         this.scan = c; // too short to stand alone: keep it at the front and look for the end of the next one
         continue;
       }
       out.push(sentence.trim());
+      this.released++;
       let next = c;
       while (next < len && WHITESPACE.test(s[next])) next++;
       this.buf = s.slice(next);

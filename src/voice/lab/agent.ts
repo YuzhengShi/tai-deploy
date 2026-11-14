@@ -408,14 +408,15 @@ export class LabAgent {
         lastErr = new Error(`${kind} needs the Deepgram key`);
         continue;
       }
-      const ears = this.deps.makeEars(kind, this.earsHandlers(), { keyterms: this.keyterms, turn: this.turnFields });
+      const made = this.turnFields;
+      const ears = this.deps.makeEars(kind, this.earsHandlers(), { keyterms: this.keyterms, turn: made });
       this.connecting = ears;
       try {
         await ears.connect(this.cfg.earsConnectTimeoutMs);
         this.connecting = null;
         this.ears = ears;
         this.earsKind = kind;
-        ears.setTurnFields?.(this.turnFields);                       // (whatever UpdateListen said while it was being connected)
+        if (this.turnFields !== made) ears.setTurnFields?.(this.turnFields);   // (an UpdateListen that came while it was being connected)
         if (kind !== this.cfg.ears) this.log.warn({ using: kind, wanted: this.cfg.ears }, 'voice lab: the first recognizer was not reachable; using the fallback');
         return;
       } catch (err) {
@@ -688,7 +689,8 @@ export class LabAgent {
   private async completion(run: Run, round: number): Promise<Array<{ id: string; name: string; arguments: string }>> {
     const cfg = this.think_;
     if (!cfg) throw new ThinkError('network', 'no think configuration');
-    const cutter = new SentenceCutter();
+    // the first sentence of the answer is the one the student waits for: a short opener ("Right.") goes out at once
+    const cutter = new SentenceCutter({ firstMinWords: 1 });
     const speak = (sentence: string): void => {
       const original = sentence.trim();
       if (!original || !spokenText(original)) return;

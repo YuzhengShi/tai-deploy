@@ -924,6 +924,9 @@ if specs:
         key = "adopted" if sp.get("outcome") == "adopted" else "dropped (%s)" % sp.get("why")
         by[key] = by.get(key, 0) + 1
     print("  eager requests: %d  %s" % (len(specs), "; ".join("%s %d" % kv for kv in sorted(by.items()))))
+# C12 (a): no function may have been started for a turn before the turn was confirmed (a held answer asks nothing of the session); every function's start is at or after its turn's commit
+early = sum(1 for r in rows if r.get("commit") is not None for f in r.get("functions", []) if f.get("startedAt", 0) < r["commit"])
+if any(r.get("specs") for r in rows) or any(r.get("chain") in ("h", "fd", "c") for r in rows): print("  functions started before their turn's commit: %d (C12 a: must be 0)" % early)
 heads = [r["derived"]["headStart"] for r in rows if isinstance(r.get("derived", {}).get("headStart"), (int, float))]
 if heads: print("  %-32s n=%d p50 %s p90 %s ms (the model was asked this long before the turn was confirmed)" % ("head start of adopted requests", len(heads), pct(heads, .5), pct(heads, .9)))
 for chain in sorted({r.get("chain", "") for r in rows}):

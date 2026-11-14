@@ -334,7 +334,7 @@ describe.concurrent('runCall: a whole call against a scripted server', () => {
       const times = call1.frames.flatMap((f) => f.t.map((t, j) => ({ i: f.i + j, t })));
       expect(times.length).toBeGreaterThan(50);
       const late = times.map(({ i, t }) => t - (call1.mic!.t + i * 40)).sort((a, b) => a - b);
-      expect(late[0]).toBeGreaterThanOrEqual(0);
+      expect(late[0]).toBeGreaterThanOrEqual(-1e-6);                         // (never early; the difference of two large floats can come out at -1e-13)
       expect(late[Math.floor((late.length - 1) * 0.9)]).toBeLessThan(60); // (other calls run beside this one in this file; client.test.ts holds the tight bound)
 
       // UE is the send time of the frame that carries the last speech sample, and every mark agrees with the frame times

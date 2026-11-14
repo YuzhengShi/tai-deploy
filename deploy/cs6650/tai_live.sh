@@ -883,7 +883,7 @@ voice_cmd() {
       local n="${2:-12}" file="$T/data/voice-lab/turns.jsonl" setting
       case "$n" in ''|*[!0-9]*) die "tai_live.sh voice lab [N]   the last N turns of the lab's calls (default 12)" ;; esac
       setting() { grep -m1 "^$1=" "$L/orch.env" 2>/dev/null | cut -d= -f2- | tr -d '"' | grep . || echo "$2"; }
-      echo "lab:        $(setting TAI_VOICE_LAB off | sed 's/^1$/on/')  ears $(setting TAI_VOICE_LAB_EARS 'labgpu (default)')  mouth $(setting TAI_VOICE_LAB_MOUTH 'labgpu (default)')  fallback ears $(setting TAI_VOICE_LAB_EARS_FALLBACK 'flux (default)')"
+      echo "lab:        $(setting TAI_VOICE_LAB off | sed 's/^1$/on/')  ears $(setting TAI_VOICE_LAB_EARS 'labgpu (default)')  mouth $(setting TAI_VOICE_LAB_MOUTH 'labgpu (default)')  fallback ears $(setting TAI_VOICE_LAB_EARS_FALLBACK 'flux (default)')  eager end of turn $(setting TAI_VOICE_LAB_EAGER_EOT 'off (chains h, fd, c: 0.45)')  barge-in $(setting TAI_VOICE_LAB_BARGE_MS '200 (default)') ms of loud speech in $(setting TAI_VOICE_LAB_BARGE_WINDOW_MS '300 (default)') ms"
       [ -s "$file" ] || { echo "trace:      none yet ($file)"; return 0; }
       python3 - "$file" "$n" <<'PY'
 import json, sys
@@ -905,15 +905,30 @@ for r in last:
     if r.get("bargeIn"): extra.append("barge-in by %s, %d sentence(s) spoken" % (r["bargeIn"].get("by"), len(r["bargeIn"].get("spoken", []))))
     for f in r.get("functions", []): extra.append("%s %s ms" % (f.get("name"), (f.get("answeredAt") or 0) - f.get("startedAt", 0)))
     if r.get("fillers"): extra.append("%d filler(s)" % len(r["fillers"]))
+    for sp in r.get("specs", []):
+        extra.append("eager %s%s" % (sp.get("outcome"), (": " + sp["why"]) if sp.get("why") else (" %s ms ahead" % d.get("headStart", "?"))))
     if r.get("shadow"): extra.append("%s heard: %s" % (r["shadow"].get("ears"), json.dumps(" / ".join(f.get("text", "") for f in r["shadow"].get("finals", [])))[:90]))
     if r.get("fallbacks"): extra.append("fallbacks " + ",".join(r["fallbacks"]))
-    print("  %s %s %-9s %s+%s #%-2s eot %5s total %5s whole %5s  %s%s" % (r.get("at", "")[11:19], r.get("sid", ""), r.get("mode", ""), r.get("ears", ""), r.get("mouth", ""), r.get("turn", ""), d.get("eotWait", "-"), d.get("total", "-"), d.get("fromSpeechEnd", "-"), json.dumps(r.get("userText", ""))[:60], ("  [" + "; ".join(extra) + "]") if extra else ""))
+    print("  %s %s %-9s %s%s+%s #%-2s eot %5s total %5s whole %5s  %s%s" % (r.get("at", "")[11:19], r.get("sid", ""), r.get("mode", ""), (r["chain"] + ":") if r.get("chain") else "", r.get("ears", ""), r.get("mouth", ""), r.get("turn", ""), d.get("eotWait", "-"), d.get("total", "-"), d.get("fromSpeechEnd", "-"), json.dumps(r.get("userText", ""))[:60], ("  [" + "; ".join(extra) + "]") if extra else ""))
 for label, key in (("end of speech to committed turn", "eotWait"), ("committed turn to first audio", "total"), ("end of speech to first audio", "fromSpeechEnd")):
     v = [r["derived"][key] for r in rows if isinstance(r.get("derived", {}).get(key), (int, float))]
     plain = [r["derived"][key] for r in rows if isinstance(r.get("derived", {}).get(key), (int, float)) and not r.get("functions")]
     if v: print("  %-32s n=%d p50 %s p90 %s ms; turns with no function n=%d p50 %s p90 %s ms" % (label, len(v), pct(v, .5), pct(v, .9), len(plain), pct(plain, .5), pct(plain, .9)))
 over = [rd["afterAnswerMs"] for r in rows for rd in r.get("rounds", []) if isinstance(rd.get("afterAnswerMs"), (int, float))]
 if over: print("  %-32s n=%d p50 %s p90 %s ms (docs/VOICE_SELFBUILT.md C5, amendment A3: p90 <= 100)" % ("function answer to next request", len(over), pct(over, .5), pct(over, .9)))
+# round 2 (amendment A10): the eager requests and what became of them, and the whole wait of the plain turns by chain
+specs = [sp for r in rows for sp in r.get("specs", [])]
+if specs:
+    by = {}
+    for sp in specs:
+        key = "adopted" if sp.get("outcome") == "adopted" else "dropped (%s)" % sp.get("why")
+        by[key] = by.get(key, 0) + 1
+    print("  eager requests: %d  %s" % (len(specs), "; ".join("%s %d" % kv for kv in sorted(by.items()))))
+heads = [r["derived"]["headStart"] for r in rows if isinstance(r.get("derived", {}).get("headStart"), (int, float))]
+if heads: print("  %-32s n=%d p50 %s p90 %s ms (the model was asked this long before the turn was confirmed)" % ("head start of adopted requests", len(heads), pct(heads, .5), pct(heads, .9)))
+for chain in sorted({r.get("chain", "") for r in rows}):
+    mine = [r["derived"]["fromSpeechEnd"] for r in rows if r.get("chain", "") == chain and not r.get("functions") and isinstance(r.get("derived", {}).get("fromSpeechEnd"), (int, float))]
+    if mine and (chain or len({r.get("chain", "") for r in rows}) > 1): print("  chain %-4s plain turns, end of speech to first audio: n=%d p50 %s p90 %s ms" % (chain or "(none)", len(mine), pct(mine, .5), pct(mine, .9)))
 PY
       ;;
     *) die "tai_live.sh voice status|enable|disable|lab [N]" ;;

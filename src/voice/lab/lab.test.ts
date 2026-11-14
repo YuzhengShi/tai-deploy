@@ -160,8 +160,10 @@ describe('a call on the lab', () => {
     expect(JSON.stringify(lab.logs)).not.toContain(lab.engine()!.token);
     b.send({ type: 'end' });
     await b.next('closed');
-    await until(() => fs.existsSync(path.join(lab!.dataDir, 'voice-lab', 'turns.jsonl')));
-    const rows = fs.readFileSync(path.join(lab.dataDir, 'voice-lab', 'turns.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    // the sink appends asynchronously: the file exists a moment before its first line is in it (a busy machine showed it), so wait for a whole line
+    const traceFile = path.join(lab.dataDir, 'voice-lab', 'turns.jsonl');
+    await until(() => fs.existsSync(traceFile) && fs.readFileSync(traceFile, 'utf8').endsWith('\n'));
+    const rows = fs.readFileSync(traceFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ turn: 1, mode: 'chat', ears: 'labgpu', mouth: 'labgpu', userText: 'What is a mutex?' });
     expect(rows[0].derived.total).toBeGreaterThan(0);

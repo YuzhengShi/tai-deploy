@@ -94,12 +94,8 @@ export function fileSink(file: string, log: VoiceLog): TraceSink {
           fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
           ready = true;
         }
-        fs.appendFile(file, JSON.stringify(turn, round) + '\n', { mode: 0o600 }, (err) => {
-          if (err && !warned) {
-            warned = true;
-            log.warn({ err: err.message }, 'voice lab: the trace could not be written');
-          }
-        });
+        // synchronous on purpose: one short line a turn, so the lines stay in the order of the turns (two asynchronous appends can finish in either order)
+        fs.appendFileSync(file, JSON.stringify(turn, round) + '\n', { mode: 0o600 });
       } catch (err) {
         if (!warned) {
           warned = true;

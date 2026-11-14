@@ -7,7 +7,9 @@
 #     numpy 1.26.4); soundfile is imported only by the package's save_audio() and huggingface-hub only by its download_model(), neither of which this service calls (it always passes
 #     auto_download=False), so a copy that has no code that can fetch a model is the safer one to ship. `pip check` therefore reports the three of them; that is expected.
 #   * sherpa-onnx brings its own ONNX Runtime (1.28.2, inside sherpa-onnx-core); onnxruntime below is the one the speech engine (supertonic) uses (1.32.0). Both are loaded in the one process. That works on
-#     Windows in either import order (tested); it is not tested on Linux, where the two libraries have different file names and are loaded from different folders.
+#     Windows in either import order, and on Linux (the python:3.12-slim image on the cs6650 host, 2026-11-14, sherpa-onnx first, the service's own order).
+#   * onnxruntime 1.32.0 carries a Microsoft telemetry client that is on by default and is switched off by the environment variable ORT_DISABLE_TELEMETRY=1 (set by the package and by the Dockerfile): when this pin
+#     is changed, run check_egress.sh again (README.md, "Why an internal network").
 numpy==2.5.4
 websockets==17.4
 sherpa-onnx==1.13.8

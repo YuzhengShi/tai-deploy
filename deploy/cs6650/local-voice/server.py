@@ -28,7 +28,7 @@ async def serve(cfg: Config, services, stop: asyncio.Event | None = None, on_lis
     host, port = server.sockets[0].getsockname()[:2]
     LOG.info('%s %s listening on %s:%d (pid %d, recognizer %s, synthesizer %s)', SERVICE, VERSION, host, port, os.getpid(), services.recognizer.name, services.tts.name)
     if cfg.host not in LOOPBACK:
-        LOG.warning('bound to %s, not to loopback: this service has no authentication; publish its port on 127.0.0.1 only', cfg.host)
+        LOG.warning('bound to %s, not to loopback: this service has no authentication; keep it on a network only the lab can reach (an internal Docker network, or a port published on 127.0.0.1)', cfg.host)
     if on_listen is not None:
         on_listen(port)
     stop = stop or asyncio.Event()

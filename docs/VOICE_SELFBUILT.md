@@ -481,6 +481,28 @@ The simulated calls were added after the saturating test, because that test is n
 
 The host's busy cores averaged 1.45 (three streams, 5 steps) and 1.16 (2 steps) over 41 and 37 s with the model loading included. Steps 3 was timed on the PC only. **Against A13's mouth clause** (first audio at most 300 ms at p90 alone and 500 ms with three at once; real-time factor at most 0.5): with three at once it is met (p90 at most 418 ms, factor at most 0.095); **alone it is not met as written** (p90 457 ms at 5 steps and 395 ms at 2 steps with 4 threads; with 2 threads the three-stream numbers suggest about 300 to 420 ms). Supertonic makes a whole sentence at once, so its "first audio" is the whole synthesis; LabGPU's GPU adapter gives the first byte at p50 115 ms and the whole sentence in 140 to 300 ms (10.1). The price of the voice on our own CPU is therefore about 0.2 to 0.3 s at the start of each answer. Against it stands the faster final text of the local ears (LabGPU's final comes p50 1.75 s after the end of speech; the local decode takes about 0.5 s on the host, plus the service's own pause rule, 10.12); the net of the two was not measured, and a window of the whole local chain against L is what would say.
 
+### 10.14 The host check of the local service (A14; 2026-11-14 night)
+
+**What was run.** The local service (`deploy/cs6650/local-voice`, `docs/LOCAL_VOICE.md`; commit 241d304 plus the telemetry switch, tests and docs, which change no accuracy or timing and were in the image before the runs) as a container on the host, in the scratch folder, measured with the lab's own recognition client against the rows of 10.12, exactly as A14 fixed before any host run. The tables and the reading of each number are in `docs/LOCAL_VOICE.md` section 9.
+
+| A14 | line | result | verdict |
+|---|---|---|---|
+| (1)-(3) ears, final after the end of speech, one stream, set 3 | p90 at most 800 ms | p50 623, p90 1049 ms | not met (expected in advance) |
+| the same, three streams (set 2, started 0, 2.5, 5.0 s apart) | p90 at most 800 ms | pooled p50 1059, p90 1609 ms | not met (expected in advance) |
+| (4) accuracy, once, set 3: recall against Flux | at most 5 points below | 81.0 % against 86.5 %: -5.5 [-9.4, -1.7] | **not met, by half a point** |
+| (4) WER against Flux | at most 2 points above | 4.39 % against 4.07 %: +0.32 [-0.60, +1.23] | met |
+| (4) against LabGPU (reported) | | recall +4.0 [-0.6, +8.7], WER -0.52 [-1.76, +0.67] | non-inferior |
+| set 2, for the record | | 84.6 %, 3.54 %; against Flux -2.6 [-6.9, +1.7] and -0.19; against LabGPU +10.3 [+5.0, +15.6] and -2.42 [-3.76, -1.20] | met against both |
+| (5) mouth, first byte alone | at most 300 ms | median 459 to 496 ms, max about 1.05 s (5 steps, 2 threads per engine) | not met |
+| (5) mouth, three requests at the same instant | at most 500 ms | 0.8 to 1.6 s (the container is held to 4 CPUs; three engines of 2 threads are 6) | not met |
+| (6) host load, three streams | under 4 of 8 | 3.43 (one stream 1.87), the whole host | met |
+
+Measured beside the clauses: the container's memory settles near 2.05 GiB (1.77 GiB after 30 clips; growth per clip falling), and **no question reached the DNS sinkhole during the whole session** (the container on an internal network, `ORT_DISABLE_TELEMETRY=1`), while the same library without the variable asks for Microsoft's collector at import.
+
+**What it says.** Against LabGPU's two parts the service hears better (set 2: recall +10.3 points, the interval excludes zero; set 3: +4.0) and is faster to a final (0.8 to 1.1 s at the median); its mouth costs about 0.35 to 0.4 s more at the start of each sentence than LabGPU's GPU. Against Flux, the ears of today's call, its final comes 0.4 to 0.9 s earlier at the median, its WER is the same and its key-term recall is 2.6 (set 2) and 5.5 (set 3) points lower: **by A13's own rule the recognition clause does not hold for the shipped pipeline on set 3, narrowly** (segmenting at pauses is the cost: the second sentence of an utterance is decoded without the first; names that no setting fixes are TAi, Coady and goroutine). Of the pre-registered lines it meets WER, load and (outside the clauses) the network; it fails the ears-speed line, the mouth-speed line and the recall clause on set 3 by half a point. None of this says whether the whole local chain is as good as today's call: that needs the owner's own calls on it or a window, and nothing is deployed.
+
+**Found on the way.** (1) The pip onnxruntime 1.32.0 contacts Microsoft's telemetry collector as soon as it is imported (measured with a DNS sinkhole on an internal Docker network); `ORT_DISABLE_TELEMETRY=1` stops it, the service and the image set it, the container runs on a network with no route out, and `deploy/cs6650/local-voice/check_egress.sh` repeats the proof; the PC and scratch trial runs before this (synthetic audio only) used the library without the variable. sherpa-onnx's own runtime asked for nothing. (2) The lab's two URL settings make it local in function only: the Flux shadow recognizer, both fallbacks and every `?chain=` route still go to Deepgram unless three more settings are set (`docs/LOCAL_VOICE.md`, intro and 9.5).
+
 ## 11. Amendments (changes to anything above after the commit that introduced it)
 
 **A1, 2026-11-14, made before any end-to-end number of the lab or of the live call on the test set existed (only the component probes of 10.1 were in): what a cut-in is, and which user line the end-of-turn wait is read from.**

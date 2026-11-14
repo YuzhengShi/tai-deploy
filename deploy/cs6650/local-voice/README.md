@@ -12,11 +12,12 @@ LabGPU's two voice services on **our own CPU, behind one loopback port**: the re
 ## Using it from the lab
 
 ```
-TAI_VOICE_LAB_EARS_URL=ws://127.0.0.1:18800/v1/listen?encoding=linear16&sample_rate=16000&language=en&label=tai-lab
-TAI_VOICE_LAB_TTS_URL=http://127.0.0.1:18800
+TAI_VOICE_LAB_EARS_URL=ws://<address>:18800/v1/listen
+TAI_VOICE_LAB_TTS_URL=http://<address>:18800
 ```
 
-With those two the lab uses the service wherever it used LabGPU's services. They do NOT by themselves keep the audio and the text inside: the lab's defaults still stream every call's audio to Deepgram's Flux as
+`<address>` is 127.0.0.1 for the process run below and 172.29.88.2 for the container below. The ears address needs no query: LabGPU's default carries `?encoding=linear16&sample_rate=16000&language=en&label=tai-lab`, which the service
+accepts and does not need, and the operator's `tai_live.sh set` takes no `?` or `&` in a value (a test covers the bare address). With those two the lab uses the service wherever it used LabGPU's services. They do NOT by themselves keep the audio and the text inside: the lab's defaults still stream every call's audio to Deepgram's Flux as
 a second ("shadow") recognizer, fall back to Flux when the ears fail and to Aura when the mouth fails, and a call that asks for `?chain=d|h|fd|c` (the owner's measurement route) gets those parts back whatever the
 settings say. For calls that send nothing to a third party also set
 
@@ -43,22 +44,33 @@ D:\tai-voice-local\venv-tts\Scripts\python.exe -B server.py          # 127.0.0.1
 curl.exe http://127.0.0.1:18800/health                                # {"ok":true,"asr":"parakeet-tdt-0.6b-v2-int8","tts":"supertonic-v1"}
 ```
 
-Docker (the `Dockerfile` has not been built: this PC has no Docker; see its header and `requirements.txt`):
+Docker (built and run on the cs6650 host in a scratch folder on 2026-11-14; see `docs/LOCAL_VOICE.md` section 9 for what it measured):
 
 ```
 docker build -t tai-local-voice:latest deploy/cs6650/local-voice
-docker run -d --name tai-local-voice --restart unless-stopped -p 127.0.0.1:18800:18800 --memory 4g --cpus 4 \
+docker network create --internal --subnet 172.29.88.0/24 tai-voice-net          # once: a network with NO route out
+docker run -d --name tai-local-voice --restart unless-stopped --network tai-voice-net --ip 172.29.88.2 \
+    --cpu-shares 128 --cpus 4 --memory 4g --memory-swap 4g --pids-limit 256 \
+    --read-only --tmpfs /tmp:rw,size=64m -e HOME=/tmp --cap-drop ALL --security-opt no-new-privileges \
     -v /srv/tai-voice/models/parakeet-tdt-0.6b-v2-int8:/models/parakeet-tdt-0.6b-v2-int8:ro \
     -v /srv/tai-voice/models/supertonic/v1:/models/supertonic/v1:ro tai-local-voice:latest
+curl http://172.29.88.2:18800/health         # from the host: the container's address on the bridge; no port is published
 ```
 
-Memory measured on the PC after a run: about 1.8 GB resident (Parakeet about 1 GB, three Supertonic engines of 250 MB each and their working memory). `LOCAL_VOICE_TTS_WORKERS=2` saves 250 MB.
+**Why an internal network.** The pip `onnxruntime` 1.32.0 that the speech engine uses contains a Microsoft OneCollector telemetry client that is on by default: measured on 2026-11-14 (a DNS sinkhole on an internal
+network), `import onnxruntime` alone asks for `mobile.events.data.microsoft.com`, twice, and `onnxruntime.disable_telemetry_events()` after the import does not stop the first attempt. What the events carry was not
+inspected. The environment variable `ORT_DISABLE_TELEMETRY=1` does stop it (zero questions for the import and for a model load); the package sets it before anything imports the library, the image sets it, and the
+container runs on an `--internal` network (no route out; Docker's DNS does not forward names from it), so a later version of a library that behaves differently still reaches nothing. sherpa-onnx's own runtime (1.28.2) asked for
+nothing without the variable. `check_egress.sh` repeats the measurement on a real container: the control (variable removed) must ask, the shipped image and a whole service run must not. The trial runs of 2026-11-14 on the
+development PC and in the host's scratch folder used the library without the variable (synthetic audio only): its own library telemetry may have left then.
+
+Memory measured on the PC after a run: about 1.8 GB resident (Parakeet about 1 GB, three Supertonic engines of 250 MB each and their working memory); 1.77 GiB in the container on the host after 30 calls. `LOCAL_VOICE_TTS_WORKERS=2` saves 250 MB.
 
 ## Tests, smoke, accuracy
 
 ```powershell
 $py = 'D:\tai-voice-local\venv-tts\Scripts\python.exe'
-& $py -B -m unittest discover -s tests -t . -v      # 139 tests; the ones that need models skip themselves when the folders are not there (see the top of tests/test_real_models.py)
+& $py -B -m unittest discover -s tests -t . -v      # 143 tests; the ones that need models skip themselves when the folders are not there (see the top of tests/test_real_models.py)
 & $py -B smoke.py                                   # starts the server, streams 4 clips in real time, calls /tts; prints message kinds and times, never a transcript
 & $py -B smoke.py --concurrent 3                    # the clips three at a time
 & $py -B eval_set.py --set ..\..\..\eval\voice-lab\recognition2.json --audio <folder with manifest.json> [--whole-clip]
@@ -124,11 +136,12 @@ Fixed limits (constants in the code): 16 KiB for a request head and for a `/tts`
 ## Files
 
 `server.py` entry point; `localvoice/` the package (`config`, `vad`, `segmenter` the state machine, `asr`, `keyterms` + `spoken_forms` (verbatim copy of the frozen rules), `tts`, `listen` the per-connection
-session, `wsconn` the websocket side, `httpio` + `httpd` the HTTP front and `/tts`, `services`, `logutil`); `tests/`; `smoke.py`; `eval_set.py`; `regenerate_keyterms.py`; `keyterms.json`; `requirements.txt`;
-`Dockerfile`, `.dockerignore`.
+session, `wsconn` the websocket side, `httpio` + `httpd` the HTTP front and `/tts`, `services`, `logutil`); `tests/`; `smoke.py`; `eval_set.py`; `regenerate_keyterms.py`; `check_egress.sh` (the network
+check above); `keyterms.json`; `requirements.txt`; `Dockerfile`, `.dockerignore`.
 
 ## Privacy
 
 No transcript, no text of a synthesis request and no audio is ever written to a log, an error message or a file. The log has counts, durations and connection events; an exception is described by its class and the
 place it was raised, never its message; the websocket library gets a switched-off logger; the address of a request is logged without its query. `tests/test_protocol.py` and `tests/test_tts_http.py` search the
-captured log for marker texts.
+captured log for marker texts. The service opens no outgoing connection and fetches no model (`auto_download` is always off); the library telemetry that would leave is switched off and cut off as described under
+"Why an internal network".

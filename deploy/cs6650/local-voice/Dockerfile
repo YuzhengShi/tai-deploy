@@ -1,19 +1,24 @@
 # The local-voice service (docs/LOCAL_VOICE.md): LabGPU's recognizer and synthesizer, on our own CPU, on one loopback port. Build context: this folder.
 #
 #   docker build -t tai-local-voice:latest deploy/cs6650/local-voice
-#   docker run -d --name tai-local-voice --restart unless-stopped -p 127.0.0.1:18800:18800 --memory 4g --cpus 4 \
+#   docker network create --internal --subnet 172.29.88.0/24 tai-voice-net          # once: a network with NO route out
+#   docker run -d --name tai-local-voice --restart unless-stopped --network tai-voice-net --ip 172.29.88.2 \
+#       --cpu-shares 128 --cpus 4 --memory 4g --memory-swap 4g --pids-limit 256 \
+#       --read-only --tmpfs /tmp:rw,size=64m -e HOME=/tmp --cap-drop ALL --security-opt no-new-privileges \
 #       -v /srv/tai-voice/models/parakeet-tdt-0.6b-v2-int8:/models/parakeet-tdt-0.6b-v2-int8:ro \
 #       -v /srv/tai-voice/models/supertonic/v1:/models/supertonic/v1:ro \
 #       tai-local-voice:latest
+#   (the lab then uses ws://172.29.88.2:18800/v1/listen?... and http://172.29.88.2:18800 : the host reaches the container's address on the bridge; nothing is published)
 #
-# THIS FILE HAS NOT BEEN BUILT OR RUN: it was written on a PC without Docker. Everything in it is ordinary, but the first build on the host is the first test of it (the sherpa-onnx and onnxruntime wheels for
-# Linux in particular: see requirements.txt).
+# Built and run on the cs6650 host in a scratch folder on 2026-11-14 (docs/LOCAL_VOICE.md, section 9): the build works, both ONNX Runtimes (sherpa-onnx's 1.28.2 and the pip package's 1.32.0) load in one Linux process.
 #
 # What it is: python:3.12-slim, the pinned packages, the code, a user that is not root. The models are NOT in the image: they are mounted read-only at /models (a bind mount of the folders the development PC
-# has in D:\tai-voice-local: models\parakeet-tdt-0.6b-v2-int8, supertonic\v1, and tts\vits-piper-en_US-lessac-medium only if LOCAL_VOICE_TTS_BACKEND=piper). Nothing is fetched at run time and the service
-# makes no outgoing connection; its one exposure is its port, published on 127.0.0.1 only, which is the whole of its access control.
+# has in D:\tai-voice-local: models\parakeet-tdt-0.6b-v2-int8, supertonic\v1, and tts\vits-piper-en_US-lessac-medium only if LOCAL_VOICE_TTS_BACKEND=piper). The service fetches nothing at run time and opens
+# no outgoing connection; but the pip onnxruntime 1.32.0 it embeds has a Microsoft telemetry client that contacts mobile.events.data.microsoft.com as soon as it is imported (measured 2026-11-14), so the image
+# sets ORT_DISABLE_TELEMETRY=1 (the package sets it too) AND the container is meant to run on an `--internal` network, which has no route out and no DNS beyond its own: a library that behaves differently in a
+# later version still cannot reach anything. check_egress.sh proves it on a real container.
 #
-# The process listens on 0.0.0.0 INSIDE the container, because the container's own loopback is not reachable from the host: the host side of `-p` is what keeps it on 127.0.0.1. Never run it with
+# The process listens on 0.0.0.0 INSIDE the container (the address of the bridge, reachable from the host only): there is no authentication, so never publish its port beyond 127.0.0.1 and never run it with
 # `--network host` without setting LOCAL_VOICE_HOST=127.0.0.1 (the service logs a warning when it is bound to anything else).
 #
 # BASE_IMAGE can name another copy of the same image (Docker Hub limits anonymous pulls per address and the host shares one):
@@ -41,7 +46,8 @@ ENV LOCAL_VOICE_HOST=0.0.0.0 \
     LOCAL_VOICE_ASR_MODEL_DIR=/models/parakeet-tdt-0.6b-v2-int8 \
     LOCAL_VOICE_ST_MODEL_DIR=/models/supertonic/v1 \
     LOCAL_VOICE_PIPER_MODEL_DIR=/models/vits-piper-en_US-lessac-medium \
-    HF_HUB_OFFLINE=1
+    HF_HUB_OFFLINE=1 \
+    ORT_DISABLE_TELEMETRY=1
 
 USER localvoice
 EXPOSE 18800

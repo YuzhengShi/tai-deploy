@@ -5,9 +5,12 @@ replaced by models on our own CPU?") in the form the lab can use: **one Python p
 two settings and no code:
 
 ```
-TAI_VOICE_LAB_EARS_URL=ws://127.0.0.1:18800/v1/listen?encoding=linear16&sample_rate=16000&language=en&label=tai-lab
-TAI_VOICE_LAB_TTS_URL=http://127.0.0.1:18800
+TAI_VOICE_LAB_EARS_URL=ws://<address>:18800/v1/listen
+TAI_VOICE_LAB_TTS_URL=http://<address>:18800
 ```
+
+(`<address>` is 127.0.0.1 for the process on the same machine and 172.29.88.2 for the container of section 9. The ears address needs no query: LabGPU's default has `?encoding=linear16&sample_rate=16000&language=en&label=tai-lab`,
+which the service accepts and does not need, and the operator's `tai_live.sh set` takes no `?` or `&` in a value.)
 
 **Those two settings make the lab LOCAL IN FUNCTION, not in data.** The lab's own defaults still send each call's audio to Deepgram (a Flux "shadow" recognizer on the same audio, `TAI_VOICE_LAB_SHADOW_EARS`
 `auto` = Flux when the ears are LabGPU's), switch to Flux when the ears fail and to Aura when the mouth fails (`TAI_VOICE_LAB_EARS_FALLBACK`, `TAI_VOICE_LAB_MOUTH_FALLBACK`), and a call that asks for `?chain=d|h|fd|c`
@@ -21,7 +24,9 @@ adapter, with the voice style F1 at the package defaults: of the ten styles it i
 (`docs/VOICE_SELFBUILT.md` 10.13). F2 is nearer by the average spectrum, so which of the two is the voice the owner means is for his ear to say, and both are available (`voice` F1 or F2). The owner listened to
 Piper and Kokoro and did not accept either; Piper is kept as an optional backend (`LOCAL_VOICE_TTS_BACKEND=piper`) for comparisons.
 
-Nothing in the service calls out to a network, and nothing in it ever writes a transcript, the text of a synthesis request or audio to a log, an error message or a file.
+The service opens no outgoing connection and fetches no model, and nothing in it ever writes a transcript, the text of a synthesis request or audio to a log, an error message or a file. One library inside it
+would phone home on its own (the pip onnxruntime 1.32.0 has a Microsoft telemetry client that asks for `mobile.events.data.microsoft.com` as soon as it is imported: measured 2026-11-14); it is switched off by
+an environment variable and the container runs on a network with no route out (section 9, and the README under "Why an internal network").
 
 ## 1. What the lab's own code requires (the client is the specification)
 
@@ -166,10 +171,86 @@ to 1.6 s. The text has the model's own punctuation and the key terms written as 
 
 * The wait after the end of speech grows with the last segment (5). No speculative decode, no overlap-and-merge decoding.
 * An interim decode in flight at the end of speech delays the covering partial by what remains of it (3.4).
-* `Dockerfile` has not been built (no Docker on the development PC). Two ONNX Runtimes (sherpa-onnx's 1.28.2 and the pip package's 1.32.0) share the process: tested on Windows in both import orders, not on Linux.
+* The image was built and run on the cs6650 host (scratch folder, 2026-11-14, section 9): it builds from `requirements.txt` with `--no-deps`, the two ONNX Runtimes (sherpa-onnx's 1.28.2 and the pip package's
+  1.32.0) share one Linux process (the service's own order: sherpa-onnx first; both orders were tested on Windows), and a read-only root, no capabilities and a non-root user are enough.
   `supertonic` was installed with `--no-deps` (it pins numpy below 2 and pulls soundfile and huggingface-hub, which nothing here uses): numpy 2.5.4 for everything, and the Supertonic backend was also run on 1.26.4.
 * Silero VAD is wired and tested with a stand-in detector only.
 * A client that closes its sending side before the audio of a `/tts` request is ready is taken to have gone away (the request is dropped); HTTP clients do not do that.
 * No authentication: the port is meant for 127.0.0.1 (the image binds 0.0.0.0 inside the container and says to publish it on 127.0.0.1 only).
 * The soft cut, `MAX_SEGMENT_MS`, is lossy (3.3). A `SEG_PAUSE_MS` below 350 closes segments earlier, and the text that covers the speech still arrives 350 ms after its end only while the decode makes up the
   difference (a very short last segment would not: the engine would wait for the final instead); it also splits more sentences at their pauses.
+
+## 9. The host check (2026-11-14, scratch folder; amendment A14 of `docs/VOICE_SELFBUILT.md`) and how the service would be put behind the lab
+
+### 9.1 What was run
+
+The image was built on the cs6650 host from a copy of this folder (the pins of `requirements.txt`, `--no-deps`; 205 MB of packages) and run the way the README says: read-only root, no capabilities, user 10001, 4 CPUs at
+most and low priority, 4 GB, on an `--internal` network at 172.29.88.2 (the host reaches it there; nothing is published), the models read-only from the scratch folder (the same files as on the PC, equal fingerprints),
+and its DNS pointed at a sinkhole that logs every name asked. It was healthy 7 s after the start. The live service, its settings, LabGPU's box and the lab were not touched. The measurements are those of A14, made with the lab's
+OWN recognition client (`recognize.js run --ears labgpu --url ...`: the lab's `V1Ears` with the real `ws` library on Linux, the same client and scorer as the LabGPU, Flux and nova-3 rows of 10.12), one utterance after
+another in real time, synthetic voices (Windows' David and Zira), the container's default settings, nothing changed between the runs.
+
+### 9.2 Results
+
+**Network.** Zero questions reached the sinkhole during the whole of it: the start, the models, `smoke.py` (three runs, 210 clips and their `/tts` calls), and the A14 runs (160 + 3 x 128 utterances), so nothing in the running service tried
+to reach a name. Without the opt-out variable the pip onnxruntime asks for `mobile.events.data.microsoft.com` at import (README, "Why an internal network"; `check_egress.sh` repeats it).
+
+**Accuracy** (the shipped pipeline: segments at pauses, interims, the key-term layer; paired against the rows of 10.12, the margins of A13):
+
+| | WER | key terms | against Flux: recall, WER | against LabGPU: recall, WER |
+|---|---|---|---|---|
+| set 3, one stream (A14 (4), run once, never seen before) | 4.39 % | 222 / 274 = 81.0 % | **-5.5 points [-9.4, -1.7]**, +0.32 [-0.60, +1.23] | +4.0 [-0.6, +8.7], -0.52 [-1.76, +0.67] |
+| set 2, three streams (the three streams' texts are identical) | 3.54 % | 230 / 272 = 84.6 % | -2.6 [-6.9, +1.7], -0.19 [-1.08, +0.66] | +10.3 [+5.0, +15.6], -2.42 [-3.76, -1.20] |
+
+(Flux: 4.07 %, 237 / 274 on set 3 and 3.73 %, 237 / 272 on set 2; LabGPU: 4.92 %, 211 / 274 and 5.96 %, 202 / 272; whole-clip Parakeet with the layer on set 3: 3.61 %, 228 / 274.) **A13's clause (recall at most 5 points below
+Flux's, WER at most 2 points above) is NOT met for the shipped pipeline on set 3, by half a point** (the interval does not exclude -5 either way), and is met on set 2 (-2.6); the WER half is met on both. Against LabGPU's
+ears the service is better on both sets (non-inferiority shown; on set 2 the interval excludes zero). Segmenting is what costs: against whole-clip decoding of the same audio the service lost 8 key-term instances on set 3 and
+gained 2, all of them the second sentence of an utterance decoded without the first ("So Terraform" came out as "Soterraform", "wait group" as "weight group", "Locust" as "locused", "Lamport" as "lampoard"). The names no
+setting here fixes: TAi 0 of 12 (heard as "Ty"; Flux 8), Coady 0 of 10 (Flux 0), goroutine 1 of 10 (Flux 6), WaitGroup 2 of 10 (Flux 1). No setting was changed after seeing this (A14).
+
+**The final after the end of speech** (A14's event; the lab engine answers on the first text 350 ms or more after the end of speech, which for a long last segment is the same moment, and for a short one earlier):
+
+| | p50 | p90 | max | over 800 ms |
+|---|---|---|---|---|
+| service, one stream, set 3 (160 utterances of 9 to 19 words) | 623 ms | 1049 ms | 1402 ms | 15 % |
+| service, three streams started 2.5 s apart, set 2 (384 utterances pooled; per stream p90 1562, 1693, 1615) | 1059 ms | 1609 ms | 2717 ms | 83 % |
+| Flux on set 3 / set 2 (10.12 / 10.8) | 1533 / 1416 ms | 1856 / 1936 ms | | |
+| LabGPU's adapter on set 3 / set 2 | 1754 / 1899 ms | 2130 / 2346 ms | | |
+
+**A14's ears line (p90 at most 800 ms) is not met, alone (1049) or with three at once (1609)**, as written in advance. It is faster than Flux's and LabGPU's own finals on the same audio, by about 0.9 s and 1.1 s alone
+and 0.4 s and 0.8 s with three at once, at the median. `smoke.py` (three clips in lockstep, the worst case) gave the same on 210 clips in three runs: covering partial and final p50 0.97 to 1.02 s, p90 1.52 to 1.56 s; the first partial
+comes 3.3 s after the start of the audio (the interim).
+
+**The mouth** (`smoke.py`, 5 steps, 2 threads per engine, three engines): first byte one at a time median 480 to 496 ms (max 1.03 to 1.08 s); three requests at once 0.8 to 1.5 s. A13's lines (300 ms alone, 500 ms with three at
+once) are not met; LabGPU's GPU adapter is at 115 ms (10.1). The knobs, `ST_STEPS` and `TTS_THREADS`, are in section 5.
+
+**Load and memory.** The host's busy cores averaged 1.87 of 8 over the one-stream run and 3.43 of 8 over the three-stream run (the whole host, the live service's own use included): under A13's 4. The container's
+memory settles near 2.05 GiB (9.4).
+
+### 9.3 What it adds up to
+
+Against LabGPU's two parts the local service is better at hearing (the finding that blocked chain d) and faster to a final; its mouth costs about 0.4 s more at the start of each sentence (about 500 ms against 115 ms). Against
+Flux (the ears of today's call) it hears about as many words and 3 to 6 points fewer course terms, and its final is earlier. On A13's own numeric lines it fails three (the recall clause on set 3 by half a point, the ears line, the
+mouth line) and meets the rest (WER, load, no network). Nothing here says how the whole chain feels or measures against today's call: only the owner's calls and, for numbers, a window of section 9 of
+`docs/VOICE_SELFBUILT.md` can.
+
+### 9.4 Memory over a long run
+
+The container's resident memory after 30 clips was 1.77 GiB, after the A14 runs and 30 more clips 1.98 GiB, then 2.02 GiB after 60 more clips and 2.05 GiB after 120 more (and unchanged a minute later, idle): the growth per
+clip falls (0.57 MB, then 0.23 MB) and the service sits near 2.05 GiB, which is what the ONNX Runtime's arenas filling up to the longest inputs look like, not a leak that would end at the 4 GiB limit. A kill by the limit would be
+restarted by `--restart unless-stopped`; the log shows one warning line in the whole session, the start-up note that the service is bound to the container's own address and has no authentication.
+
+### 9.5 Putting it behind the lab (NOT done: every step that changes the live system waits for the owner's "部署")
+
+Before anything: no call in the last 3 hours, not during class (Wednesday 15:15 to 17:15 Pacific), `TAI_VOICE_DAILY_MIN` back at 45, the rollback material made first (`orch.env` and the build, as for every deploy).
+
+1. **Models** to a durable folder outside the release tree (a deploy replaces `~/tai-live/tai`): `~/voice-local/models/parakeet-tdt-0.6b-v2-int8` and `~/voice-local/supertonic/v1`, copied from the scratch folder, fingerprints checked against the PC's.
+2. **Image**: `docker build -t tai-local-voice:YYYYMMDD -t tai-local-voice:live deploy/cs6650/local-voice` (the layers are cached from the scratch build; the previous tag stays for the rollback).
+3. **Network and container** as in the README (`tai-voice-net`, 172.29.88.2, the hardening flags, `--restart unless-stopped`); wait for `/health` from the host.
+4. **`check_egress.sh all`** against `tai-local-voice:live`: it must print PASS (the control asks, the shipped image and the running service do not).
+5. **Lab settings** (orch.env, with `tai_live.sh set`, then `restart` with no call on): `TAI_VOICE_LAB_EARS_URL=ws://172.29.88.2:18800/v1/listen` and `TAI_VOICE_LAB_TTS_URL=http://172.29.88.2:18800`. For calls that
+   keep the audio and the text inside, also `TAI_VOICE_LAB_SHADOW_EARS=none`, `TAI_VOICE_LAB_EARS_FALLBACK=none` and `TAI_VOICE_LAB_MOUTH_FALLBACK=none` (strict: a failure of the service is a failed call; with the fallbacks left on a
+   failure is hidden and the audio goes to Deepgram, which makes a judgement of the local chain meaningless). The voice is `TAI_VOICE_LAB_LABGPU_VOICE` (default `af_bella` = style F1; `F2` is the other candidate). `?chain=d|h|fd|c`
+   routes keep their Deepgram parts whatever is set; `TAI_VOICE_LAB_TEMPO` stays 0.
+6. **A synthetic call through the lab's route** with the measuring client (one scenario), then the owner calls it himself; a window (`TAI_VOICE_DAILY_MIN` raised for its length and put back) only if he wants numbers.
+7. **Rollback**: restore `orch.env` from the rollback material, `restart`, `docker stop tai-local-voice`; nothing else was changed.

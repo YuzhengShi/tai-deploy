@@ -95,6 +95,14 @@ class MessageTests(unittest.TestCase):
             send_audio(ws, speech(0.8) + silence(1.2))
             self.assertTrue(has_end(collect(ws, has_end)))
 
+    def test_an_address_with_no_query_at_all_works(self):
+        # the operator's `tai_live.sh set` takes no `?` or `&` in a value, so the lab is pointed at the bare address
+        from websockets.sync.client import connect
+        with service() as srv, connect('ws://127.0.0.1:%d/v1/listen' % srv.port, open_timeout=5, compression=None, legacy=True) as ws:
+            send_audio(ws, speech(0.8) + silence(1.2))
+            msgs = collect(ws, has_end)
+        self.assertEqual(events_of(msgs), [('partial', 'seg1'), ('final', 'seg1')])
+
 
 class ControlMessageTests(unittest.TestCase):
     def test_finalize_ends_the_utterance_now_and_says_so(self):

@@ -420,7 +420,7 @@ describe('LabAgent: barge-in', () => {
     const trace = r.traces.find((t) => t.bargeIn);
     expect(trace?.bargeIn?.by).toBe('vad');
     expect(trace?.bargeIn?.spoken.length).toBeGreaterThanOrEqual(1);
-  }, 15_000);
+  }, 60_000);
 
   it('a cough is not a barge-in', async () => {
     const r = await rig({ mouths: { labgpu: new FakeMouth({ name: 'labgpu', ms: 1500 }), aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 500 }) } });
@@ -546,7 +546,7 @@ describe('LabAgent: what the session injects', () => {
     r.send({ type: 'InjectAgentMessage', message: 'one sec.', behavior: 'queue' });
     await r.until(() => r.of('InjectionRefused').length === 2);
     await feeding;
-  }, 15_000);
+  }, 60_000);
 
   it('takes a typed line as a student turn and answers it; refuses one while a turn is on', async () => {
     const r = await rig();

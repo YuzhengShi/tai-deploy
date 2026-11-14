@@ -94,7 +94,8 @@ def build_zipformer(models, threads, hotwords_path, score_):
         decoding_method='modified_beam_search', max_active_paths=4,
     )
     if hotwords_path:
-        kw.update(hotwords_file=hotwords_path, hotwords_score=score_, modeling_unit='bpe', bpe_vocab=os.path.join(m, 'bpe.model'))
+        # bpe.vocab ("piece score" per line) is derived from the downloaded bpe.model with the sentencepiece package (id_to_piece / get_score); sherpa-onnx wants that text form for hotwords
+        kw.update(hotwords_file=hotwords_path, hotwords_score=score_, modeling_unit='bpe', bpe_vocab=os.path.join(m, 'bpe.vocab'))
     return sherpa_onnx.OnlineRecognizer.from_transducer(**kw)
 
 

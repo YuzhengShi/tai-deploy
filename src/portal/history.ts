@@ -18,10 +18,12 @@
 import fs from 'fs';
 import path from 'path';
 
+import { cleanObject, clipObject } from '../chat-objects/clean.js';
+import type { ChatObject } from '../chat-objects/types.js';
 import type { Choice } from '../choices.js';
 import type { SourceChip } from '../sources.js';
 
-export type EntryKind = 'text' | 'image' | 'react' | 'voice' | 'audio' | 'feedback' | 'activity' | 'speech';
+export type EntryKind = 'text' | 'image' | 'react' | 'voice' | 'audio' | 'feedback' | 'activity' | 'speech' | 'object';
 /** What a marker line of a voice call stands for: the call began, it went into another kind of call, it ended. */
 export type SpeechEvent = 'start' | 'mode' | 'end';
 export const SPEECH_EVENTS: readonly SpeechEvent[] = ['start', 'mode', 'end'];
@@ -43,7 +45,7 @@ export type FeedbackTag = 'long' | 'robotic' | 'wrong' | 'other';
 export interface EntryFile {
   name: string;
   size: number;
-  kind: 'text' | 'document' | 'image' | 'audio';
+  kind: 'text' | 'document' | 'image' | 'audio' | 'archive';
   /** An image the student sent: the id of its copy in the media store (the page shows it as a thumbnail). */
   media?: string;
 }
@@ -89,6 +91,11 @@ export interface HistoryEntry {
    * an https address; src/sources.ts clipSources, applied by the server before the line is written). Not what the reply cites: what TAi's tools returned.
    */
   sources?: SourceChip[];
+  /**
+   * An `object` line (docs/CHAT_OBJECTS.md): a card that lives in the chat beside the words (a run of the student's code, a document, a chart, a trace, a prediction). `text` is its one-line summary
+   * (what search and a screen reader have); the page draws `obj` (portal/web/objects.js). Written only through `appendObject`, which has it cleaned (src/chat-objects/clean.ts).
+   */
+  obj?: ChatObject;
   /** A student's message that is a tap on an option: the line of TAi's it answers, the option, and whether it was the answer TAi marked (absent when none was marked). */
   choice?: { to: number; index: number; correct?: boolean };
   /**
@@ -103,7 +110,7 @@ export interface HistoryEntry {
 }
 
 /** What `append` may add to a line beyond who said it and what. */
-export type EntryExtra = Partial<Pick<HistoryEntry, 'kind' | 'id' | 'media' | 'mediaId' | 'duration' | 'peaks' | 'to' | 'emoji' | 'rating' | 'tag' | 'files' | 'type' | 'title' | 'detail' | 'items' | 'choices' | 'quiz' | 'secret' | 'sources' | 'choice' | 'call' | 'event' | 'mode' | 'seconds'>>;
+export type EntryExtra = Partial<Pick<HistoryEntry, 'kind' | 'id' | 'media' | 'mediaId' | 'duration' | 'peaks' | 'to' | 'emoji' | 'rating' | 'tag' | 'files' | 'type' | 'title' | 'detail' | 'items' | 'choices' | 'quiz' | 'secret' | 'sources' | 'choice' | 'obj' | 'call' | 'event' | 'mode' | 'seconds'>>;
 
 const SPEECH_CHARS = 2000;
 
@@ -245,14 +252,14 @@ export const ADMIN_FOLDER = 'main';
 export const isChatFolder = (folder: string): boolean => STUDENT_FOLDER.test(folder) || folder === ADMIN_FOLDER;
 // a call's words are lines too (an 8-minute call is about 140 of them), so the window a student's history keeps in memory is wider than it was
 const KEEP_IN_MEMORY = 2500;
-const KINDS: readonly string[] = ['text', 'image', 'react', 'voice', 'audio', 'feedback', 'activity', 'speech'];
+const KINDS: readonly string[] = ['text', 'image', 'react', 'voice', 'audio', 'feedback', 'activity', 'speech', 'object'];
 const EXCERPT_CHARS = 80;
 
 /** The start of a message of TAi's, as the agent is shown it with a reaction or a thumb: one line, no quotation marks inside. */
 function excerptOf(target: HistoryEntry | undefined): string {
   const words = (target?.text || '').replace(/\s+/g, ' ').replace(/"/g, "'").trim();
   if (words) return words.length > EXCERPT_CHARS ? `${words.slice(0, EXCERPT_CHARS).trimEnd()}…` : words;
-  return target?.kind === 'image' ? '(a picture)' : '';
+  return target?.kind === 'image' ? '(a picture)' : target?.kind === 'object' ? '(a card)' : '';
 }
 
 export class History {
@@ -272,7 +279,13 @@ export class History {
       if (!line.trim()) continue;
       try {
         const entry = JSON.parse(line) as HistoryEntry;
-        const kindOk = entry.kind === undefined || KINDS.includes(entry.kind);
+        let kindOk = entry.kind === undefined || KINDS.includes(entry.kind);
+        if (kindOk && entry.kind === 'object') {
+          // a card is kept only as the gate would make it now: a line whose object is no longer valid is not worth failing for
+          const obj = cleanObject(entry.obj);
+          if (obj) entry.obj = obj;
+          else kindOk = false;
+        }
         if (typeof entry.n === 'number' && typeof entry.text === 'string' && (entry.role === 'user' || entry.role === 'assistant') && kindOk) {
           this.entries.push(entry);
           this.lastN = Math.max(this.lastN, entry.n);
@@ -299,6 +312,13 @@ export class History {
     this.entries.push(entry);
     if (this.entries.length > KEEP_IN_MEMORY) this.entries.shift();
     return entry;
+  }
+
+  /** A card in the chat (a chat object): cleaned by the gate, its summary the line's text; null when what was handed over is no object. */
+  appendObject(raw: unknown, now: Date = new Date()): HistoryEntry | null {
+    const clipped = clipObject(raw);
+    if (!clipped) return null;
+    return this.append('assistant', clipped.text, now, { kind: 'object', obj: clipped.obj });
   }
 
   /**

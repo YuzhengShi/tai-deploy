@@ -23,11 +23,19 @@ import { VOICE_ENV_KEYS, VoiceConfig, chatCompletionsUrl, loadVoiceConfig } from
 import type { ChatLine } from './context-builder.js';
 import { InterviewTokenInfo, verifyInterviewToken } from './interview-token.js';
 import { RelayTokens, createRelay, newSessionId } from './relay.js';
+import { screenNoteFor } from './screen.js';
+import type { ScreenSources } from './screen.js';
 import { DEFAULT_TIMING, VoiceSession, VoiceTiming } from './session.js';
 import { speedFor } from './speed.js';
 import type { ToolHost } from './tool-host.js';
 import { ToolHostPool } from './tool-host-pool.js';
 import type { AgentMode, Caller, ChatExtra, VoiceLog } from './types.js';
+import type { ChatObject } from '../chat-objects/types.js';
+import { parseViewState } from '../chat-objects/view.js';
+import type { ViewStore } from '../chat-objects/view.js';
+import type { DocsApi } from '../docs/types.js';
+import type { SandboxApi } from '../sandbox/types.js';
+import type { StoredWorkFact, WorkFact } from '../work-facts.js';
 import { CallSlots, VoiceUsage } from './usage.js';
 
 export interface VoiceHub {
@@ -40,6 +48,8 @@ export interface VoiceHub {
   /** A call is on for this student: typed chat goes to the call (inject) instead of the text agent. */
   isActive(folder: string): boolean;
   inject(folder: string, text: string): boolean;
+  /** A call is on and the page knows something the model should answer (a prediction card was run: src/portal/predict-routes.ts): it is told as a note of the host's, not as anything the student typed or said. False when no call is on. */
+  tellCall(folder: string, text: string): boolean;
   /**
    * The student pressed the call button and the browser has not asked for the microphone yet: start their tool host now, so that the
    * container is coming up while the permission prompt is on screen (POST /api/voice/warm, src/portal/voice-routes.ts). Answers at once, never
@@ -79,6 +89,24 @@ export interface VoiceDeps {
   recentChat?: (folder: string, n: number) => ChatLine[];
   /** The student's memories as lines; without it they are read from groups/<folder>/memory_store.json. */
   memories?: (folder: string, jid: string) => string[];
+  /** What TAi remembers of the student's work (a repository, where a session stopped, a problem: docs/STUDENT_STATE.md), newest first; without it the conversation and the interviewer go without. */
+  workFacts?: (folder: string) => StoredWorkFact[];
+  /** Keeps one fact of the student's work, or takes one back by its key: host-side and best-effort, they never throw. */
+  rememberWork?: (folder: string, fact: WorkFact) => void;
+  forgetWork?: (folder: string, key: string) => void;
+  /** Runs a student's Go code for the run_code function (src/sandbox, docs/GO_SANDBOX.md): for the student of the call, with the account the host bound to them. Without it the function says it is not set up. */
+  runSandbox?: SandboxApi['run'];
+  /** Where the page says the student is looking (src/chat-objects/view.ts): a call's socket writes it, each turn of the call reads it. Without it a call does not know. */
+  views?: ViewStore;
+  /** The document viewer's service (src/docs): what show_document, point_at and look_at_screen use. Without it they say it is not set up. */
+  docs?: DocsApi;
+  /** The chat object on line `n` of this student's chat (the history's line `n` object, or null): what a note about a card they are looking at is made from. Without it such a view says nothing. */
+  objectOf?: (folder: string, n: number) => ChatObject | null;
+  /**
+   * A finished call goes through the host's state writer once (src/student-state-writer.ts, docs/STUDENT_STATE.md): the call's merged turns and the session's facts, for an issue,
+   * where the call stopped and a repository the student named. Asynchronous and best-effort: it settles when the writer is done and never rejects; the call waits for it only a moment.
+   */
+  workFromCall?: (input: { folder: string; turns: Array<{ role: 'student' | 'tai'; text: string }>; facts: string[] }) => Promise<void>;
   /** A `messages` row with the call's summary, for the text agent's next start (it must not wake the text agent). */
   recordVoiceSummary: (jid: string, text: string) => void;
   /** Close the student's running text container: the call has the floor. */
@@ -112,6 +140,8 @@ export interface VoiceDeps {
 
 const FOLDER = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX_TEXT_FRAME = 16 * 1024;
+/** The views one socket may send in a minute (the page's own pace is under 75). */
+export const VIEW_PER_MINUTE = 120;
 
 /**
  * The portal's history store as VoiceDeps' appendChat and recentChat (what a call leaves in the chat is an `activity` line, the old long summary
@@ -128,6 +158,9 @@ export function chatFromPortal(history: HistoryStore, wakeStudent: (folder: stri
         const clipped = clipActivity({ type: extra.type as ActivityType, title: extra.title ?? '', text, detail: extra.detail, items: extra.items });
         if (!clipped) return;
         log.append(role, clipped.text, new Date(), clipped.extra);
+      } else if (extra?.kind === 'object') {
+        // a card (a run of their code, a document ...): only what the gate accepts becomes a line, with its own summary as the text
+        if (!log.appendObject(extra.obj)) throw new Error('the chat did not take the card');       // the caller says "a card is in the chat" only when this did not throw
       } else if (extra?.kind === 'speech') {
         // what was said aloud in a call: one line a turn (or a marker), bounded; no words and no event is not a line
         const clipped = clipSpeech({ text, call: extra.call, event: extra.event, mode: extra.mode, seconds: extra.seconds });
@@ -220,6 +253,8 @@ class Hub implements VoiceHub {
   private readonly now: () => number;
   private readonly timing: VoiceTiming;
   private readonly env: Record<string, string | undefined>;
+  /** What a note about the student's screen is made from (screen.ts): the page's views, the documents service, the student's chat objects. */
+  private readonly screen: ScreenSources;
   private closed = false;
 
   constructor(
@@ -232,6 +267,7 @@ class Hub implements VoiceHub {
     this.now = deps.now ?? Date.now;
     this.env = deps.env ?? process.env;
     this.timing = { ...DEFAULT_TIMING, ...(deps.timing ?? {}) };
+    this.screen = { views: deps.views, docs: deps.docs, objectOf: deps.objectOf, now: this.now };
     this.slots = new CallSlots(config.maxConcurrent);
     this.toolHosts = new ToolHostPool({ spawn: deps.spawnToolHost, keepSec: config.toolHostKeepSec, keepMax: config.toolHostKeepMax, log: deps.log });
     this.usage = new VoiceUsage(path.join(deps.storeDir, 'voice-usage.json'), {
@@ -259,6 +295,11 @@ class Hub implements VoiceHub {
       speech: config.govern ? { maxSentences: config.maxSentences, maxWords: config.maxWords } : false,
       speechFor: (sid, messages) => this.bySid.get(sid)?.speechLimits(messages),
       modelFor: (sid) => this.bySid.get(sid)?.relayModel(),
+      // what the student has open or selected on their page, on each turn of the call (a listener's talk-it-through has no use for it: its prompt does not know the note)
+      screenFor: (sid) => {
+        const s = this.bySid.get(sid);
+        return s && !s.ended && s.mode !== 'listener' ? screenNoteFor(s.user.folder, this.screen) : undefined;
+      },
       onClaimDropped: (sid) => this.bySid.get(sid)?.onClaimDropped(),
     });
   }
@@ -346,6 +387,16 @@ class Hub implements VoiceHub {
     }
   }
 
+  tellCall(folder: string, text: string): boolean {
+    const s = this.byFolder.get(folder);
+    if (!s || s.ended) return false;
+    try {
+      return s.tell(text);
+    } catch {
+      return false;
+    }
+  }
+
   async relay(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     try {
       await this.relayHandler(req, res);
@@ -382,6 +433,8 @@ class Hub implements VoiceHub {
     const conn: { session: VoiceSession | null; started: boolean } = { session: null, started: false };
     const textLimit = new RateLimiter(30, 60_000, this.now);
     const frameLimit = new RateLimiter(240, 60_000, this.now);
+    // the page reports the whole view at most every 0.8 s (about 75 a minute at the most); this allows for a little more than that
+    const viewLimit = new RateLimiter(VIEW_PER_MINUTE, 60_000, this.now);
     const startTimer = setTimeout(() => {
       if (!conn.started) {
         send(ws, { type: 'error', code: 'no-start', message: 'Expected a start message.' });
@@ -427,6 +480,14 @@ class Hub implements VoiceHub {
               this.deps.log.warn({ folder: user.folder, err: (err as Error).message }, 'voice: could not add the typed line to the chat');
             }
             s.inject(typed);
+            return;
+          }
+          case 'view': {
+            // where the student is looking (docs/CHAT_OBJECTS.md "The view"): kept for this student, with or without a call attached to the socket yet. An empty view is kept too: it is how the page
+            // says the viewer was closed. One that does not parse is dropped; the folder is the portal's, never the page's
+            if (!this.deps.views || !viewLimit.allow('view')) return;
+            const view = parseViewState(msg.view);
+            if (view) this.deps.views.set(user.folder, view);
             return;
           }
           case 'mute':
@@ -528,6 +589,14 @@ class Hub implements VoiceHub {
           appendChat: this.deps.appendChat,
           recentChat: this.deps.recentChat,
           memories: this.deps.memories,
+          workFacts: this.deps.workFacts,
+          rememberWork: this.deps.rememberWork,
+          forgetWork: this.deps.forgetWork,
+          runSandbox: this.deps.runSandbox,
+          views: this.deps.views,
+          docs: this.deps.docs,
+          objectOf: this.deps.objectOf,
+          workFromCall: this.deps.workFromCall,
           recordVoiceSummary: this.deps.recordVoiceSummary,
           gateway: { url: this.config.llmUrl, key: this.config.llmKey, model: this.config.evalModel, fetchImpl: this.deps.fetchImpl, log: this.deps.log },
           addUsage: (folder, seconds) => this.usage.add(folder, seconds),

@@ -376,7 +376,8 @@ describe('the rest of the helpers', () => {
       "## THE WEEK'S EVIDENCE",
       'Never invent a commit, a post, a status or a requirement',
       "never read the assignment's wording, a commit message or a post out",
-      'Early on (your first question, when you can), ask which requirements they covered and which they left, in your own words',
+      'Your first question (the warm-up): pick ONE concrete part of the assignment from the ASSIGNMENT section (a requirement, a component, a design choice), name it, and ask how they approached it: what it does, how they built it, why they chose it that way',
+      'NEVER ask them to list what they finished or skipped; only when the ASSIGNMENT section names no concrete part, ask once: "which part did you start with?"',
       "three beats are REQUIRED: one question each, asked ONCE, in this order, between the code walkthrough's questions (aim for your 3rd, 5th and 7th question), skipped only when their section is not there",
       'Do not call end_interview before they have been asked; when time is nearly up, ask each that is left in one short question',
       '(a) A commit: pick one (the one that touched the file you read is best), say its day and what it was about in your own words (never the hash), and ask what problem it solved and what they traded off',
@@ -396,11 +397,16 @@ describe('the rest of the helpers', () => {
     ]) expect(WEEK_RULES).toContain(part);
     // "two to four times, naturally" was read as optional: in nine turns on the real model it asked no commit, no post and no status question
     expect(WEEK_RULES).not.toContain('two to four times');
+    // the owner's call of 2026-11-06: "which requirements did you cover and which did you leave out?" was asked four times and never understood; it is gone, here and in the structure
+    for (const gone of ['which requirements they covered', 'which of its requirements they covered', 'which they left', 'Early on (your first question']) {
+      expect(WEEK_RULES).not.toContain(gone);
+      expect(WEEK_STRUCTURE).not.toContain(gone);
+    }
   });
 
   it('puts the beats in the structure as a step of their own, and two rules after the tenth: the end waits for them, a contradiction is the next question', () => {
     expect(WEEK_STRUCTURE.split('\n')).toHaveLength(6);
-    expect(WEEK_STRUCTURE).toContain('1. Their general approach to the assignment (warm-up): ask which of its requirements they covered and which they left, in your own words.');
+    expect(WEEK_STRUCTURE).toContain('1. Their approach to the assignment (warm-up): pick ONE concrete part of it from the ASSIGNMENT section and ask how they approached it. Never ask them to list what they finished or skipped.');
     expect(WEEK_STRUCTURE).toContain("3. THIS WEEK'S WORK, three beats that are REQUIRED");
     expect(WEEK_STRUCTURE).toContain("each asked ONCE, in this order, between the walkthrough's questions, aiming for your 3rd, 5th and 7th question: (a) a commit, (b) their Piazza post, (c) where the assignment stands. Skip one only when its section is not there.");
     for (const kept of ['2. Their code: the CODE WALKTHROUGH below', '4. "What happens if..." scenarios', '5. Explaining the week\'s concepts clearly out loud.', '6. Their weak spots and verbal gaps (below).']) expect(WEEK_STRUCTURE).toContain(kept);

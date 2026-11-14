@@ -1,6 +1,6 @@
 /**
  * TAI_VISION on the host (src/vision-env.ts, docs/VISION.md): the switch is exactly "1"; a student's own chat container is started with TAI_VISION=1 and the
- * alias that looks at pictures (a plain name only), and nothing else is: not the admin's chat, not a scheduled task, never the voice tool host. No key is
+ * alias that looks at pictures (a plain name only), and so is a voice call's tool host (the owner's decision of 2026-11-07) unless TAI_CALL_VISION=0; nothing else is: not the admin's chat, not a scheduled task. No key is
  * ever on the command line, and the host hands the container no second copy of the gateway's key.
  */
 import { EventEmitter } from 'events';
@@ -72,7 +72,7 @@ vi.mock('child_process', async () => {
 import { spawn } from 'child_process';
 import { runContainerAgent, spawnToolHost } from './container-runner.js';
 import type { RegisteredGroup } from './types.js';
-import { MODEL_ALIAS, visionFor, visionModel, visionOn } from './vision-env.js';
+import { MODEL_ALIAS, callVisionOn, visionFor, visionForCall, visionModel, visionOn } from './vision-env.js';
 
 const ada: RegisteredGroup = { name: 'Ada', folder: 's_ada', trigger: '@TAi', added_at: '2026-01-01', canvasUserId: '7' };
 const GATEWAY_KEY = 'gateway-key-not-a-real-one';
@@ -108,6 +108,7 @@ afterEach(() => {
   vi.useRealTimers();
   delete process.env.TAI_VISION;
   delete process.env.TAI_VISION_MODEL;
+  delete process.env.TAI_CALL_VISION;
 });
 
 describe('the switch', () => {
@@ -135,6 +136,24 @@ describe('the model\'s name', () => {
       expect(visionModel({ TAI_VISION_MODEL: bad }), JSON.stringify(bad)).toBeNull();
       expect(MODEL_ALIAS.test(bad ?? ''), JSON.stringify(bad)).toBe(false);
     }
+  });
+});
+
+describe('the switch for calls', () => {
+  it('is on with the picture switch, and off with TAI_CALL_VISION=0 or without the picture switch', () => {
+    expect(callVisionOn({ TAI_VISION: '1' })).toBe(true);
+    expect(callVisionOn({ TAI_VISION: '1', TAI_CALL_VISION: '1' })).toBe(true);
+    expect(callVisionOn({ TAI_VISION: '1', TAI_CALL_VISION: '0' })).toBe(false);
+    for (const vision of [undefined, '', '0', 'true', ' 1']) expect(callVisionOn({ TAI_VISION: vision }), String(vision)).toBe(false);
+    expect(callVisionOn({})).toBe(false);
+  });
+
+  it("is the launch of a student's chat for a call's tool host when on, with the alias it names, and nothing when off", () => {
+    expect(visionForCall({ TAI_VISION: '1' })).toEqual({ model: null });
+    expect(visionForCall({ TAI_VISION: '1', TAI_VISION_MODEL: 'glm-5.3-flash' })).toEqual({ model: 'glm-5.3-flash' });
+    expect(visionForCall({ TAI_VISION: '1', TAI_VISION_MODEL: 'a;b' })).toEqual({ model: null });
+    expect(visionForCall({ TAI_VISION: '1', TAI_CALL_VISION: '0' })).toBeNull();
+    expect(visionForCall({})).toBeNull();
   });
 });
 
@@ -203,15 +222,32 @@ describe('TAI_VISION in the container\'s environment', () => {
     });
   }
 
-  it('is not set for a voice call\'s tool host, which would then run a tool that sends a student\'s picture to z.ai without the call\'s student knowing', async () => {
+  it("is set for a voice call's tool host when the switch is on (the owner's decision of 2026-11-07), with the alias, and the gateway's key is no more than the secret it always was", async () => {
     process.env.TAI_VISION = '1';
     process.env.TAI_VISION_MODEL = 'glm-vision';
     await spawnToolHost(ada, 'web:s_ada');
     const args = lastArgs();
-    expect(args.some((a) => a.includes('TAI_VISION'))).toBe(false);
     expect(envOf(args)).toContain('TAI_MODE=tool-host');
+    expect(envOf(args)).toContain('TAI_VISION=1');
+    expect(envOf(args)).toContain('TAI_VISION_MODEL=glm-vision');
+    expect(args[args.length - 1]).toBe('nanoclaw-agent:latest');
+    expect(args.join(' ')).not.toContain(GATEWAY_KEY);
     const stdin = String(fakeProc.stdin.read() ?? '');
-    expect(stdin).not.toContain('TAI_VISION');
+    const secrets = (JSON.parse(stdin.trim()) as { secrets: Record<string, string> }).secrets;
+    expect(Object.keys(secrets).filter((k) => k.startsWith('TAI_VISION'))).toEqual([]);
+    expect(secrets.ANTHROPIC_AUTH_TOKEN).toBe(GATEWAY_KEY);
+  });
+
+  it("is not set for a voice call's tool host without the switch or with TAI_CALL_VISION=0: calls alone can be switched off", async () => {
+    for (const [vision, call] of [[undefined, undefined], ['1', '0'], ['0', undefined], ['true', undefined]] as Array<[string | undefined, string | undefined]>) {
+      if (vision === undefined) delete process.env.TAI_VISION;
+      else process.env.TAI_VISION = vision;
+      if (call === undefined) delete process.env.TAI_CALL_VISION;
+      else process.env.TAI_CALL_VISION = call;
+      fakeProc = createFakeProcess();
+      await spawnToolHost(ada, 'web:s_ada');
+      expect(lastArgs().some((a) => a.includes('TAI_VISION')), `${vision} ${call}`).toBe(false);
+    }
   });
 });
 

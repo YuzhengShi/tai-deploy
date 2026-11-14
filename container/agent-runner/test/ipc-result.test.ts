@@ -137,3 +137,23 @@ describe('awaitIpcResult', () => {
     expect(await awaitIpcResult(dir, 'req-00000040', { now: c.now, sleep: c.sleep, timeoutMs: 500 })).toBeNull();
   });
 });
+
+describe('the size of an answer and the sentence for one that cannot be read', () => {
+  it('keeps 600 characters of a task tool\'s answer by default (the cap a longer answer, run_go\'s, raises)', async () => {
+    answerFile('req-00000010', { ok: true, message: 'a'.repeat(900) });
+    const c = clock();
+    expect((await awaitIpcResult(dir, 'req-00000010', { now: c.now, sleep: c.sleep }))?.message).toHaveLength(600);
+    answerFile('req-00000011', { ok: true, message: 'a'.repeat(900) });
+    expect((await awaitIpcResult(dir, 'req-00000011', { now: c.now, sleep: c.sleep, maxMessageChars: 2000 }))?.message).toHaveLength(900);
+    answerFile('req-00000012', { ok: true, message: 'a'.repeat(900) });
+    expect((await awaitIpcResult(dir, 'req-00000012', { now: c.now, sleep: c.sleep, maxMessageChars: 100 }))?.message).toHaveLength(100);
+  });
+
+  it('says what a tool asks it to say about an answer it cannot read, and the task list for a tool that does not', async () => {
+    answerFile('req-00000013', 'not json');
+    const c = clock();
+    expect(await awaitIpcResult(dir, 'req-00000013', { now: c.now, sleep: c.sleep, unreadable: 'could not read it' })).toEqual({ ok: false, message: 'could not read it' });
+    answerFile('req-00000014', 'not json');
+    expect((await awaitIpcResult(dir, 'req-00000014', { now: c.now, sleep: c.sleep }))?.message).toMatch(/Check list_tasks/);
+  });
+});

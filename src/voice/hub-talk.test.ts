@@ -228,7 +228,7 @@ describe('switching into a talk-it-through and back', () => {
     const bye = await conn.waitFor('FunctionCallResponse', (m) => m.id === 'fc-end');
     expect(JSON.parse(bye.content as string).status).toBe('ending the talk-through');
     expect(bye.content as string).toContain('[[handoff]]');
-    const back: any = await conn.waitFor('UpdateThink', (m: any) => m.think.functions.length === 16);
+    const back: any = await conn.waitFor('UpdateThink', (m: any) => m.think.functions.some((f: any) => f.name === 'start_interview'));
     expect(back.think.prompt).not.toContain('LISTENER');
     const quick: any = await conn.waitFor('UpdateListen', (m: any) => m.listen.provider.eot_threshold === 0.75);
     expect(quick.listen.provider.eot_timeout_ms).toBe(5000);
@@ -331,7 +331,7 @@ describe('what the listener says', () => {
     conn.callFunction('fc-m', 'save_memory', { content: 'explains best when she starts from the failure case', category: 'student_preference' });
     expect((await conn.waitFor('FunctionCallResponse', (m) => m.id === 'fc-m')).content).toBe('Remembered.');
     conn.callFunction('fc-end', 'end_talk_through', { summary: 'explained timeouts and ties well; the majority rule needs another pass' });
-    await conn.waitFor('UpdateThink', (m: any) => m.think.functions.length === 16);
+    await conn.waitFor('UpdateThink', (m: any) => m.think.functions.some((f: any) => f.name === 'start_interview'));
     await browser.next('mode', (e) => e.mode === 'conversational');
     h.gw.respond = () => completion('You talked Raft leader election through and the timeouts were strong. The majority rule needs another pass.');
     browser.send({ type: 'end' });
@@ -385,7 +385,7 @@ describe('what the listener says', () => {
     expect(timer.talkRemainingSec).toBeLessThanOrEqual(59);
     clock.now += 60_000;
     await conn.waitFor('InjectAgentMessage', (m) => m.message === lines.talkClosing());
-    await conn.waitFor('UpdateThink', (m: any) => m.think.functions.length === 16);
+    await conn.waitFor('UpdateThink', (m: any) => m.think.functions.some((f: any) => f.name === 'start_interview'));
     await browser.next('mode', (e) => e.mode === 'conversational');
     expect(conn.ofType('InjectAgentMessage').filter((m) => m.message === lines.talkClosing())).toHaveLength(1);
   });

@@ -105,6 +105,11 @@ describe('what the governor lets through', () => {
       'I will call query_piazza now.',
       'The user wants the slides.',
       'I think I will send link to Week 7 maybe.',
+      'I will call look_at_week to see Canvas.', // the interviewer's look at Canvas, GitHub and Piazza (functions.ts)
+      'Now look_at_week.',
+      'I will call run_code on their repo.', // the function that runs their Go code (functions.ts, run-code.ts)
+      'Okay, run_code.',
+      'We should use RUN_CODE here.',
     ]) {
       expect(said(thought).text, thought).toBe('');
     }

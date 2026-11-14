@@ -45,6 +45,15 @@ export function realDirInside(dir: string, root: string): string | null {
  * in a directory that leads out of `root`. Never blocks and never follows a link at the file.
  */
 export function readTextSafe(file: string, maxBytes: number = MAX_READ_BYTES, root?: string): string | null {
+  const bytes = readBytesSafe(file, maxBytes, root);
+  return bytes === null ? null : bytes.toString('utf-8');
+}
+
+/**
+ * The file's bytes (for a file that is not text: an archive a student attached), under the same rules as `readTextSafe`, which this is the body of. The caller names
+ * its own `maxBytes`; there is no default here because an archive's limit is not a log's.
+ */
+export function readBytesSafe(file: string, maxBytes: number, root?: string): Buffer | null {
   let fd: number | undefined;
   try {
     if (root !== undefined && realDirInside(path.dirname(file), root) === null) return null;
@@ -60,7 +69,7 @@ export function readTextSafe(file: string, maxBytes: number = MAX_READ_BYTES, ro
       if (n === 0) break;
       read += n;
     }
-    return buffer.subarray(0, read).toString('utf-8');
+    return buffer.subarray(0, read);
   } catch {
     return null;
   } finally {

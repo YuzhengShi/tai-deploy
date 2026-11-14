@@ -12,6 +12,15 @@ import { practiceOf, setPractise } from './review.js';
 import { createPresence, createSettings } from './settings.js';
 import { lookedAt } from './sources.js';
 import { LONGEST_TEXT, createAnnouncer, noteText, previewText, statusView, withoutPreview } from './status.js';
+import { objectRow, setObjectHelpers, viewerApi } from './objects.js';
+import { createViewState } from './view-state.js';
+import './runcard.js';                      // the cards register their renderers on import (objects.js)
+import './doccard.js';
+import './chartcard.js';
+import './tracecard.js';
+import './predictcard.js';
+import { initViewer, offerOpen } from './viewer.js';
+import { initAskHere } from './askhere.js';
 
 // The mock interview's link (/interview/<token>, behind the page's base path) opens this page. The token is read here, before anything
 // else runs, kept in memory only (never in storage, an address or a log), and taken out of the address bar and the session history at once.
@@ -73,7 +82,7 @@ const STARTERS = [
   { icon: 'wave', title: 'Talk it through out loud', sub: 'Explain it by voice and TAi listens', call: 'talk' },
 ];
 // what the server may switch on (GET api/me says); with all of it off the page is the text chat and its Activity list
-const NO_FEATURES = { files: false, pictures: false, voiceNotes: false, voiceCalls: false, activity: false, choices: false, maxUploadBytes: 0, voiceNoteSeconds: 180, accept: [] };
+const NO_FEATURES = { files: false, pictures: false, voiceNotes: false, voiceCalls: false, activity: false, choices: false, viewer: false, maxUploadBytes: 0, voiceNoteSeconds: 180, accept: [] };
 
 const state = {
   user: null,
@@ -98,6 +107,7 @@ const state = {
   notes: new Set(),        // the voice notes on the page (their players are let go when the conversation is cleared)
   blobUrls: new Set(),     // local copies of recordings that were sent from this page
   lastUserN: 0,            // the student's newest numbered message
+  callWasOn: false,        // the call was going the last time the layout was drawn (a call that begins makes the view be reported again)
   pending: [],             // sent, not yet numbered: { text, files, row, n? }
   awaiting: false,         // a message of ours has no reply yet
   serverTyping: false,
@@ -235,6 +245,16 @@ const call = createCall({
     const act = { started: speaking.started, voice: speaking.voice, heard: speaking.heard, stop: speaking.stop }[kind];
     if (act) act();
   },
+  // what TAi does to the student's screen in a call: `show` (go to a page), `point` (draw boxes), `doc_state` (a document is being prepared): the viewer's
+  onScreen: (message) => viewerApi.screen(message),
+});
+
+// where the student is looking (view-state.js): the call's socket during a call, a POST otherwise; the server describes it to TAi when it is wanted
+const viewState = createViewState({
+  send: (view) => {
+    if (call.active() && typeof call.sendView === 'function' && call.sendView(view)) return;
+    api('api/view', { method: 'POST', body: view });
+  },
 });
 const speaking = createSpeaking({ show: () => showSpeaking(), hide: () => hideSpeaking() });
 const recorder = createNoteRecorder({
@@ -319,6 +339,7 @@ function readFeatures(raw) {
     files, pictures, voiceNotes: f.voiceNotes === true, voiceCalls: f.voiceCalls === true, activity: f.activity === true, choices: f.choices === true, maxUploadBytes: max,
     voiceNoteSeconds: seconds > 0 ? Math.min(600, Math.floor(seconds)) : NO_FEATURES.voiceNoteSeconds,
     team: f.team === true,
+    viewer: f.viewer === true,                                // the document viewer and what it reports (docs/CHAT_OBJECTS.md)
     accept: files ? listed.filter((x) => pictures || !PICTURE_TYPES[x]) : [],
   };
 }
@@ -429,7 +450,7 @@ function picture(media, alt, kind) {
 }
 
 /** Can this assistant line be shown at all: words, or a picture. */
-const showable = (entry) => !!(entry.text || (entry.kind === 'image' && MEDIA_ID.test(entry.media || '')));
+const showable = (entry) => !!(entry.text || (entry.kind === 'image' && MEDIA_ID.test(entry.media || '')) || (entry.kind === 'object' && entry.obj));
 
 /** An activity line of TAi's (a call, a note it kept, a reminder), or a call summary of the older kind: a card, not something TAi said. */
 const isActivityLine = (entry) => entry.role !== 'user' && (entry.kind === 'activity' || entry.kind === 'voice');
@@ -587,6 +608,8 @@ function hideSpeaking() {
  */
 function callLayout() {
   const on = call.active();
+  if (on && !state.callWasOn) viewState.resend();      // the server's copy of the view belongs to the call: it is told again
+  state.callWasOn = on;
   els.composer.classList.toggle('in-call', on);
   els.input.placeholder = on ? 'Type' : state.user ? 'Message' : 'Sign in to message TAi';
   if (!on) speaking.stop();
@@ -704,7 +727,12 @@ function userRow(text, ts, files) {
   else {
     bubble = el('div', 'bubble has-files');
     const box = el('div', 'files');
-    for (const file of attached) box.append(fileChip(file));
+    for (const file of attached) {
+      const chip = fileChip(file);
+      // a PDF can be opened in the viewer (viewer.js): the message's number is read when the button is pressed, because a message that was just sent gets it from the server's answer
+      offerOpen(chip, { n: () => Number(row.dataset.n), index: files.indexOf(file), name: file.name, kind: file.kind });
+      box.append(chip);
+    }
     bubble.append(box);
     if (text) bubble.append(el('div', 'text', text));
   }
@@ -1195,6 +1223,17 @@ function addEntries(entries, { instant = false } = {}) {
       state.entries.push(entry);
       place(card, 'activity', Date.parse(entry.ts) || Date.now());
       activityPanel.push(entry);
+      added = true;
+      continue;
+    }
+    if (entry.kind === 'object') {
+      // a card of TAi's (a run of their code, a document, a chart ...), drawn by its own module (objects.js) at its place: it is no reply, so it is not unread, answers nothing and stops no dots
+      if (state.rows.has(entry.n)) continue;
+      const card = objectRow(entry);
+      if (!card) continue;
+      state.rows.set(entry.n, card);
+      state.entries.push(entry);
+      place(card, 'object', Date.parse(entry.ts) || Date.now());
       added = true;
       continue;
     }
@@ -1762,10 +1801,12 @@ function autosize() {
   els.count.classList.toggle('over', length > state.maxChars);
 }
 
-function quoteIntoComposer(text) {
+/** Puts words in the message box as a quotation. `focus` false (askhere.js on a phone: the keyboard would cover the conversation) leaves the box as it is. */
+function quoteIntoComposer(text, { focus = true } = {}) {
   const quoted = text.split('\n').map((line) => `> ${line}`).join('\n');
   els.input.value = `${quoted}\n\n${els.input.value}`;
   autosize();
+  if (!focus) return;
   els.input.focus();
   els.input.setSelectionRange(els.input.value.length, els.input.value.length);
 }
@@ -2227,5 +2268,10 @@ async function boot() {
   if (me.status === 403) return showSignIn('This account is not on my list. Sign in with another account.');
   showSignIn();
 }
+
+// what the cards, the viewer and the selection helper are given (objects.js, viewer.js, askhere.js)
+setObjectHelpers({ el, icon, fullTime, renderMarkdown, view: viewState, viewer: viewerApi, toast });
+initViewer({ root: $('#viewer'), view: viewState, api, el, icon, toast, quote: quoteIntoComposer, inCall: () => call.active(), features: () => state.features });
+initAskHere({ view: viewState, messages: els.messages, quote: quoteIntoComposer, inCall: () => call.active(), toast });
 
 boot();

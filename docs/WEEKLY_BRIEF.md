@@ -12,7 +12,7 @@ Built in the agent container (`container/agent-runner/src/weekly-brief.ts`), fro
 | Entry | What it does |
 | --- | --- |
 | `start_mock_interview` | builds the brief **beside** its own lookups (below) and adds it to `groups/<folder>/interview_context.json` as `weekBrief`; the answer's `Context:` line gains `week ✓, status ✓, commits ✓ (7), piazza ✓ (2 posts)` (✗ with the reason for what did not arrive). The interview starts whatever the brief does: it never throws. |
-| `weekly_brief({assignment_id?, student_folder?})` | the same brief as compact text for the text agent (`formatWeekBrief`); writes no file; 3 calls per conversation (`tool-limits.ts`). `student_folder`, `canvas_user_id` and `github_username` are the admin chat's only. |
+| `weekly_brief({assignment_id?, student_folder?, format?})` | the same brief as compact text for the text agent (`formatWeekBrief`); writes no file; 3 calls per conversation (`tool-limits.ts`). `student_folder`, `canvas_user_id` and `github_username` are the admin chat's only. `format` is `"text"` (absent: exactly the text above) or, since 2026-11-06, `"json"`: `JSON.stringify(brief)`, the object `start_mock_interview` stores as `weekBrief` (`weeklyBriefAnswer`), for the voice interviewer's `look_at_week` (below); not for the text agent. |
 | `canvas_query` `week_status` | the Canvas part alone: `{window, week, assignments}` (params: `assignment_id?`). Auto-scoped to the student. |
 | `github_query` `activity` | the GitHub part alone (params: `since?`, `until?` default the last 7 days, `repo?`, `max_repos?`, `max_commits?`, `detail?`). The student's own account only. |
 | `piazza_query` `student_activity` | the Piazza part alone (params: `since?`, `until?`, `limit?` up to 8). Found by the student's Canvas e-mail address or name. |
@@ -23,6 +23,12 @@ Built in the agent container (`container/agent-runner/src/weekly-brief.ts`), fro
 usually 5 to 15), not the sum. The brief starts as soon as the assignment is settled (at once when `assignment_id` is given, otherwise after the first Canvas call), so its main assignment is the
 interview's (see "The window and the week"). A side effect: the MCP server no longer holds every other call back for the length of `start_mock_interview` (an `execSync` blocks the whole Node process; the other tools' calls
 still do, for their own length, and a blocked loop makes this brief's timers run late).
+
+**The interviewer looks again (2026-11-06).** The voice interviewer's prompt holds the brief of the interview's start, and a student who says "can you look at Canvas?" or "I just pushed" needs the sources read again, so its
+function `look_at_week` (docs/VOICE.md, "Looking at the week again") asks the call's tool host for this tool with `{assignment_id: <the interview's>, format: "json"}` and 50 s. Same brief, same binding (the model chooses
+neither the student nor an account), same `sources`. The limit is the tool's own, 3 a voice call (the tool host counts per call and resets at `new-call`); the host counts its own looks to the same number and answers from
+the last view past it. The text of `weekly_brief` (no `format`) is what it was, byte for byte (`weeklyBriefAnswer`, tested against `formatWeekBrief`); the JSON is read by the host's `parseWeekBrief`, whose shape this
+file's schema is the contract of (a test in `weekly-brief.test.ts` runs the producer's output through the host's reader). The image must be rebuilt before a look can work: an older image ignores `format` and answers text.
 
 ## What is fetched
 
@@ -51,7 +57,7 @@ those due closest to P, ordered by due date. The window and the week are `week_w
 
 **One rule picks P everywhere**: `pickPrimaryAssignment` (`weekly-brief.ts`, pure). `start_mock_interview` runs it over its own assignment list (its old default was the assignment most recently *past* due, i.e.
 last week's), so `interview_context.json`'s `assignmentId`, name, spec, lecture material, submission text and code excerpts and the brief's `primary` assignment are about one assignment whenever no
-`assignment_id` is passed (a named one is found by id exactly as before, published or not). `buildWeekBrief` with no assignment named (the `weekly_brief` tool) reads the `assignments` list first (one more
+`assignment_id` is passed (a named one is found by id as before, published or not, in the admin chat; in a student's chat an unpublished one is not in the list the tool shows, so a named unpublished id falls back to the default primary, 2026-11-08). `buildWeekBrief` with no assignment named (the `weekly_brief` tool) reads the `assignments` list first (one more
 Canvas request, 8 s at most, in step with `user_contact`) and runs the same function; a list it cannot read costs nothing, `week_status` then applies the rule itself. `pick_primary` in `canvas_api.py` is
 the same rule for a direct `canvas_query week_status` (the unlock date plays no part in either: the `assignments` list has none), and a test runs both on the same cases.
 

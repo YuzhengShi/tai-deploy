@@ -63,6 +63,10 @@ export function newSessionId(): string {
 // ---------------------------------------------------------------- the request the gateway gets
 
 const ROLES = new Set(['system', 'developer', 'user', 'assistant', 'tool']);
+/** The most messages a request may have (a longer one is refused, and the screen note is never what takes one past it). */
+export const MAX_MESSAGES = 500;
+/** The longest screen note the relay puts into a request, whatever it is given (describeView's own limit is 2,000 characters). */
+export const SCREEN_NOTE_MAX_CHARS = 2_400;
 
 function cleanContent(content: unknown): unknown {
   if (typeof content === 'string' || content === null) return content;
@@ -150,10 +154,31 @@ export function questionLast(messages: unknown): unknown {
   return [...messages.slice(0, start), ...messages.slice(end), ...messages.slice(start, end)];
 }
 
+/**
+ * The messages with the note about the student's screen (screen.ts) as a system message right before the LAST user message, for this request only: nothing of it is in Deepgram's own
+ * conversation (it never accumulates, and an UpdatePrompt, which appends for good, is not used). Put after `questionLast` has run, so that the question stays last, and before the last
+ * user line, so that an assistant message with its function calls and the tool message that answers it stay together and the prefix of the request is the same from one turn to the next. Nothing
+ * is added when there is no user message to attach it to, when the request already has this very note, or when it would take the request past MAX_MESSAGES. The note is clipped to SCREEN_NOTE_MAX_CHARS.
+ */
+export function withScreenNote(messages: unknown, note: string): unknown {
+  if (!Array.isArray(messages) || !note.trim() || messages.length >= MAX_MESSAGES) return messages;
+  const text = note.length > SCREEN_NOTE_MAX_CHARS ? note.slice(0, SCREEN_NOTE_MAX_CHARS - 1) + '…' : note;
+  let at = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if ((messages[i] as { role?: unknown } | null)?.role === 'user') {
+      at = i;
+      break;
+    }
+  }
+  if (at < 0) return messages;
+  if (messages.some((m) => (m as { role?: unknown; content?: unknown } | null)?.role === 'system' && (m as { content?: unknown }).content === text)) return messages;
+  return [...messages.slice(0, at), { role: 'system', content: text }, ...messages.slice(at)];
+}
+
 export function rewriteChatRequest(body: unknown, opts: { model: string; maxTokens: number }): Record<string, unknown> | null {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
   const b = body as Record<string, unknown>;
-  if (!Array.isArray(b.messages) || b.messages.length === 0 || b.messages.length > 500) return null;
+  if (!Array.isArray(b.messages) || b.messages.length === 0 || b.messages.length > MAX_MESSAGES) return null;
   const messages: Record<string, unknown>[] = [];
   for (const raw of b.messages) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -224,6 +249,12 @@ export interface RelayOptions {
   speechFor?: (sid: string, messages: unknown) => Partial<GovernorOptions> | undefined;
   /** The model for this call's next request when it is not `model` (a talk-it-through has its own): asked at every request. */
   modelFor?: (sid: string) => string | undefined;
+  /**
+   * The note about what the student has open and selected on their page (screen.ts, docs/CHAT_OBJECTS.md "The view"), asked at every request that goes to the model: when it returns text it is put
+   * into THAT request as a system message right before the last user message (`withScreenNote`), and nowhere else. Nothing is added to Deepgram's own context, and the diagnostic dump
+   * records only its length. A listener that throws leaves the turn without a note.
+   */
+  screenFor?: (sid: string) => string | undefined;
   /** Told when an answer said something was in the chat and nothing had gone there (the sentence was not spoken). */
   onClaimDropped?: (sid: string) => void;
 }
@@ -389,6 +420,22 @@ export function createRelay(opts: RelayOptions): (req: http.IncomingMessage, res
       return;
     }
 
+    // what the student has open on their page, for this request only; asked after the silence for a handoff (a request that is not sent needs no note)
+    const beforeNote = body.messages;
+    let screenChars = 0;
+    try {
+      const note = opts.screenFor?.(sid);
+      if (typeof note === 'string' && note.trim() && raw.length + Buffer.byteLength(note.slice(0, SCREEN_NOTE_MAX_CHARS)) <= maxBody) {
+        const withNote = withScreenNote(body.messages, note);
+        if (withNote !== body.messages) {
+          body.messages = withNote;
+          screenChars = Math.min(note.length, SCREEN_NOTE_MAX_CHARS);
+        }
+      }
+    } catch {
+      /* a note that cannot be made is a turn without one */
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 60_000);
     const onClose = () => controller.abort();
@@ -490,7 +537,8 @@ export function createRelay(opts: RelayOptions): (req: http.IncomingMessage, res
               at: new Date(now()).toISOString(),
               sid: sid.slice(0, 6),
               ms: now() - started,
-              request: describeRequest(body, parsed),
+              // the request as Deepgram sent it, and how long the screen note was: never its text (it holds what a document says)
+              request: { ...describeRequest({ ...body, messages: beforeNote }, parsed), ...(screenChars ? { screen_note_chars: screenChars } : {}) },
               answer: { finish: speech.finishReason, text: speech.rawContent, calls: [...speech.rawCalls.values()], writtenAsText: speech.textCalls, spoken: speech.spoken, notSpoken: speech.dropped },
             }) + '\n',
             { mode: 0o600 },

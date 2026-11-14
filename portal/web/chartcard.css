@@ -1,0 +1,91 @@
+/* chartcard.css: the styles of chartcard.js (docs/CHAT_OBJECTS.md, docs/CARDS.md): a chart of numbers in the conversation. It uses the page's own tokens (style.css: --bubble, --line, --text, --muted, --dash,
+   --blue, --pill, --font) and has a palette of six series colours of its own, for the light, auto and dark themes the way style.css has them. Colour is never the only signal: a series also has its own marker,
+   dash or hatching (chartcard.js SERIES_STYLES), and the words of the readout and the table say the same. Every colour here is a class or a custom property (the page's content policy forbids inline styles,
+   and var() does not resolve in an SVG presentation attribute). Nothing in this file animates, so there is nothing for a reduced-motion setting to turn off. */
+
+.row.object[data-type="chart"] { align-items: flex-start; }
+
+.chartcard {
+  /* the series colours on the card's white (#fff) and dark (#212121) backgrounds: each is 3:1 or better for a line, a bar and a marker */
+  --ch-1: #0b5fcc; --ch-2: #c2410c; --ch-3: #0f766e; --ch-4: #a21caf; --ch-5: #4d7c0f; --ch-6: #be123c;
+  flex: 1 1 auto; min-width: 0; max-width: min(100%, 760px);
+  background: var(--bubble); border: 1px solid var(--line); border-radius: 18px; overflow: hidden;
+  color: var(--text); font-size: 14px; line-height: 1.5;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] .chartcard { --ch-1: #60a5fa; --ch-2: #fb923c; --ch-3: #5eead4; --ch-4: #e879f9; --ch-5: #a3e635; --ch-6: #fda4af; }
+}
+:root[data-theme="dark"] .chartcard { --ch-1: #60a5fa; --ch-2: #fb923c; --ch-3: #5eead4; --ch-4: #e879f9; --ch-5: #a3e635; --ch-6: #fda4af; }
+
+.ch-title { padding: 10px 14px 2px; font-size: 15px; font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; }
+
+/* the plot: one tab stop; vertical swipes still scroll the page */
+.ch-plot { position: relative; padding: 2px 8px 0; border-radius: 12px; touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
+.ch-plot:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.ch-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.ch-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+/* the page's own rule for its icons (style.css: svg { fill: none; stroke: currentColor; stroke-width: 1.7; round caps }) is inherited by everything drawn here: every chart SVG starts from no stroke, and each
+   shape below says what it has */
+.ch-svg, .ch-swatch, .ch-defs { fill: none; stroke: none; stroke-width: 1; stroke-linecap: butt; stroke-linejoin: miter; }
+
+.ch-gridline { stroke: var(--line); stroke-width: 1; }
+.ch-axis { stroke: var(--dash); stroke-width: 1; }
+.ch-zero { stroke: var(--muted); }
+.ch-tick { fill: var(--muted); font-family: var(--font); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ch-axis-title { fill: var(--text); font-family: var(--font); font-size: 12px; font-weight: 600; }
+
+/* one colour a series, set on the series' group, its legend item and its hatching */
+.ch-s0 { --c: var(--ch-1); }
+.ch-s1 { --c: var(--ch-2); }
+.ch-s2 { --c: var(--ch-3); }
+.ch-s3 { --c: var(--ch-4); }
+.ch-s4 { --c: var(--ch-5); }
+.ch-s5 { --c: var(--ch-6); }
+.ch-line { fill: none; stroke: var(--c); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.ch-mk { fill: var(--c); stroke: var(--bubble); stroke-width: 1.5; }
+.ch-mk-stroke { fill: none; stroke: var(--c); stroke-width: 2.2; stroke-linecap: round; }
+.ch-bar { fill: var(--c); stroke: var(--c); stroke-width: 1; }
+.ch-barp { stroke: var(--c); stroke-width: 1.5; }
+.ch-pat-bg { fill: var(--bubble); }
+.ch-pat-ink { stroke: var(--c); fill: none; }
+.ch-pat-dot { fill: var(--c); }
+
+/* the ring on the point that is read or picked */
+.ch-cursor { display: none; pointer-events: none; }
+.ch-cursor.ch-on { display: inline; }
+.ch-halo { fill: none; stroke: var(--text); stroke-width: 2; }
+
+/* the readout: a line under the chart (never a floating tooltip), with room for two lines so that the conversation does not move as the pointer does */
+.ch-readout { min-height: 1.5em; padding: 2px 14px 4px; color: var(--text); font-size: 13.5px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+/* while it holds nothing, a hint (generated content, which a screen reader is given no text of) fills the room it keeps */
+.ch-readout:empty::before { content: "Hover over a point to read it"; content: "Hover over a point to read it" / ""; color: var(--muted); }
+@media (hover: none) { .ch-readout:empty::before { content: "Tap a point to read it"; content: "Tap a point to read it" / ""; } }
+
+.ch-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 2px 14px 8px; list-style: none; font-size: 13px; }
+.ch-key { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.ch-swatch { flex: none; display: block; }
+.ch-key-name { overflow-wrap: anywhere; }
+.ch-note { margin: 0; padding: 0 14px 8px; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+
+.ch-foot { display: flex; align-items: center; padding: 5px 8px; border-top: 1px solid var(--line); }
+.ch-btn {
+  min-height: 32px; padding: 4px 12px; background: transparent; border: 0; border-radius: 10px; color: var(--muted);
+  font-size: 13px; font-weight: 600; -webkit-tap-highlight-color: transparent;
+}
+.ch-btn:hover { background: var(--pill); color: var(--text); }
+
+/* the data: a real table, scrolling inside the card (never the page) */
+.ch-data { max-height: 260px; overflow: auto; overscroll-behavior: contain; border-top: 1px solid var(--line); background: var(--code-bg); }
+.ch-data[hidden] { display: none; }
+.ch-data:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.ch-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ch-table th, .ch-table td { padding: 4px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.ch-table th[scope="row"], .ch-table thead th:first-child { text-align: left; }
+.ch-table thead th { position: sticky; top: 0; background: var(--code-bg); font-weight: 650; }
+.ch-table tbody th { font-weight: 500; }
+
+@media (max-width: 720px) {
+  .chartcard { border-radius: 16px; font-size: 13.5px; }
+  .ch-readout { min-height: 3em; }
+  .ch-btn { min-height: 36px; }
+}

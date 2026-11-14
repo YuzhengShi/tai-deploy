@@ -11,7 +11,7 @@ size, rate and pitch at the fake server; captions, interruption, the interviewer
 comes back as a compact card, not a bubble), TAi answering a student's emoji (a moment after the last one, unless they type first, take it
 back or are in a call), the activity list (calls, notes TAi kept, reminders, progress and course news as cards in the conversation and as
 the days of a sheet that the rail's Activity button opens, and on a phone the Chats drawer: opening one, paging, a line that arrives while
-the sheet is open, the Chats drawer's search, a phone), the mock interview link, and the same page with every feature off. (The page has no
+the sheet is open, the Chats drawer's search, a phone), the mock interview link, the document viewer (`document_viewer`: the cards, the pane, a drag, a click, the keyboard, the Text tab, a reload, a call that shows, points and reports over its socket, a PDF chip's Open in each of its outcomes, a phone's sheet above the call's buttons), and the same page with every feature off. (The page has no
 thumbs, no "What TAi remembers" and no second, teaching-team chat any more: what the server still has of them is not used by the page.)
 
     uv run --no-project --python 3.11 --with playwright python portal/qa/portal_e2e.py [--out DIR] [--headed] [--only NAME,NAME]
@@ -2772,7 +2772,337 @@ def choices_motion(browser, base, off, ctl, out):
     context.close()
 
 
-FLOWS = [features_off, pictures_and_reactions, student_reactions, reaction_replies, touch_reactions, attachments, upload_release, voice_notes, jump_pill, voice_call, talk_mode, interview_link, call_thread, call_orb, call_phone, activity_list, activity_phone, choices_quiz, choices_replies, choices_failures, choices_phone, choices_motion]
+# ---------------------------------------------------------------- the document viewer (docs/VIEWER.md)
+
+HW_DOC = "d0c00000000000000000000000000001"
+SLIDES_DOC = "d0c00000000000000000000000000002"
+LONG_DOC = "d0c00000000000000000000000000004"
+VIEW_JS = "fetch('api/qa/view').then((r) => r.json())"
+
+
+def reported(page) -> dict:
+    """What the page last told the server about where the student is looking (the dev server keeps it: `view`, `via` is 'post' or 'socket')."""
+    return page.evaluate(VIEW_JS)
+
+
+def wait_view(page, held, timeout_ms: int = 4500) -> dict:
+    """Waits for the reported view to be what `held` says (a report goes out a quarter of a second after the last change, and never twice within 0.8 s)."""
+    deadline = time.time() + timeout_ms / 1000
+    record = reported(page)
+    while time.time() < deadline and not held(record.get("view") or {}):
+        page.wait_for_timeout(120)
+        record = reported(page)
+    return record
+
+
+def page_words(page, doc: str, n: int) -> dict:
+    return page.evaluate("([d, p]) => fetch('api/doc/words?d=' + d + '&p=' + p).then((r) => r.json())", [doc, n])
+
+
+def on_page(page, fx: float, fy: float) -> tuple:
+    """A place on the page image, given as fractions of the page, in pixels of the window."""
+    box = page.locator(".vw-page").bounding_box()
+    return box["x"] + box["width"] * fx, box["y"] + box["height"] * fy
+
+
+def word_centre(words: dict, index: int) -> tuple:
+    x0, y0, x1, y1, _ = words["words"][index]
+    return (x0 + x1) / 2, (y0 + y1) / 2
+
+
+def viewer_state(page) -> dict:
+    return page.evaluate("""(() => {
+      const v = document.querySelector('#viewer'), box = (s) => { const r = document.querySelector(s).getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
+      const img = document.querySelector('.vw-img'), pg = document.querySelector('.vw-page');
+      return { open: !v.hidden, mode: v.dataset.mode, title: v.querySelector('.vw-title').textContent, pages: v.querySelector('.vw-pages').textContent, state: pg.dataset.state,
+               natural: [img.naturalWidth, img.naturalHeight], alt: img.alt, page: box('.vw-page'), viewer: box('#viewer'), stage: box('.stage'), dock: box('.dock'),
+               zoom: [...v.querySelectorAll('[aria-label="Zoom"] button[aria-pressed="true"]')].map((b) => b.textContent), withViewer: document.querySelector('#app').classList.contains('with-viewer') };
+    })()""")
+
+
+def document_viewer(browser, base, off, ctl, out):
+    print("the document viewer")
+    context, page, problems = student(browser, base, "dev:viewer@example.com")
+    ctl.post("voice/reset")
+    features = page.evaluate("fetch('api/me').then((r) => r.json()).then((d) => d.features)")
+    check(features.get("viewer") is True, "the server says the viewer is on", str(features))
+    check(page.locator("#viewer").is_hidden() and not viewer_state(page)["withViewer"], "the viewer is closed to begin with, and the conversation has the whole width")
+    wide = page.evaluate("document.querySelector('.stage').getBoundingClientRect().width")
+
+    print("the cards in the conversation")
+    cards = page.locator(".doccard")
+    check(cards.count() == 3, "a card for each document TAi showed (three in the history)", str(cards.count()))
+    check(cards.nth(0).locator(".doccard-title").inner_text() == "Homework 5 spec.pdf" and "4 pages" in cards.nth(0).locator(".doccard-meta").inner_text(), "a card has the title and the number of pages")
+    # (a thumbnail loads lazily: the history now has more cards after these, so each card is brought near the screen before the picture is waited for)
+    for i in range(cards.count()):
+        cards.nth(i).scroll_into_view_if_needed()
+    check(wait_for(page, "document.querySelectorAll('.doccard-thumb img[data-ready]').length === 2", 8000), "the first page is a small picture on the two cards whose documents are there, and not on the one that has expired")
+    check(page.evaluate("[...document.querySelectorAll('.doccard-open')].every((b) => b.textContent === 'Open')"), "every button reads Open while the viewer is closed")
+    check(page.locator(".doccard .actions, .doccard .react, .row.object .act").count() == 0, "a card is no reply: no emoji or copy buttons")
+    shots(page, out, "150-doc-cards", focus="document.querySelector('.doccard').scrollIntoView({ block: 'center' })")
+
+    print("opening, the pane and what it reports")
+    cards.nth(0).locator(".doccard-open").scroll_into_view_if_needed()
+    cards.nth(0).locator(".doccard-open").click()
+    check(wait_for(page, "document.querySelector('.vw-page').dataset.state === 'ready'", 8000), "Open shows the page's picture in the viewer")
+    st = viewer_state(page)
+    check(st["open"] and st["withViewer"] and st["title"] == "Homework 5 spec.pdf" and st["pages"] == "Page 1 of 4", "titled and numbered: page 1 of 4", str(st))
+    check(st["viewer"]["left"] >= st["stage"]["right"] - 1 and st["viewer"]["right"] <= 1281 and st["stage"]["width"] < wide - 300, "a pane beside the conversation, which narrows to make room", str((st["stage"], st["viewer"], wide)))
+    check(st["natural"][0] > 0 and abs(st["page"]["width"] / st["page"]["height"] - st["natural"][0] / st["natural"][1]) < 0.01, "the page's box has the shape of its picture", str(st))
+    check(st["alt"] == "Page 1 of 4. The text of the page is in the Text tab.", "the picture says which page it is, and where its text is", st["alt"])
+    check(page.evaluate("document.activeElement.classList.contains('vw-scroll')"), "the focus moves to the page")
+    check(page.locator(".doccard-open").first.inner_text() == "Showing", "the card's button says the page is showing")
+    record = wait_view(page, lambda v: v.get("doc") == {"id": HW_DOC, "page": 1})
+    check(record["view"].get("doc") == {"id": HW_DOC, "page": 1} and "sel" not in record["view"] and record["via"] == "post", "the page tells the server which document and page are open, by a POST outside a call", str(record))
+    shots(page, out, "151-viewer-page")
+
+    print("selecting words and pointing")
+    words = page_words(page, HW_DOC, 1)
+    first, second = words["lines"][1], words["lines"][2]
+    start, end = on_page(page, *word_centre(words, first[0])), on_page(page, *word_centre(words, second[1]))
+    page.mouse.move(*start)
+    page.mouse.down()
+    page.mouse.move((start[0] + end[0]) / 2, (start[1] + end[1]) / 2, steps=4)
+    page.mouse.move(*end, steps=6)
+    page.mouse.up()
+    record = wait_view(page, lambda v: "sel" in v)
+    check(record["view"].get("sel") == {"doc": HW_DOC, "page": 1, "from": first[0], "to": second[1]}, "dragging from one word to another selects the words between, and the page reports their indexes", str(record["view"]))
+    check(page.locator(".vw-box-sel").count() == 2, "a box for each line shows what is selected")
+    count = second[1] - first[0] + 1
+    check(page.inner_text(".vw-selbar-text") == f"{count} words selected" and page.locator(".vw-selbar .vw-ask").is_visible(), "the pane says how many words, and offers Ask TAi about this", page.inner_text(".vw-selbar-text"))
+    shots(page, out, "152-viewer-selection")
+    page.click(".vw-selbar .vw-ask")
+    check(page.input_value("#input").startswith("> In this assignment you will build") and page.evaluate("document.activeElement.id") == "input", "Ask TAi about this puts the words in the message box as a quotation, and does not send")
+    page.fill("#input", "")
+    blank = on_page(page, 0.5, 0.86)
+    page.mouse.click(*blank)
+    record = wait_view(page, lambda v: "point" in v)
+    point = record["view"].get("point") or {}
+    check(abs(point.get("x", 9) - 0.5) < 0.01 and abs(point.get("y", 9) - 0.86) < 0.01 and "sel" not in record["view"], "a click reports the spot as fractions of the page, and drops the selection", str(record["view"]))
+    check(page.locator(".vw-pin").count() == 1 and page.locator(".vw-box-sel").count() == 0 and page.locator(".vw-selbar").is_hidden(), "a marker shows the spot")
+
+    print("the keyboard")
+    page.locator(".vw-scroll").focus()
+    page.keyboard.press("ArrowRight")
+    check(wait_for(page, "document.querySelector('.vw-pages').textContent === 'Page 2 of 4'"), "the right arrow turns to the next page")
+    record = wait_view(page, lambda v: v.get("doc", {}).get("page") == 2)
+    check(record["view"] == {"v": 1, "doc": {"id": HW_DOC, "page": 2}}, "a page change clears the spot and the selection from the view", str(record["view"]))
+    check(page.locator(".doccard-open").first.inner_text() == "Open page", "the card says the document is open at another page")
+    page.keyboard.press("PageDown")
+    check(wait_for(page, "document.querySelector('.vw-pages').textContent === 'Page 3 of 4'"), "Page Down too")
+    page.keyboard.press("ArrowLeft")
+    page.keyboard.press("PageUp")
+    check(wait_for(page, "document.querySelector('.vw-pages').textContent === 'Page 1 of 4'"), "the left arrow and Page Up turn back")
+    page.keyboard.press("ArrowLeft")
+    check(viewer_state(page)["pages"] == "Page 1 of 4" and page.get_attribute(".vw-prev", "aria-disabled") == "true", "and stop at the first page")
+    page.keyboard.press("+")
+    check(viewer_state(page)["zoom"][0] == "100%" and abs(viewer_state(page)["page"]["width"] - viewer_state(page)["natural"][0]) < 2, "plus zooms to 100%, the picture's own size", str(viewer_state(page)))
+    page.keyboard.press("+")
+    st = viewer_state(page)
+    check(st["zoom"][0] == "150%" and abs(st["page"]["width"] - st["natural"][0] * 1.5) < 2, "and again to 150%", str(st))
+    page.keyboard.press("-")
+    page.keyboard.press("-")
+    check(viewer_state(page)["zoom"][0] == "Fit", "minus brings it back to fit")
+    page.focus("#input")
+    page.keyboard.press("ArrowRight")
+    check(viewer_state(page)["pages"] == "Page 1 of 4", "the arrows in the message box are the message box's: the page does not turn")
+
+    print("turning quickly through a document")
+    page.evaluate("import('./objects.js').then((m) => m.viewerApi.open('" + LONG_DOC + "', 1))")
+    check(wait_for(page, "document.querySelector('.vw-pages').textContent === 'Page 1 of 12' && document.querySelector('.vw-page').dataset.state === 'ready'", 8000), "a document of twelve pages opens")
+    page.wait_for_timeout(600)
+    page.locator(".vw-scroll").focus()
+    ctl.post("doc-hits/reset")
+    for _ in range(12):
+        page.keyboard.down("ArrowRight")                      # a key that is held: the first press turns a page, the repeats do nothing
+    page.keyboard.up("ArrowRight")
+    page.wait_for_timeout(500)
+    check(viewer_state(page)["pages"] == "Page 2 of 12", "a key that is held down turns one page", viewer_state(page)["pages"])
+    ctl.post("doc-hits/reset")
+    for _ in range(7):
+        page.keyboard.press("ArrowRight")                     # quickly: pages 3 to 9, none of them for long
+    check(wait_for(page, "document.querySelector('.vw-pages').textContent === 'Page 9 of 12' && document.querySelector('.vw-page').dataset.state === 'ready'", 6000), "turning quickly lands on the page the student stops at, and its picture loads")
+    page.wait_for_timeout(500)
+    hits = ctl.get("doc-hits")
+    skipped = sum(hits.get(f"{LONG_DOC}:{n}", 0) for n in range(5, 8))
+    check(skipped == 0 and hits.get(f"{LONG_DOC}:9", 0) >= 1, "the pages that were turned past in a quick run are not asked for: only the one it stops at (and its neighbours)", str(hits))
+    cards.nth(0).locator(".doccard-open").scroll_into_view_if_needed()
+    cards.nth(0).locator(".doccard-open").click()
+    check(wait_for(page, "document.querySelector('.vw-pages').textContent === 'Page 1 of 4' && document.querySelector('.vw-page').dataset.state === 'ready'", 8000), "and a card opens the other document again")
+
+    print("the Text tab")
+    page.click(".vw-seg button[data-tab='text']")
+    check(page.locator(".vw-text .vw-word").count() > 40 and page.locator(".vw-scroll").is_hidden(), "the Text tab shows the page's words as text")
+    page.evaluate("""(() => {
+      const spans = [...document.querySelectorAll('.vw-text .vw-word')], range = document.createRange();
+      range.setStart(spans[7].firstChild, 0); range.setEnd(spans[11].firstChild, 3);
+      getSelection().removeAllRanges(); getSelection().addRange(range);
+    })()""")
+    record = wait_view(page, lambda v: "sel" in v)
+    check(record["view"].get("sel") == {"doc": HW_DOC, "page": 1, "from": 7, "to": 11}, "a selection in the text is reported as the same words", str(record["view"]))
+    page.click(".vw-seg button[data-tab='page']")
+    check(page.locator(".vw-box-sel").count() >= 1, "and it is drawn on the page too")
+
+    print("closing, and the document that has expired")
+    page.locator(".vw-scroll").focus()
+    page.keyboard.press("Escape")
+    check(page.locator("#viewer").is_hidden() and viewer_state(page)["withViewer"] is False, "Escape closes the viewer")
+    check(abs(page.evaluate("document.querySelector('.stage').getBoundingClientRect().width") - wide) < 2, "and the conversation has its width back")
+    check(page.evaluate("document.activeElement.classList.contains('doccard-open')"), "the focus goes back to the button that opened it")
+    record = wait_view(page, lambda v: "doc" not in v)
+    check(record["view"] == {"v": 1}, "the view is empty again", str(record["view"]))
+    cards.nth(1).locator(".doccard-open").scroll_into_view_if_needed()
+    cards.nth(1).locator(".doccard-open").click()
+    check(wait_for(page, "document.querySelector('.vw-empty-text').textContent === 'This document is no longer available.' && !document.querySelector('.vw-empty').hidden"), "a document that has expired says so, in plain words")
+    page.click(".vw-empty .vw-ask")
+    cards.nth(2).locator(".doccard-open").scroll_into_view_if_needed()
+    cards.nth(2).locator(".doccard-open").click()
+    check(wait_for(page, "document.querySelector('.vw-pages').textContent === 'Page 2 of 3'", 8000), "a card of a deck opens at the page it names")
+    st = viewer_state(page)
+    check(st["title"] == "Raft slides.pdf" and abs(st["page"]["width"] / st["page"]["height"] - 16 / 9) < 0.02, "a landscape deck has a landscape page", str(st))
+
+    print("opening a PDF the student attached")
+    ctl.post("attach?who=viewer&names=big-report.pdf,busy-doc.pdf,fail-doc.pdf,scan-handout.pdf,broken-doc.pdf&text=More+files")
+    check(wait_for(page, "document.querySelectorAll('li.row.user .file').length === 8", 8000), "a message with five more files arrives")
+    # (app.js gives every PDF chip its Open button when it draws the chip; this does the same for the ones that are there, and does nothing for a chip that has one)
+    page.evaluate("""import('./viewer.js').then((m) => { for (const row of document.querySelectorAll('li.row.user')) [...row.querySelectorAll('.file')].forEach((chip, i) => { const name = chip.querySelector('.file-name').textContent; m.offerOpen(chip, { index: i, name, kind: /[.]pdf$/i.test(name) ? 'document' : 'text' }); }); })""")
+    check(wait_for(page, "document.querySelectorAll('.file-open').length === 7", 3000), "every PDF chip has an Open button, and the text file's has none", str(page.locator(".file-open").count()))
+    check(page.get_attribute(".file-open >> nth=0", "aria-label") == "Open hw5-load-testing.pdf in the viewer", "a button says which file it opens")
+
+    def chip_button(name: str):
+        return page.locator(f".file-open[aria-label='Open {name} in the viewer']")
+
+    chip_button("hw5-load-testing.pdf").scroll_into_view_if_needed()
+    chip_button("hw5-load-testing.pdf").click()
+    check(wait_for(page, "!document.querySelector('#viewer').hidden && document.querySelector('.vw-title').textContent === 'Homework 5 spec.pdf'", 8000), "Open on a PDF opens it in the viewer")
+    page.locator(".vw-scroll").focus()
+    page.keyboard.press("Escape")
+    check(page.evaluate("document.activeElement.classList.contains('file-open')"), "and Escape gives the focus back to that button")
+    for name, words in (("big-report.pdf", "That PDF is too big to open here. Try one under 20 MB."), ("busy-doc.pdf", "TAi is busy preparing other documents. Try again in a minute.")):
+        chip_button(name).scroll_into_view_if_needed()
+        chip_button(name).click()
+        check(wait_for(page, f"document.querySelector('#toast').textContent === {json.dumps(words)} && !document.querySelector('#toast').hidden", 4000), f"{name}: a refusal is said in plain words, never as a code", page.inner_text("#toast"))
+        check(chip_button(name).inner_text() == "Open" and page.locator("#viewer").is_hidden(), f"{name}: the button is ready to be pressed again, and nothing opened")
+    chip_button("raft-slides-slow.pdf").scroll_into_view_if_needed()
+    chip_button("raft-slides-slow.pdf").click()
+    check(wait_for(page, "document.querySelector('.file-open[aria-label=\"Open raft-slides-slow.pdf in the viewer\"]').textContent === 'Preparing…'", 3000), "a document that takes a while says it is being prepared")
+    check(wait_for(page, "!document.querySelector('#viewer').hidden && document.querySelector('.vw-title').textContent === 'Raft slides.pdf'", 12000), "and opens when it is ready (the page asks after it every 1.5 s)")
+    check(chip_button("raft-slides-slow.pdf").inner_text() == "Open", "the button reads Open again")
+    page.locator(".vw-scroll").focus()
+    page.keyboard.press("Escape")
+    chip_button("fail-doc.pdf").scroll_into_view_if_needed()
+    chip_button("fail-doc.pdf").click()
+    check(wait_for(page, "document.querySelector('#toast').textContent === 'TAi could not read that PDF. It may be damaged.'", 12000), "a document that cannot be prepared says so when the job ends")
+    check(page.locator("#viewer").is_hidden() and chip_button("fail-doc.pdf").inner_text() == "Open", "and nothing opened")
+    chip_button("broken-doc.pdf").scroll_into_view_if_needed()
+    chip_button("broken-doc.pdf").click()
+    check(wait_for(page, "!document.querySelector('.vw-fail').hidden", 8000), "a page whose picture does not load says so")
+    check(page.inner_text(".vw-fail p") == "This page could not be loaded." and page.locator(".vw-fail .vw-ask").is_visible(), "in plain words, with a way to try again", page.inner_text(".vw-fail"))
+    page.click(".vw-seg button[data-tab='text']")
+    check(wait_for(page, "document.querySelector('.vw-text .vw-note') && document.querySelector('.vw-text').textContent === 'The text of this page could not be loaded.'", 4000), "and the Text tab says the same of its words")
+    page.click(".vw-seg button[data-tab='page']")
+    page.locator(".vw-scroll").focus()
+    page.keyboard.press("Escape")
+
+    print("a reload opens the last document again")
+    cards.nth(2).locator(".doccard-open").scroll_into_view_if_needed()
+    cards.nth(2).locator(".doccard-open").click()
+    check(wait_for(page, "document.querySelector('.vw-pages').textContent === 'Page 2 of 3' && !document.querySelector('#viewer').hidden", 8000), "the deck is open at page 2")
+    page.reload()
+    check(wait_for(page, "!document.querySelector('#viewer').hidden && document.querySelector('.vw-pages').textContent === 'Page 2 of 3'", 10000), "the viewer is open on the same document and page after a reload")
+    page.locator(".vw-scroll").focus()
+    page.keyboard.press("Escape")
+    check(page.locator("#viewer").is_hidden(), "and Escape closes it")
+
+    print("a call that opens, points and reports")
+    page.click("#call-btn")
+    check(wait_for(page, "document.querySelector('#call').dataset.state === 'listening'", 8000), "a call connects")
+    page.locator("#viewer").wait_for(state="hidden")
+    ctl.post(f"voice/show?who=viewer&doc={SLIDES_DOC}&page=2&title=Raft%20slides.pdf&pages=3")
+    check(wait_for(page, "!document.querySelector('#viewer').hidden && document.querySelector('.vw-pages').textContent === 'Page 2 of 3'", 8000), "TAi's show opens the document at its page")
+    check(page.evaluate("document.activeElement.id") == "call-mute", "without taking the focus from where the student was")
+    ctl.post(f"voice/point?who=viewer&doc={SLIDES_DOC}&page=2&phrase=Log%20replication")
+    check(wait_for(page, "document.querySelectorAll('.vw-box-tai').length === 1", 6000), "TAi's point draws a box on the page")
+    check(wait_for(page, "document.querySelector('.sr-only[role=status]') && document.querySelector('#viewer .sr-only').textContent.startsWith('TAi is pointing at: Log replication')", 3000), "and a screen reader is told what is under it")
+    shots(page, out, "153-viewer-tai-box")
+    ctl.post(f"voice/doc-state?who=viewer&state=failed&message=TAi%20could%20not%20open%20that%20file.")
+    check(wait_for(page, "document.querySelector('.vw-status').dataset.kind === 'failed' && document.querySelector('.vw-status').textContent === 'TAi could not open that file.'", 4000), "a document that could not be opened says so in the pane's header")
+    ctl.post("voice/doc-state?who=viewer&state=preparing&title=Homework%206.pdf")
+    check(wait_for(page, "document.querySelector('.vw-status').dataset.kind === 'preparing' && document.querySelector('.vw-status').textContent.includes('Homework 6.pdf')", 4000), "and one that is being prepared says so, politely")
+    print("a show and a point that follow each other at once, and a point that names another page")
+    page.locator(".vw-scroll").focus()
+    page.keyboard.press("Escape")
+    check(page.locator("#viewer").is_hidden(), "the student closes the viewer")
+    ctl.post(f"voice/show-point?who=viewer&doc={SLIDES_DOC}&page=3&title=Raft%20slides.pdf&pages=3&phrase=Votes%20three%20of%20five")
+    check(wait_for(page, "!document.querySelector('#viewer').hidden && document.querySelector('.vw-pages').textContent === 'Page 3 of 3' && document.querySelectorAll('.vw-box-tai').length === 1", 8000), "a show and a point that come at once: the page opens, and the box is drawn on it when it is there")
+    ctl.post(f"voice/point?who=viewer&doc={SLIDES_DOC}&page=1&phrase=Raft")
+    ctl.post(f"voice/point?who=viewer&doc={HW_DOC}&page=1&phrase=Homework")
+    page.wait_for_timeout(700)
+    check(viewer_state(page)["pages"] == "Page 3 of 3" and viewer_state(page)["title"] == "Raft slides.pdf" and page.locator(".vw-box-tai").count() == 1, "a point for another page, or another document, changes nothing: it never turns a page or opens a document")
+    check(wait_for(page, "document.querySelectorAll('.vw-box-tai').length === 0", 11000), "TAi's boxes go by themselves after about eight seconds")
+    page.locator(".vw-scroll").focus()
+    page.keyboard.press("Escape")
+    ctl.post(f"voice/point?who=viewer&doc={SLIDES_DOC}&page=3&phrase=Votes%20three%20of%20five")
+    page.wait_for_timeout(700)
+    check(page.locator("#viewer").is_hidden(), "a point while the viewer is closed does not open it")
+    ctl.post(f"voice/show?who=viewer&doc={SLIDES_DOC}&page=2&title=Raft%20slides.pdf&pages=3")
+    check(wait_for(page, "!document.querySelector('#viewer').hidden && document.querySelector('.vw-pages').textContent === 'Page 2 of 3'", 8000), "only a show opens it")
+    words2 = page_words(page, SLIDES_DOC, 2)
+    a, b = on_page(page, *word_centre(words2, 0)), on_page(page, *word_centre(words2, 5))
+    page.mouse.move(*a)
+    page.mouse.down()
+    page.mouse.move(*b, steps=6)
+    page.mouse.up()
+    record = wait_view(page, lambda v: "sel" in v)
+    check(record["via"] == "socket" and record["view"].get("sel", {}).get("page") == 2, "in a call the view goes over the call's socket, not by POST", str(record))
+    sent = ctl.get("voice?who=viewer").get("views", [])
+    check(sent and sent[-1].get("sel") and sent[-1].get("doc") == {"id": SLIDES_DOC, "page": 2}, "the call's server has the same view", str(sent[-2:]))
+    page.click("#call-end")
+    check(wait_for(page, "document.querySelector('#call').dataset.state === 'ended'", 6000), "the call ends")
+    check(not page.locator("#viewer").is_hidden(), "and the document stays open")
+    page.keyboard.press("Escape")
+    clean(page, problems, "the viewer on a desktop")
+    context.close()
+
+    print("the viewer on a phone")
+    context, page, problems = student(browser, base, "dev:viewer@example.com", viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True, device_scale_factor=2)
+    page.locator(".doccard-open").first.scroll_into_view_if_needed()
+    page.locator(".doccard-open").first.tap()
+    check(wait_for(page, "document.querySelector('.vw-page').dataset.state === 'ready'", 8000), "a tap on Open opens the viewer")
+    st = viewer_state(page)
+    check(page.locator(".vw-back").is_visible() and page.locator(".vw-close").is_hidden() and page.inner_text(".vw-back").strip() == "Back to the chat", "a sheet with a clear Back to the chat button")
+    check(abs(st["viewer"]["bottom"] - st["dock"]["top"]) < 2 and st["viewer"]["top"] < 1 and st["viewer"]["width"] > 385, "full height down to the message box, which stays in reach", str((st["viewer"], st["dock"])))
+    check(page.evaluate("[...document.querySelectorAll('.topbar, .scroller')].every((n) => n.inert)"), "what is under the sheet is out of reach of the keyboard and a screen reader")
+    check(page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), "nothing sticks out sideways")
+    size = page.evaluate("[...document.querySelectorAll('#viewer button')].filter((b) => b.offsetParent).map((b) => Math.min(b.offsetWidth, b.offsetHeight))")
+    check(min(size) >= 36, "its buttons are big enough for a finger", str(size))
+    x, y = on_page(page, 0.4, 0.8)
+    page.touchscreen.tap(x, y)
+    record = wait_view(page, lambda v: "point" in v)
+    check(abs((record["view"].get("point") or {}).get("x", 9) - 0.4) < 0.02, "a tap on the page reports the spot", str(record["view"]))
+    shots(page, out, "154-viewer-phone")
+    page.tap(".vw-back")
+    check(page.locator("#viewer").is_hidden() and page.evaluate("[...document.querySelectorAll('.topbar, .scroller')].every((n) => !n.inert)"), "Back to the chat closes it, and the chat is reachable again")
+    page.tap("#call-btn")
+    check(wait_for(page, "document.querySelector('#call').dataset.state === 'listening'", 8000), "a call can be started from the chat")
+    page.locator(".doccard-open").first.scroll_into_view_if_needed()
+    page.locator(".doccard-open").first.tap()
+    check(wait_for(page, "!document.querySelector('#viewer').hidden", 6000), "a document opens during the call")
+    ctl.post(f"voice/show?who=viewer&doc={SLIDES_DOC}&page=1&title=Raft%20slides.pdf&pages=3")
+    check(wait_for(page, "document.querySelector('.vw-title').textContent === 'Raft slides.pdf'", 8000), "TAi can show a document in the middle of a call")
+    reach = page.evaluate("""(() => {
+      const at = (sel) => { const r = document.querySelector(sel).getBoundingClientRect(); const hit = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2); return !!hit && !!hit.closest(sel); };
+      return { mute: at('#call-mute'), end: at('#call-end'), input: at('#input') };
+    })()""")
+    check(reach["mute"] and reach["end"] and reach["input"], "the call's mute and end buttons and the message box are not covered by the sheet", str(reach))
+    shots(page, out, "155-viewer-phone-in-call")
+    page.tap("#call-end")
+    check(wait_for(page, "document.querySelector('#call').dataset.state === 'ended'", 6000), "the call ends from under the sheet")
+    clean(page, problems, "the viewer on a phone")
+    context.close()
+
+
+FLOWS = [features_off, pictures_and_reactions, student_reactions, reaction_replies, touch_reactions, attachments, upload_release, voice_notes, jump_pill, voice_call, talk_mode, interview_link, call_thread, call_orb, call_phone, activity_list, activity_phone, choices_quiz, choices_replies, choices_failures, choices_phone, choices_motion, document_viewer]
 
 
 def run_gate_only(args) -> int:

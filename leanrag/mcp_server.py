@@ -7,6 +7,7 @@ The Agent SDK spawns this process and communicates over stdin/stdout.
 from __future__ import annotations
 
 import logging
+import re
 import sys
 
 from mcp.server.fastmcp import FastMCP
@@ -87,6 +88,70 @@ def _format_context(result: dict) -> str:
     return "\n".join(lines)
 
 
+# ── Formatting of the graph engine's result (graph_query.py; docs/LEANRAG.md) ───────────────────────
+
+_MAX_GRAPH_CHARS = 7000      # what one answer may take of the model's context
+_MAX_SLIDE_CHARS = 700
+
+
+def _week_label(week: str) -> str:
+    m = re.match(r"^w(\d+)$", week or "")
+    return f"week {m.group(1)}" if m else (week or "")
+
+
+def _format_graph_context(result: dict) -> str:
+    """The graph engine's result as text. Keeps the shape the host reads: `### Source Course Materials`, then one `**Source: <file>**` line per document
+    (container/agent-runner/src/progress.ts turns those lines into the chips of the page), each followed by the slides found in it, with their numbers."""
+    lines: list[str] = [f"## Course Knowledge (slide-level retrieval, level: {result['difficulty']})", ""]
+    if result["seed_entities"]:
+        lines.append("### Most Relevant Concepts")
+        for seed in result["seed_entities"][:5]:
+            lines.append(f"- **{seed['name']}** (relevance: {seed['score']:.2f})")
+        lines.append("")
+    if result["entities"]:
+        lines.append("### Concepts in Context")
+        for ent in result["entities"]:
+            label = {0: "concept", 1: "cluster", 2: "theme"}.get(ent["layer"], "?")
+            lines.append(f"- [{label}] **{ent['name']}**" + (f": {ent['description']}" if ent["description"] else ""))
+        lines.append("")
+    if result["relations"]:
+        lines.append("### Relationships")
+        for rel in result["relations"]:
+            lines.append(f"- {rel['head']} --[{rel['relation']}]--> {rel['tail']}")
+        lines.append("")
+    head = "\n".join(lines)
+    sources = result["source_texts"]
+    if not sources:
+        return head + "\n### Source Course Materials\n_Nothing in the released course material matched this question._"
+    groups: dict[str, list[dict]] = {}
+    for src in sources:
+        groups.setdefault(src["source_file"], []).append(src)
+    body: list[str] = ["### Source Course Materials"]
+    used = len(head) + len(body[0])
+    shown = 0
+    for source_file, items in groups.items():
+        block = [f"**Source: {source_file}**", "```text"]
+        for src in items:
+            text = src["text"] if len(src["text"]) <= _MAX_SLIDE_CHARS else src["text"][:_MAX_SLIDE_CHARS] + "..."
+            if src["kind"] == "slide":
+                tag = f"[slide {src['page']}, {_week_label(src['week'])}]"
+            else:
+                tag = "[assignment text]" if src["kind"] == "homework" else "[syllabus]"
+            block.append(tag)
+            block.append(text)
+            block.append("")
+        block[-1] = "```"
+        size = sum(len(x) + 1 for x in block)
+        if shown and used + size > _MAX_GRAPH_CHARS:
+            body.append(f"_... and {len(sources) - shown} more passages not shown_")
+            break
+        body.extend(block)
+        body.append("")
+        used += size
+        shown += len(items)
+    return head + "\n" + "\n".join(body).rstrip()
+
+
 # ── Tool ──────────────────────────────────────────────────────────────
 
 @mcp.tool(
@@ -116,6 +181,8 @@ def query_knowledge(
 
     try:
         result = _query_knowledge(question, difficulty=difficulty, top_k=top_k)
+        if result.get("engine") == "graph":
+            return _format_graph_context(result)
         return _format_context(result)
     except FileNotFoundError as exc:
         return f"LeanRAG error: knowledge graph not found — {exc}"

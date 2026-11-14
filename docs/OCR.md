@@ -13,7 +13,7 @@ It is off by default; everything below describes TAi without it, and OCR stays t
    if it is taken (every pasted picture is `pasted-picture.png`). Removing the chip before sending deletes the copy.
 2. The message TAi gets names it: `- /workspace/group/uploads/<name> (a picture, 43 KB): read the text in it with read_image_text, giving it this path; you cannot see
    charts, diagrams or what a screen looks like, so say so if the question is about that` (with `TAI_VISION=1` the line says instead that TAi can look at it with
-   `look_at_image` as well and must say so honestly when a picture is not clear: `VISION.md`; a voice call keeps these words in both states).
+   `look_at_image` as well and must say so honestly when a picture is not clear: `VISION.md`; a voice call keeps these words unless it may look at pictures: docs/RUN_CARDS.md).
 3. TAi calls `read_image_text` (`container/agent-runner/src/ipc-mcp-stdio.ts`, logic and wording in `image-text.ts`). The tool runs
    `/opt/leanrag/bin/python3 /opt/scripts/ocr_image.py <path>` (no shell; the script gets `PATH` and `LANG`, none of the server's credentials) and frames what comes back.
 
@@ -99,7 +99,7 @@ The student chose to show it, but tell them (a persona line may be worth adding)
 
 ## Voice
 
-An image sent during a call takes **the same message**, but `server.ts` builds it for the call with the old words (`messageFor(..., 'call')`): "you cannot see pictures; ask the student to
+An image sent during a call takes **the same message**, but `server.ts` builds it for the call with the old words (`messageFor(..., 'call')`, unless a call may look at pictures: docs/RUN_CARDS.md): "you cannot see pictures; ask the student to
 paste the text or describe it", which `src/voice/session.ts` (`/\(a picture, /`: a notice on the page), `src/voice/prompts.ts` and `docs/VOICE.md` rely on. If the call cannot take the message the
 text agent gets the new wording. The call's `read_file` (`src/voice/functions.ts` -> the tool host's builtin) answers an image with "is an image, and there is no way to see images here" and was left alone.
 A later change would need, together: `read_image_text` as a voice function in `functions.ts` (and `TOOL_HOST_FUNCTIONS`, and `speech-governor.ts`'s list of tool names), calling `th.call('read_image_text', { path })`

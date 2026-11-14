@@ -16,7 +16,7 @@
 //
 // It compiles the portal modules with the repository's TypeScript into DIR first (a dev machine may lack the orchestrator's other
 // dependencies, so the logger is replaced by a silent one). Users: ada@example.com (owner), bob@, carol@, dave@, erin@, frank@, gina@, hana@,
-// ivan@, june@, kai@, lena@, mike@, nina@, olga@, quinn@, rosa@, sam@, tara@, uma@, vera@, wade@, xena@, yara@, zane@, abel@, bella@ and cleo@example.com
+// ivan@, june@, kai@, lena@, mike@, nina@, olga@, quinn@, rosa@, sam@, tara@, uma@, vera@, wade@, xena@, yara@, zane@, abel@, bella@, cleo@ and viewer@example.com (who starts with documents and a run in the history)
 // (the browser suite gives each flow a student of its own, so every conversation starts empty).
 //
 // (/activity/add also takes `items=N|hostile|long`: the questions of a mock interview, for the card's review list; POST /api/voice/warm on the page is the
@@ -32,6 +32,16 @@
 // start, a switch and its end), through /voice/user-says (the student speaks: the server hears them begin, then the line), /voice/user-speaking
 // (they begin and say nothing final), /voice/speak (TAi speaks), and, with no call on, /voice/lines?count=N, /voice/line?role=&text= and
 // /voice/marker?event=&mode=&seconds= (a long call that was made before, one line, one marker).
+// The document viewer (docs/VIEWER.md): fake GET /api/doc/meta, /page, /words and /job and POST /api/doc/open serve three generated documents (Homework 5 spec.pdf, four letter pages with
+// a title, paragraphs, a diagram and code; Raft slides.pdf, three 16:9 slides; Scanned handout.pdf, one page with no text), every page numbered, with a words file whose boxes match the
+// ink. An attached file's name decides what open does: 'slides' or 'raft' the deck, 'scan' the scan, 'broken' a document whose pictures and words answer 404, 'slow' (3.5 s) and 'fail'
+// (a job that fails) take the 202 and the job, 'big' and 'busy' are refused. POST /api/view runs the real parseViewState and remembers the last view; GET /api/qa/view (the page's session) and the control port's GET /view?who= return it,
+// whether it came by POST or over a call's socket. The student viewer@example.com (Vic Viewer) starts with a history that holds a message with PDF chips, a document card, a run card
+// (a failing `go test -race ./...`, forty lines of output), a card of a document that has expired and a card of the deck at page 2; POST /objects/seed?who=NAME adds the same to anyone.
+// POST /attach?who=NAME&names=a.pdf,big.pdf,busy.pdf,fail.pdf,scan.pdf,slow.pdf adds a message of theirs with those files (what each does: openPlan).
+// Long notes.pdf has twelve pages, for turning quickly through: GET /doc-hits on the control port says how often each page's picture was asked for (POST /doc-hits/reset starts again).
+// The fake call takes POST /voice/show?doc=&page=&title=&pages=, /voice/point?doc=&page=&phrase= (or &boxes=x0,y0,x1,y1;...), /voice/show-point?doc=&page=&title=&pages=&phrase= (both, back to back) and
+// /voice/doc-state?state=preparing|failed&title=&message=.
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -73,6 +83,21 @@ const PAGE_FILES = [
   'status.js',
   'sources.js',
   'status.css',
+  'objects.js',
+  'view-state.js',
+  'runcard.js',
+  'doccard.js',
+  'chartcard.js',
+  'tracecard.js',
+  'predictcard.js',
+  'viewer.js',
+  'askhere.js',
+  'runcard.css',
+  'chartcard.css',
+  'tracecard.css',
+  'predictcard.css',
+  'viewer.css',
+  'askhere.css',
   'sw.js',
   'manifest.webmanifest',
   'icon-192.png',
@@ -84,7 +109,7 @@ const PAGE_FILES = [
 
 function build() {
   fs.rmSync(out, { recursive: true, force: true });
-  const sources = ['auth', 'history', 'media', 'uploads', 'transcribe', 'feedback', 'server', 'team-routes', 'testing/team-fixture', 'voice-routes','../notify/start', '../notify/vapid'].map((name) => path.join(root, 'src/portal', `${name}.ts`));
+  const sources = ['auth', 'history', 'media', 'uploads', 'transcribe', 'feedback', 'server', 'team-routes', 'testing/team-fixture', 'voice-routes', 'predict-routes','../notify/start', '../notify/vapid', '../docs/words', '../chat-objects/view'].map((name) => path.join(root, 'src/portal', `${name}.ts`));
   try {
     execFileSync(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'), '--outDir', out, '--rootDir', path.join(root, 'src'), '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--strict', '--skipLibCheck', '--esModuleInterop', ...sources], { stdio: 'pipe' });
   } catch {
@@ -111,7 +136,10 @@ const { UploadStore } = await load('uploads');
 const { TeamView } = await load('team');
 const { teamRoutes } = await load('team-routes');
 const { voiceRoutes } = await load('voice-routes');
+const { predictRoutes } = await load('predict-routes');
 const { writeTeamFixture } = await load('testing/team-fixture');
+const { findPhrase, validateWords } = await import(pathToFileURL(path.join(out, 'docs', 'words.js')).href);
+const { parseViewState } = await import(pathToFileURL(path.join(out, 'chat-objects', 'view.js')).href);
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'tai-portal-dev-'));
 const usersFile = path.join(work, 'users.json');
@@ -145,6 +173,7 @@ fs.writeFileSync(usersFile, JSON.stringify({
     { email: 'abel@example.com', name: 'Abel Tasman', canvasUserId: '1026' },
     { email: 'bella@example.com', name: 'Bella Swan', canvasUserId: '1027' },
     { email: 'cleo@example.com', name: 'Cleo Patra', canvasUserId: '1028' },
+    { email: 'viewer@example.com', name: 'Vic Viewer', canvasUserId: '1029' },
   ],
 }));
 const users = new UserDirectory(usersFile);
@@ -205,6 +234,365 @@ const DIAGRAM = png(560, 340, (x, y) => {
   }
   return c;
 });
+
+// ---- documents for the viewer (docs/VIEWER.md): pretend prepared documents with real page images, and the words file that matches what is drawn on them
+
+// a 5 by 7 font, enough for the page numbers the pages carry (rows of the glyph, top to bottom)
+const FONT = {
+  0: '01110 10001 10011 10101 11001 10001 01110',
+  1: '00100 01100 00100 00100 00100 00100 01110',
+  2: '01110 10001 00001 00010 00100 01000 11111',
+  3: '11110 00001 00001 01110 00001 00001 11110',
+  4: '00010 00110 01010 10010 11111 00010 00010',
+  5: '11111 10000 11110 00001 00001 10001 01110',
+  6: '00110 01000 10000 11110 10001 10001 01110',
+  7: '11111 00001 00010 00100 01000 01000 01000',
+  8: '01110 10001 10001 01110 10001 10001 01110',
+  9: '01110 10001 10001 01111 00001 00010 01100',
+  P: '11110 10001 10001 11110 10000 10000 10000',
+  A: '01110 10001 10001 11111 10001 10001 10001',
+  G: '01110 10001 10000 10111 10001 10001 01111',
+  E: '11111 10000 10000 11110 10000 10000 11111',
+};
+
+/** A page as pixels (white, with ink drawn on it) and as words: every word is a bar of ink and a box in the words file at the same place. Geometry is in fractions of the page. */
+class QaPage {
+  constructor(width, height) {
+    this.w = width;
+    this.h = height;
+    this.buf = Buffer.alloc(width * height * 3, 255);
+    this.words = [];
+    this.lines = [];
+  }
+
+  fill(x0, y0, x1, y1, color = [58, 60, 72]) {
+    const a = Math.max(0, Math.round(x0 * this.w));
+    const b = Math.min(this.w, Math.round(x1 * this.w));
+    const c = Math.max(0, Math.round(y0 * this.h));
+    const d = Math.min(this.h, Math.round(y1 * this.h));
+    for (let y = c; y < d; y++) for (let x = a; x < b; x++) this.buf.set(color, (y * this.w + x) * 3);
+  }
+
+  frame(x0, y0, x1, y1, color = [124, 92, 246], thick = 0.004) {
+    const t = thick;
+    this.fill(x0, y0, x1, y0 + t * (this.w / this.h), color);
+    this.fill(x0, y1 - t * (this.w / this.h), x1, y1, color);
+    this.fill(x0, y0, x0 + t, y1, color);
+    this.fill(x1 - t, y0, x1, y1, color);
+  }
+
+  /** A word: a bar of ink in the middle of its box, and the box. */
+  word(text, x, y, width, height, color) {
+    this.fill(x, y + height * 0.22, x + width, y + height * 0.78, color);
+    this.words.push([x, y, x + width, y + height, text]);
+  }
+
+  /** Words of text wrapped between `x` and `right`, one line each time the right edge is reached; answers the y below the last line. */
+  flow(text, { x = 0.09, right = 0.91, y, pitch = 0.032, charW = 0.0118, color, tall = 0.62 }) {
+    let cx = x;
+    let cy = y;
+    let first = this.words.length;
+    const close = () => {
+      if (this.words.length > first) this.lines.push([first, this.words.length - 1]);
+      first = this.words.length;
+    };
+    for (const word of text.split(' ')) {
+      const width = word.length * charW;
+      if (cx + width > right && cx > x) {
+        close();
+        cx = x;
+        cy += pitch;
+      }
+      this.word(word, cx, cy, width, pitch * tall, color);
+      cx += width + charW * 1.1;
+    }
+    close();
+    return cy + pitch;
+  }
+
+  /** Boxes in a row with arrows between them and a label in each; answers the y below them. */
+  boxes(labels, { y, height = 0.14, color = [124, 92, 246], charW = 0.0118, pitch = 0.032 }) {
+    const n = labels.length;
+    const span = (0.82 - (n - 1) * 0.05) / n;
+    labels.forEach((label, i) => {
+      const x0 = 0.09 + i * (span + 0.05);
+      this.frame(x0, y, x0 + span, y + height, color);
+      const parts = label.split(' ');
+      const widths = parts.map((p) => p.length * charW);
+      let cx = x0 + (span - (widths.reduce((a, b) => a + b, 0) + (parts.length - 1) * charW * 1.1)) / 2;
+      const first = this.words.length;
+      parts.forEach((p, k) => {
+        this.word(p, cx, y + height / 2 - pitch * 0.31, widths[k], pitch * 0.62, [58, 60, 72]);
+        cx += widths[k] + charW * 1.1;
+      });
+      this.lines.push([first, this.words.length - 1]);
+      if (i < n - 1) {
+        this.fill(x0 + span, y + height / 2 - 0.002, x0 + span + 0.04, y + height / 2 + 0.002, color);
+        this.fill(x0 + span + 0.032, y + height / 2 - 0.008, x0 + span + 0.04, y + height / 2 + 0.008, color);
+      }
+    });
+    return y + height + 0.03;
+  }
+
+  /** The number of the page, big in the corner and small at the foot, drawn with the font above (it is ink only: not a word of the page). */
+  number(n) {
+    const draw = (text, px, py, scale, color) => {
+      [...text].forEach((ch, k) => {
+        const rows = (FONT[ch] || '').split(' ');
+        rows.forEach((row, ry) => [...row].forEach((bit, rx) => {
+          if (bit === '1') this.fill((px + (k * 6 + rx) * scale) / this.w, (py + ry * scale) / this.h, (px + (k * 6 + rx + 1) * scale) / this.w, (py + (ry + 1) * scale) / this.h, color);
+        }));
+      });
+    };
+    const big = Math.max(5, Math.round(this.h / 60));
+    const text = String(n);
+    const width = (text.length * 6 - 1) * big;
+    draw(text, this.w - width - this.w * 0.05, this.h * 0.035, big, [124, 92, 246]);
+    const small = Math.max(2, Math.round(this.h / 240));
+    const foot = `PAGE ${n}`;
+    draw(foot, this.w / 2 - ((foot.length * 6 - 1) * small) / 2, this.h * 0.955, small, [150, 152, 162]);
+  }
+
+  png() {
+    const stride = this.w * 3 + 1;
+    const raw = Buffer.alloc(stride * this.h);
+    for (let y = 0; y < this.h; y++) this.buf.copy(raw, y * stride + 1, y * this.w * 3, (y + 1) * this.w * 3);
+    const head = Buffer.alloc(13);
+    head.writeUInt32BE(this.w, 0);
+    head.writeUInt32BE(this.h, 4);
+    head[8] = 8;
+    head[9] = 2;
+    return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), pngChunk('IHDR', head), pngChunk('IDAT', zlib.deflateSync(raw)), pngChunk('IEND', Buffer.alloc(0))]);
+  }
+}
+
+const INK = [58, 60, 72];
+const TITLE_INK = [20, 22, 34];
+const CODE_INK = [10, 100, 200];
+const PROSE = { y: 0, color: INK };
+
+const docId = (n) => `d0c${n.toString(16).padStart(29, '0')}`;
+const DOC_IDS = { hw: docId(1), slides: docId(2), scan: docId(3), long: docId(4), broken: docId(0xbeef), gone: docId(0xdead) };
+
+/** Homework 5, as a letter-size PDF would be: a title, paragraphs, a diagram, a code block. */
+function homeworkPage(n) {
+  const p = new QaPage(560, 724);
+  const title = (text, y) => p.flow(text, { y, pitch: 0.05, charW: 0.0185, color: TITLE_INK, tall: 0.7 });
+  if (n === 1) {
+    let y = title('Homework 5: Load testing a REST service', 0.1);
+    y = p.flow('In this assignment you will build a small Go service and load test it with a ramp up of concurrent clients. Measure the median and the tail latency and report both in your write up. Explain why the tail grows before the median does.', { y: y + 0.02, color: INK });
+    y = p.boxes(['Client', 'Load balancer', 'Server'], { y: y + 0.03 });
+    p.flow('func main() {', { y: y + 0.03, color: CODE_INK });
+    p.flow('http.ListenAndServe(":8080", nil)', { x: 0.13, y: y + 0.065, color: CODE_INK });
+    p.flow('}', { y: y + 0.1, color: CODE_INK });
+  } else if (n === 2) {
+    let y = title('Part 1: Concurrency', 0.1);
+    y = p.flow('Every goroutine needs a way out. Decide who closes the channel and who waits for the workers. Explain what happens to a request that arrives while the pool is full.', { y: y + 0.02, color: INK });
+    y = p.flow('Write a test that fails with the race detector turned on before you fix the code, then show that it passes after the fix.', { y: y + 0.03, color: INK });
+    p.boxes(['Handler', 'Worker pool', 'Store'], { y: y + 0.04 });
+  } else if (n === 3) {
+    let y = title('Part 2: Load testing', 0.1);
+    y = p.flow('Measure throughput in requests per second and plot the latency percentiles against the load. Use a ramp up that stops when the error rate passes one percent.', { y: y + 0.02, color: INK });
+    y = p.flow('Report the point where the median and the tail part ways, and say which resource you think runs out first.', { y: y + 0.03, color: INK });
+    p.flow('Graphs without labels will not be marked.', { y: y + 0.03, color: INK });
+  } else {
+    const y = title('Submission', 0.1);
+    p.flow('Submit a link to your repository and a short report. The report has the graphs, the numbers behind them and two paragraphs on what you would change next.', { y: y + 0.02, color: INK });
+  }
+  p.number(n);
+  return p;
+}
+
+/** A deck: 16:9 slides with a title, a few points, a diagram of five servers. */
+function slidePage(n) {
+  const p = new QaPage(800, 450);
+  const flow = (text, opts) => p.flow(text, { charW: 0.0128, pitch: 0.075, ...opts });
+  if (n === 1) {
+    flow('Raft: consensus made understandable', { x: 0.08, right: 0.92, y: 0.3, pitch: 0.12, charW: 0.026, color: TITLE_INK, tall: 0.7 });
+    flow('CS6650 week 11 with the course team', { x: 0.08, y: 0.62, color: INK });
+  } else if (n === 2) {
+    flow('How Raft works', { x: 0.08, y: 0.1, pitch: 0.11, charW: 0.024, color: TITLE_INK, tall: 0.7 });
+    flow('Leader election: a follower that hears nothing becomes a candidate.', { x: 0.08, right: 0.92, y: 0.32, color: INK });
+    flow('Log replication: the leader sends entries and waits for a majority.', { x: 0.08, right: 0.92, y: 0.5, color: INK });
+    flow('Safety: a committed entry is never lost.', { x: 0.08, right: 0.92, y: 0.68, color: INK });
+  } else {
+    flow('Five servers, one leader', { x: 0.08, y: 0.1, pitch: 0.11, charW: 0.024, color: TITLE_INK, tall: 0.7 });
+    p.boxes(['S1 leader', 'S2', 'S3', 'S4', 'S5'], { y: 0.38, height: 0.24, charW: 0.0128, pitch: 0.075 });
+    flow('Votes: three of five', { x: 0.08, y: 0.72, color: INK });
+  }
+  p.number(n);
+  return p;
+}
+
+/** A scan: grey bars where a line of text would be, and no words at all. */
+function scanPage(n) {
+  const p = new QaPage(560, 724);
+  for (let i = 0; i < 26; i++) p.fill(0.09, 0.12 + i * 0.03, 0.09 + 0.8 * (0.55 + 0.45 * Math.abs(Math.sin(i * 1.7))), 0.12 + i * 0.03 + 0.012, [120 + (i % 3) * 10, 120, 126]);
+  p.number(n);
+  p.words.length = 0;                         // no text layer
+  p.lines.length = 0;
+  return p;
+}
+
+const QA_DOCS = new Map();
+function addDoc(id, title, origin, count, draw) {
+  const pages = Array.from({ length: count }, (_, i) => {
+    const page = draw(i + 1);
+    const words = validateWords({ words: page.words, lines: page.lines });
+    if (!words || words.words.length !== page.words.length) throw new Error(`the words of ${title} page ${i + 1} do not pass the server's check`);
+    return { png: page.png(), words, aspect: page.w / page.h };
+  });
+  QA_DOCS.set(id, { id, title, origin, pages, aspect: pages[0].aspect, createdAt: Date.now() - 3 * 86400000, bytes: pages.reduce((sum, p) => sum + p.png.length, 0) });
+}
+addDoc(DOC_IDS.hw, 'Homework 5 spec.pdf', 'upload', 4, homeworkPage);
+addDoc(DOC_IDS.slides, 'Raft slides.pdf', 'course', 3, slidePage);
+addDoc(DOC_IDS.scan, 'Scanned handout.pdf', 'upload', 1, scanPage);
+addDoc(DOC_IDS.long, 'Long notes.pdf', 'upload', 12, homeworkPage);          // twelve pages, for turning quickly through (pages from 4 on look alike)
+// a document whose meta is there and whose pages are not (their pictures and words answer 404): what the viewer says of a page that cannot be loaded
+QA_DOCS.set(DOC_IDS.broken, { id: DOC_IDS.broken, title: 'Broken scan.pdf', origin: 'upload', pages: [{ png: null, words: null, aspect: 0.773 }, { png: null, words: null, aspect: 0.773 }], aspect: 0.773, createdAt: Date.now() - 86400000, bytes: 1000 });
+
+/** What the pretend server says of the file a student attached, by its name: 'slides' opens the deck, 'scan' the scan, 'broken' a document whose pages are gone, 'slow' takes 3.5 s, 'fail' fails when it is done, 'big' is too big, 'busy' is refused. */
+function openPlan(name) {
+  const lower = String(name).toLowerCase();
+  if (lower.includes('big')) return { status: 413, body: { error: 'too-big', message: 'That PDF is too big to open here. Try one under 20 MB.' } };
+  if (lower.includes('busy')) return { status: 503, body: { error: 'busy', message: 'TAi is busy preparing other documents. Try again in a minute.' } };
+  const doc = lower.includes('slides') || lower.includes('raft') ? DOC_IDS.slides : lower.includes('scan') ? DOC_IDS.scan : lower.includes('broken') ? DOC_IDS.broken : DOC_IDS.hw;
+  return { doc, slow: lower.includes('slow') || lower.includes('fail'), fail: lower.includes('fail') };
+}
+
+const jobs = new Map();                   // job id -> { until, doc, fail }
+const pageHits = new Map();               // `${doc}:${page}` -> how many times the picture of that page was asked for (the control port's GET /doc-hits, POST /doc-hits/reset)
+const views = new Map();                  // folder -> { view, at, via }: the last view the page reported, by POST api/view or over a call's socket (GET api/qa/view, the control port's /view)
+
+/** The fake document routes, as src/portal/doc-routes.ts will have them (docs/CHAT_OBJECTS.md, "Documents"), and the view's route. */
+function docRoutes() {
+  const doc = (ctx) => QA_DOCS.get(ctx.url.searchParams.get('d') || '');
+  const pageNo = (ctx, d) => {
+    const p = Number(ctx.url.searchParams.get('p'));
+    return Number.isInteger(p) && p >= 1 && p <= d.pages.length ? p : 0;
+  };
+  const notFound = (ctx) => ctx.json(404, { error: 'not-found', message: 'That document is not here.' });
+  const metaOf = (d) => ({ id: d.id, title: d.title, pages: d.pages.length, origin: d.origin, createdAt: d.createdAt, bytes: d.bytes, aspect: Math.round(d.aspect * 10000) / 10000 });
+  const readyBody = (d, page = 1) => ({ ok: true, state: 'ready', doc: d.id, page, meta: metaOf(d) });
+  return [
+    {
+      path: '/api/doc/meta', method: 'GET', access: 'student',
+      handler(ctx) {
+        const d = doc(ctx);
+        if (!d) return notFound(ctx);
+        ctx.json(200, metaOf(d));
+      },
+    },
+    {
+      path: '/api/doc/page', method: 'GET', access: 'student',
+      handler(ctx) {
+        const d = doc(ctx);
+        const p = d ? pageNo(ctx, d) : 0;
+        if (!d || !p || !d.pages[p - 1].png) return notFound(ctx);
+        const body = d.pages[p - 1].png;
+        pageHits.set(`${d.id}:${p}`, (pageHits.get(`${d.id}:${p}`) || 0) + 1);
+        ctx.res.writeHead(200, { 'content-type': 'image/png', 'content-length': body.length, 'x-content-type-options': 'nosniff', 'cache-control': 'private, max-age=60' });
+        ctx.res.end(body);
+      },
+    },
+    {
+      path: '/api/doc/words', method: 'GET', access: 'student',
+      handler(ctx) {
+        const d = doc(ctx);
+        const p = d ? pageNo(ctx, d) : 0;
+        if (!d || !p || !d.pages[p - 1].words) return notFound(ctx);
+        ctx.json(200, d.pages[p - 1].words);
+      },
+    },
+    {
+      path: '/api/doc/open', method: 'POST', access: 'student',
+      async handler(ctx) {
+        const body = await ctx.readJson();
+        if (typeof body.doc === 'string') {
+          const known = QA_DOCS.get(body.doc);
+          return known ? ctx.json(200, readyBody(known)) : notFound(ctx);
+        }
+        const entry = Number.isInteger(body.n) ? history.forFolder(ctx.user.folder).get(body.n) : undefined;
+        const file = entry && entry.role === 'user' && Number.isInteger(body.index) && entry.files ? entry.files[body.index] : undefined;
+        if (!file) return ctx.json(404, { error: 'not-found', message: 'TAi could not find that file.' });
+        const plan = openPlan(file.name);
+        if (plan.status) return ctx.json(plan.status, plan.body);
+        if (!plan.slow) return ctx.json(200, readyBody(QA_DOCS.get(plan.doc)));
+        const job = `job${crypto.randomBytes(6).toString('hex')}`;
+        jobs.set(job, { until: Date.now() + 3500, doc: plan.doc, fail: plan.fail });
+        ctx.json(202, { ok: true, state: 'preparing', job });
+      },
+    },
+    {
+      path: '/api/doc/job', method: 'GET', access: 'student',
+      handler(ctx) {
+        const job = jobs.get(ctx.url.searchParams.get('j') || '');
+        if (!job) return ctx.json(404, { error: 'not-found' });
+        if (Date.now() < job.until) return ctx.json(200, { ok: true, state: 'preparing' });
+        // a job that is done answers as open does: 200 and the document, or the reason, its sentence and a status of its own (a failure is a 502)
+        if (job.fail) return ctx.json(502, { error: 'failed', message: 'TAi could not read that PDF. It may be damaged.' });
+        ctx.json(200, readyBody(QA_DOCS.get(job.doc)));
+      },
+    },
+    {
+      // the page's report of where the student is looking (src/chat-objects/view.ts): checked by the real parser, kept for GET /api/qa/view
+      path: '/api/view', method: 'POST', access: 'student',
+      async handler(ctx) {
+        const view = parseViewState(await ctx.readJson());
+        if (!view) return ctx.json(400, { error: 'bad-view' });
+        views.set(ctx.user.folder, { view, at: Date.now(), via: 'post' });
+        ctx.json(200, { ok: true });
+      },
+    },
+    {
+      path: '/api/qa/view', method: 'GET', access: 'student',
+      handler(ctx) {
+        ctx.json(200, views.get(ctx.user.folder) || { view: null });
+      },
+    },
+  ];
+}
+
+/** The lines of a failing `go test -race ./...` (forty of them) for a card of a run. */
+const FAILING_TEST_OUTPUT = [
+  '=== RUN   TestCreateAlbum', '--- PASS: TestCreateAlbum (0.00s)', '=== RUN   TestGetAlbum', '==================', 'WARNING: DATA RACE',
+  'Write at 0x00c0000a4180 by goroutine 8:', '  runtime.mapassign_faststr()', '      /usr/local/go/src/runtime/map_faststr.go:203 +0x0', '  example.com/albums/store.(*Store).Put()',
+  '      /home/student/albums/store/store.go:31 +0x84', '  example.com/albums/handler.(*Server).Create()', '      /home/student/albums/handler/create.go:22 +0x118', '',
+  'Previous read at 0x00c0000a4180 by goroutine 7:', '  runtime.mapaccess1_faststr()', '      /usr/local/go/src/runtime/map_faststr.go:13 +0x0', '  example.com/albums/store.(*Store).Get()',
+  '      /home/student/albums/store/store.go:24 +0x6c', '  example.com/albums/handler.(*Server).Get()', '      /home/student/albums/handler/get.go:18 +0x9c', '',
+  'Goroutine 8 (running) created at:', '  testing.(*T).Run()', '      /usr/local/go/src/testing/testing.go:1648 +0x3ad', '',
+  'Goroutine 7 (finished) created at:', '  testing.(*T).Run()', '      /usr/local/go/src/testing/testing.go:1648 +0x3ad', '==================',
+  '    testing.go:1465: race detected during execution of test', '--- FAIL: TestGetAlbum (0.01s)', '=== RUN   TestListAlbums', '--- PASS: TestListAlbums (0.00s)',
+  '=== RUN   TestDeleteAlbum', '    store_test.go:58: expected 404, got 200', '--- FAIL: TestDeleteAlbum (0.00s)', 'FAIL', 'FAIL\texample.com/albums/store\t0.034s', 'ok  \texample.com/albums/handler\t0.021s',
+  'FAIL',
+].join('\n');
+
+/** What a student's history holds when TAi has shown them a document and run their code: for looking at the cards (and for batch A's run card, which uses this too). */
+function seedObjects(folder) {
+  const log = history.forFolder(folder);
+  const ago = (minutes) => new Date(Date.now() - minutes * 60000);
+  const made = [];
+  log.append('assistant', 'Hi! Send me your code or a PDF and we can go through it together.', ago(40));
+  log.append('user', 'Here is the assignment spec. Can you help me plan the load test?', ago(35), {
+    files: [{ name: 'hw5-load-testing.pdf', size: 184320, kind: 'document' }, { name: 'notes.txt', size: 812, kind: 'text' }, { name: 'raft-slides-slow.pdf', size: 3200000, kind: 'document' }],
+  });
+  made.push(log.appendObject({ t: 'doc', doc: DOC_IDS.hw, title: 'Homework 5 spec.pdf', pages: 4, origin: 'upload' }, ago(34)));
+  log.append('assistant', 'I put the spec next to us. Page 3 is the load testing part: which two numbers will you report, and why those?', ago(33));
+  made.push(log.appendObject({ t: 'run', command: 'go test -race ./...', ok: true, exitCode: 1, timedOut: false, durationMs: 14200, output: FAILING_TEST_OUTPUT, truncated: false }, ago(20)));
+  log.append('assistant', 'The race detector found a data race in your store. What do you think shares that map between the two goroutines?', ago(19));
+  made.push(log.appendObject({ t: 'doc', doc: DOC_IDS.gone, title: 'Old handout.pdf', pages: 2, origin: 'upload' }, ago(10)));
+  made.push(log.appendObject({ t: 'doc', doc: DOC_IDS.slides, title: 'Raft slides.pdf', pages: 3, page: 2, origin: 'course' }, ago(5)));
+  // the chart and trace cards (portal/qa/fixtures/cards-c2.json) and a prediction card, for looking at them in the page
+  try {
+    const fixture = JSON.parse(fs.readFileSync(path.join(root, 'portal/qa/fixtures/cards-c2.json'), 'utf-8'));
+    for (const obj of fixture.objects || []) made.push(log.appendObject(obj, ago(3)));
+  } catch {
+    console.log('the chart and trace samples (portal/qa/fixtures/cards-c2.json) could not be read');
+  }
+  made.push(log.appendObject({ t: 'predict', question: 'What does this program print?', action: 'run', pkg: '.', files: [{ path: 'main.go', content: 'package main\n\nimport "fmt"\n\nfunc main() {\n	fmt.Println(2 + 3)\n}\n' }], choices: ['5', '23', 'an error'] }, ago(1)));
+  if (made.some((card) => !card)) console.log('WARNING: the history refused one of the seeded cards (docs/CHAT_OBJECTS.md has the shapes)');
+  portalRef.current?.wakeStudent(folder);
+}
 
 // ---- the pretend TAi
 
@@ -302,7 +690,15 @@ const verifier = { verify: async (credential) => { if (!credential.startsWith('d
 const staticFiles = loadStaticFiles(path.join(root, 'portal/web'), PAGE_FILES, '/');
 const history = new HistoryStore(path.join(work, 'history'));
 const portalRef = { current: null };
-const voice = new FakeVoice({ history, wake: (folder) => portalRef.current?.wakeStudent(folder) });
+const voice = new FakeVoice({
+  history,
+  wake: (folder) => portalRef.current?.wakeStudent(folder),
+  onView: (folder, view) => views.set(folder, { view, at: Date.now(), via: 'socket' }),
+  findPhrase: (doc, page, phrase) => {
+    const found = QA_DOCS.get(doc)?.pages[page - 1];
+    return found ? findPhrase(found.words, phrase) : null;
+  },
+});
 // the teaching view (owner only: sign in as dev:ada@example.com, then "Teaching view" in the account menu): the real team module reading twelve synthetic
 // students written as real files (src/portal/testing/team-fixture.ts: Bob strong, Carol with a verbal gap, Erin quiet with a confirmed misconception, Ivan who
 // never opened the page, Lena with a file nobody can read...). The control port's /team/class?mode=empty|full swaps in an empty class and back.
@@ -353,8 +749,22 @@ const portal = new Portal({
   voice,
   staticFiles,
   basePath: '/',
-  routes: [...teamRoutes(teamView), ...notify.routes, ...voiceRoutes({ voice })],       // (POST /api/voice/warm: the real route, answered by the fake call's warm())
-  features: (user) => ({ team: user.role === 'owner', ...notify.features(user) }),
+  routes: [
+    ...teamRoutes(teamView),
+    ...notify.routes,
+    ...voiceRoutes({ voice }),
+    ...docRoutes(),
+    // a prediction card's Run button: the real route, with a pretend sandbox that prints what the card's program would (docs/PREDICT.md)
+    ...predictRoutes({
+      history,
+      core,
+      voice,
+      runSandbox: async () => ({ ok: true, exitCode: 0, timedOut: false, outputTruncated: false, output: '5\n', durationMs: 1300 }),
+      postObject: (folder, obj) => portalRef.current.postObject(folder, obj),
+      wake: (folder) => portalRef.current?.wakeStudent(folder),
+    }),
+  ],       // (POST /api/voice/warm: the real route, answered by the fake call's warm())       // (POST /api/voice/warm: the real route, answered by the fake call's warm())
+  features: (user) => ({ team: user.role === 'owner', viewer: true, ...notify.features(user) }),
   presence: notify.presence,
   sourceHosts: new Set(['canvas.example.edu', 'github.com']),         // the hosts a "looked at" chip may link to (src/sources.ts)
   reactReplyDelayMs: 0,                   // a student's emoji starts no reply here, so the flows that only react see what they always saw; the control port turns it on
@@ -371,6 +781,7 @@ if (typeof portal.upload === 'function') {
   };
 }
 await portal.listen({ host: '127.0.0.1', port });
+seedObjects(users.find('viewer@example.com').folder);
 
 // everything off: no media, uploads, transcriber or voice; its own history (both pages hear the same pretend TAi)
 const plain = new Portal({
@@ -432,6 +843,25 @@ const control = http.createServer(async (req, res) => {
     const post = req.method === 'POST';
     const jid = user.jid;
     if (url.pathname === '/png') return reply(200, DIAGRAM, 'image/png');
+    // the last view the student's page reported (by POST /api/view or over a call's socket), and the documents and the run that a history can be seeded with
+    if (url.pathname === '/view') return reply(200, views.get(user.folder) || { view: null });
+    // how many times each page's picture was asked for (`doc:page` -> count), and a clean slate: what a page turn costs the server
+    if (url.pathname === '/doc-hits') return reply(200, Object.fromEntries(pageHits));
+    if (url.pathname === '/doc-hits/reset' && post) {
+      pageHits.clear();
+      return reply(200, { ok: true });
+    }
+    if (url.pathname === '/objects/seed' && post) {
+      seedObjects(user.folder);
+      return reply(200, { ok: true });
+    }
+    // a message of the student's that carries files, named by ?names=a.pdf,b.pdf (a .pdf is a document, anything else text): see openPlan for what opening each does
+    if (url.pathname === '/attach' && post) {
+      const names = (q.get('names') || 'spec.pdf').split(',').filter(Boolean).slice(0, 5);
+      const entry = history.forFolder(user.folder).append('user', q.get('text') || 'Here are my files.', new Date(), { files: names.map((name) => ({ name, size: 120000, kind: /\.pdf$/i.test(name) ? 'document' : 'text' })) });
+      portalRef.current?.wakeStudent(user.folder);
+      return reply(200, { ok: true, n: entry.n });
+    }
     if (url.pathname === '/image' && post) {
       sendPicture(jid, q.get('caption') ?? 'Here is a Raft election: the candidate asks the others for their votes. **Who wins a tie?**', q.get('missing') === '1');
       return reply(200, { ok: true });
@@ -579,6 +1009,6 @@ await new Promise((resolve) => control.listen(port ? port + 1 : 0, '127.0.0.1', 
 
 const at = (p) => `http://127.0.0.1:${p}/`;
 const ready = { base: at(portal.address().port), control: at(control.address().port), off: at(plain.address().port) };
-console.log(`pretend TAi behind the real page: ${ready.base}  (sign in as dev:ada@example.com; the E2E script does it through a fake Google button)`);
+console.log(`pretend TAi behind the real page: ${ready.base}  (sign in as dev:ada@example.com; the E2E script does it through a fake Google button; dev:viewer@example.com starts with documents and a run in the history)`);
 console.log(`the same page with every feature off: ${ready.off}; the tests' control port: ${ready.control}`);
 console.log(`READY ${JSON.stringify(ready)}`);

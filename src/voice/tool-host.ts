@@ -325,7 +325,7 @@ export class DockerToolHost implements ToolHost {
 
 /** A tool host for tests: answers from handlers ("server:tool", "tool" or "builtin:name"), records every call. */
 export class FakeToolHost implements ToolHost {
-  readonly calls: Array<{ server: string; tool: string; args: Record<string, unknown>; builtin: boolean }> = [];
+  readonly calls: Array<{ server: string; tool: string; args: Record<string, unknown>; builtin: boolean; timeoutMs?: number }> = [];
   handlers: Record<string, (args: Record<string, unknown>) => ToolResult | Promise<ToolResult>> = {};
   startError: Error | null = null;
   startDelayMs = 0;
@@ -354,9 +354,9 @@ export class FakeToolHost implements ToolHost {
     this.started = true;
   }
 
-  async call(tool: string, args: Record<string, unknown>, opts: { server?: string } = {}): Promise<ToolResult> {
+  async call(tool: string, args: Record<string, unknown>, opts: { server?: string; timeoutMs?: number } = {}): Promise<ToolResult> {
     const server = opts.server || 'nanoclaw';
-    this.calls.push({ server, tool, args, builtin: false });
+    this.calls.push({ server, tool, args, builtin: false, ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}) });
     if (!this.alive) return { ok: false, text: 'the tool host is not running' };
     const handler = this.handlers[`${server}:${tool}`] ?? this.handlers[tool];
     return handler ? handler(args) : { ok: true, text: `${tool} answered` };

@@ -35,6 +35,10 @@ export function newRequestId(): string {
 export interface WaitOptions {
   timeoutMs?: number;
   pollMs?: number;
+  /** How much of the host's sentence is kept (600 for the task tools; a run's answer is a framed result, which cut at 600 would be a broken text: run-go.ts). */
+  maxMessageChars?: number;
+  /** What to say when the host's answer is there but cannot be read (the default talks about the task list, which is not every tool's business). */
+  unreadable?: string;
   /** For tests: the clock, and how to wait. */
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -87,12 +91,12 @@ export async function awaitIpcResult(dir: string, requestId: string, options: Wa
       try {
         const parsed = JSON.parse(text) as Partial<IpcResult>;
         if (typeof parsed.ok === 'boolean' && typeof parsed.message === 'string') {
-          return { ok: parsed.ok, message: parsed.message.slice(0, 600), ...(typeof parsed.taskId === 'string' ? { taskId: parsed.taskId } : {}) };
+          return { ok: parsed.ok, message: parsed.message.slice(0, options.maxMessageChars ?? 600), ...(typeof parsed.taskId === 'string' ? { taskId: parsed.taskId } : {}) };
         }
       } catch {
         /* handled below */
       }
-      return { ok: false, message: 'The system answered, but I could not read its answer. Check list_tasks before you tell the student anything is set up.' };
+      return { ok: false, message: options.unreadable ?? 'The system answered, but I could not read its answer. Check list_tasks before you tell the student anything is set up.' };
     }
     if (now() >= deadline) return null;
     await sleep(pollMs);

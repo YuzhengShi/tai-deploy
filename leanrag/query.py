@@ -285,6 +285,13 @@ def query_knowledge(
     top_k: int = 10,
 ) -> dict:
     """Top-level query function.  Loads the index on first call."""
+    graph_dir = os.getenv("LEANRAG_GRAPH_DIR")
+    if graph_dir:  # the host mounted a built graph (TAI_LEANRAG=1, docs/LEANRAG.md): stdlib-only engine, no model, no embedding call
+        try:
+            from .graph_query import query_graph
+            return query_graph(graph_dir, question, difficulty=difficulty, top_k=top_k)
+        except Exception as exc:  # noqa: BLE001  (a graph that cannot be read must not take the tool down: it answers as it did before)
+            log.warning("graph engine unavailable (%s: %s), falling back", type(exc).__name__, exc)
     stub = _LEANRAG_DIR / "stub_corpus.json"
     if stub.exists():  # evaluation off AWS: BM25 over a JSON corpus, same result shape (see stub_query.py)
         from .stub_query import query_stub

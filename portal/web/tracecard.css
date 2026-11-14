@@ -1,0 +1,79 @@
+/* tracecard.css: the styles of tracecard.js (docs/CHAT_OBJECTS.md, docs/CARDS.md): a sequence the student steps through, in the conversation. It uses the page's own tokens (style.css: --bubble, --code-bg,
+   --line, --dash, --text, --muted, --blue, --pill, --pill-hover, --font) and so has the light, auto and dark themes with them. The words under the diagram say each step: colour only helps (the current step is
+   also bolder and has a band, the later ones are dashed and have no label, a state that changed says "updated"). Every colour here is a class or a custom property (the page's content policy forbids inline
+   styles). Nothing in this file animates, so there is nothing for a reduced-motion setting to turn off. */
+
+.row.object[data-type="trace"] { align-items: flex-start; }
+
+.tracecard {
+  flex: 1 1 auto; min-width: 0; max-width: min(100%, 760px);
+  background: var(--bubble); border: 1px solid var(--line); border-radius: 18px; overflow: hidden;
+  color: var(--text); font-size: 14px; line-height: 1.5;
+}
+
+.tr-title { padding: 10px 14px 8px; font-size: 15px; font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; }
+
+/* the diagram scrolls inside the card, both ways, never the page; the actors' names stay at the top while the steps scroll under them */
+.tr-diagram {
+  position: relative; max-height: min(420px, 70vh); overflow: auto; overscroll-behavior: contain;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--bubble);
+}
+.tr-diagram:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.tr-head { position: sticky; top: 0; z-index: 1; display: block; background: var(--bubble); }
+.tr-body { display: block; }
+/* the page's own rule for its icons (style.css: svg { fill: none; stroke: currentColor; stroke-width: 1.7; round caps }) is inherited by everything drawn here: the diagram starts from no stroke, and each shape
+   below says what it has */
+.tr-head, .tr-body { fill: none; stroke: none; stroke-width: 1; stroke-linecap: butt; stroke-linejoin: miter; }
+
+.tr-lane { stroke: var(--dash); stroke-width: 1; stroke-dasharray: 3 4; }
+.tr-pill { fill: var(--code-bg); stroke: var(--line); stroke-width: 1; }
+.tr-actor-name { fill: var(--text); font-family: var(--font); font-size: 12px; font-weight: 650; }
+
+.tr-band { fill: none; }
+.tr-num { fill: var(--muted); font-family: var(--font); font-size: 11px; font-variant-numeric: tabular-nums; }
+.tr-arrow { fill: none; stroke: var(--text); stroke-width: 1.6; }
+.tr-point, .tr-mark { fill: var(--text); }
+.tr-label { fill: var(--text); font-family: var(--font); font-size: 12px; paint-order: stroke; stroke: var(--bubble); stroke-width: 4px; stroke-linejoin: round; }
+
+/* the current step: a band, blue, bolder */
+.tr-ev.tr-now .tr-band { fill: var(--blue); fill-opacity: 0.1; }
+.tr-ev.tr-now .tr-arrow { stroke: var(--blue); stroke-width: 2.4; }
+.tr-ev.tr-now .tr-point, .tr-ev.tr-now .tr-mark { fill: var(--blue); }
+.tr-ev.tr-now .tr-num { fill: var(--text); font-weight: 700; }
+.tr-ev.tr-now .tr-label { font-weight: 650; }
+/* the steps still to come: dashed and faint, with no label */
+.tr-ev.tr-later .tr-arrow { stroke: var(--dash); stroke-width: 1.4; stroke-dasharray: 4 4; }
+.tr-ev.tr-later .tr-point, .tr-ev.tr-later .tr-mark { fill: var(--dash); }
+.tr-ev.tr-later .tr-label { visibility: hidden; }
+
+.tr-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 8px 10px 4px; }
+.tr-btn {
+  min-height: 34px; padding: 4px 12px; background: var(--pill); border: 0; border-radius: 10px; color: var(--text);
+  font-size: 13px; font-weight: 600; -webkit-tap-highlight-color: transparent;
+}
+.tr-btn:hover { background: var(--pill-hover); }
+.tr-btn[aria-disabled="true"] { opacity: 0.45; }
+.tr-btn[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--blue); }
+.tr-slider { flex: 1 1 140px; min-width: 120px; height: 28px; margin: 0; accent-color: var(--blue); }
+
+/* the step in words: the polite live region, then the states the actors hold */
+.tr-said { padding: 4px 14px 2px; }
+.tr-said p { margin: 0; overflow-wrap: anywhere; }
+.tr-said-head { color: var(--muted); font-size: 12.5px; font-weight: 650; }
+.tr-said-line { font-weight: 600; }
+.tr-said-note { color: var(--muted); }
+.tr-said-note[hidden] { display: none; }
+.tr-states { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 4px 14px 10px; list-style: none; }
+.tr-states:empty { display: none; }
+.tr-state { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; max-width: 100%; padding: 3px 10px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; }
+.tr-state[data-changed="true"] { border-color: var(--blue); }
+.tr-state-actor { font-weight: 650; }
+.tr-state-actor::after { content: ":"; }
+.tr-state-text { overflow-wrap: anywhere; }
+.tr-tag { color: var(--muted); font-size: 11.5px; font-weight: 650; }
+.tr-note { margin: 0; padding: 0 14px 10px; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+
+@media (max-width: 720px) {
+  .tracecard { border-radius: 16px; font-size: 13.5px; }
+  .tr-btn { min-height: 38px; }
+}

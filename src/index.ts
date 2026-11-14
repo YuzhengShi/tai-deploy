@@ -50,12 +50,19 @@ import {
 import { readEnvFile } from './env.js';
 import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
+import { createCanvasSource } from './docs/canvas-source.js';
+import { createDocs } from './docs/index.js';
+import { createSandbox } from './sandbox/runner.js';
+import { createSqliteRates } from './sandbox/rates.js';
+import type { SandboxApi } from './sandbox/types.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import { masterySnapshot, progressSteps } from './progress.js';
 import { trimClosingFormula, withReplyRule } from './reply-shape.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { hasBootstrapRun, seedCompetencyBootstrap } from './competency-bootstrap.js';
 import { createCompetencyWriter } from './competency-writer.js';
+import { createStudentStateWriter } from './student-state-writer.js';
+import { deleteWorkFact, listWorkFacts, upsertWorkFact } from './memory.js';
 import { takeSendFlag } from './intervention-log.js';
 import { seedCourseSync } from './course-sync.js';
 import { chatFromPortal, createVoiceHub } from './voice/hub.js';
@@ -155,6 +162,22 @@ const competencyWriter = createCompetencyWriter({
   templateFile: path.join(GROUPS_DIR, 'global', 'COMPETENCY_TEMPLATE.md'),
   log: logger,
   readEnv: readEnvFile,
+});
+// What TAi remembers of a student's work (docs/STUDENT_STATE.md): after an answered exchange that shows code, an error or a repository, and after a finished voice
+// call, the host keeps an issue, where the session stopped and a repository the student named (src/student-state-writer.ts). TAI_STATE_WRITER=on|shadow|off.
+const stateWriter = createStudentStateWriter({
+  log: logger,
+  readEnv: readEnvFile,
+  rememberWork: (folder, fact) => {
+    try {
+      return upsertWorkFact(folder, fact);
+    } catch (err) {
+      logger.warn({ err, folder, category: fact.category }, 'A fact of a student work could not be kept');
+      return false;
+    }
+  },
+  // the problems already on record, so that one that shows again is the same note and not another
+  recorded: (folder) => listWorkFacts(folder).filter((f) => f.category === 'issue').map((f) => f.text),
 });
 
 function loadState(): void {
@@ -328,6 +351,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
   // the student model: these messages begin a turn, and the file as it is now is that turn's "before" (a turn the container answers later begins at the pipe, below)
   if (!isMainGroup) competencyWriter.turnStarted(group.folder, missedMessages);
+  if (!isMainGroup) stateWriter.turnStarted(group.folder, missedMessages);
 
   const output = await runAgent(group, prompt, chatJid, async (result) => {
     // Streaming output callback — called for each agent result
@@ -357,12 +381,14 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         emptyOutputRetried = false;
         // answered and sent: the student model is updated after it, in the background (never before the reply, never waited for)
         if (!isMainGroup) competencyWriter.turnFinished(group.folder, { reply: ipcToolUsed ? '' : text, apiFailure: result.apiFailure });
+        if (!isMainGroup) stateWriter.turnFinished(group.folder, { reply: ipcToolUsed ? '' : text, apiFailure: result.apiFailure });
       } else if (ipcToolUsed) {
         // Agent sent via IPC tool and output was all <internal> — no retry needed.
         logger.info({ group: group.name }, 'Agent output was internal-only but sent via IPC tool, skipping retry');
         stopTypingIndicator(channel, chatJid);
         emptyOutputRetried = false;
         if (!isMainGroup) competencyWriter.turnFinished(group.folder, { reply: '', apiFailure: result.apiFailure });
+        if (!isMainGroup) stateWriter.turnFinished(group.folder, { reply: '', apiFailure: result.apiFailure });
       } else if (!emptyOutputRetried) {
         // Agent output was entirely <internal> reasoning — student gets nothing.
         // Nudge the agent to produce a visible response (one retry only).
@@ -668,6 +694,7 @@ async function startMessageLoop(): Promise<void> {
             pipedUpTo[chatJid] = unpiped[unpiped.length - 1].timestamp;
             // the student model: a warm container answers these as a turn of its own (the first batch was noted in processGroupMessages)
             if (!isMainGroup) competencyWriter.turnStarted(group.folder, unpiped);
+            if (!isMainGroup) stateWriter.turnStarted(group.folder, unpiped);
             // Restart typing indicator while the container processes the piped message
             startTypingIndicator(channel, chatJid);
             // after the dots: starting them clears the status, and this turn begins with "working" (the runner adds what it is doing)
@@ -766,14 +793,63 @@ async function main(): Promise<void> {
   // chats registered before this existed get their file at the first start after
   for (const group of Object.values(registeredGroups)) seedCompetency(group);
 
+  // Running a student's Go code (docs/GO_SANDBOX.md): a disposable container started by the host, never the agent container. TAI_SANDBOX=0 switches it off (every request then says so);
+  // without the image (tai_live.sh sandbox build) every request says it is not set up. The reaper removes containers and run directories that outlived their time.
+  const sandbox = process.env.TAI_SANDBOX === '0' ? undefined : createSandbox({
+    dir: path.join(DATA_DIR, 'sandbox'),
+    uploadsDir: (folder) => path.join(GROUPS_DIR, folder, 'uploads'),
+    githubToken: () => process.env.GITHUB_TOKEN_PUBLIC || readEnvFile(['GITHUB_TOKEN_PUBLIC']).GITHUB_TOKEN_PUBLIC,   // read at each fetch, never kept
+    rates: createSqliteRates(),
+    log: logger,
+  });
+  const runSandbox: SandboxApi['run'] | undefined = sandbox ? (who, request) => sandbox.run(who, request) : undefined;
+  let sandboxReaper: ReturnType<typeof setInterval> | undefined;
+  if (sandbox) {
+    void sandbox.reap();
+    sandboxReaper = setInterval(() => void sandbox.reap(), 60_000);
+    sandboxReaper.unref();
+  }
+  logger.info({ sandbox: !!sandbox }, 'Go sandbox');
+
+  // The document viewer's service (docs/DOCUMENTS.md, docs/CHAT_OBJECTS.md): a PDF is turned into page images and words by a disposable container, kept for the student, and shown by the page's
+  // viewer and the calls' show_document; TAI_DOCS=0 turns it off (the page has no viewer then), and without the image (tai_live.sh doc build) every open says it is not set up.
+  const docs = process.env.TAI_DOCS === '0' ? undefined : createDocs({
+    dir: path.join(DATA_DIR, 'docs'),
+    storeDir: STORE_DIR,
+    uploadsDir: (folder) => path.join(GROUPS_DIR, folder, 'uploads'),
+    log: logger,
+    // the course's Canvas files a student may name (docs/COURSE_DOCS.md, "Canvas files"): the host lists and downloads them with the operator's token, read from the host's .env at each use; TAI_CANVAS_DOCS=0 turns it off
+    canvas:
+      process.env.TAI_CANVAS_DOCS === '0'
+        ? undefined
+        : createCanvasSource({
+            settings: () => {
+              const env = readEnvFile(['CANVAS_BASE_URL', 'CANVAS_API_TOKEN', 'CANVAS_COURSE_ID']);
+              return env.CANVAS_BASE_URL && env.CANVAS_API_TOKEN && env.CANVAS_COURSE_ID ? { base: env.CANVAS_BASE_URL, token: env.CANVAS_API_TOKEN, course: env.CANVAS_COURSE_ID } : null;
+            },
+            log: logger,
+          }),
+  });
+  let docsReaper: ReturnType<typeof setInterval> | undefined;
+  if (docs) {
+    void docs.reap();
+    docsReaper = setInterval(() => void docs.reap(), 60_000);
+    docsReaper.unref();
+    void docs.searchLibrary('warm up');          // builds the course library's search index now, not during the first student's turn (src/docs/library-search.ts; never throws)
+  }
+  logger.info({ docs: !!docs }, 'Document viewer');
+
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
+    if (sandboxReaper) clearInterval(sandboxReaper);
+    if (docsReaper) clearInterval(docsReaper);
     await queue.shutdown(10000);
     await competencyWriter.flush(4000);          // the exchange answered a moment ago is still being recorded
     stopCourseStatus();
     stopStudentCourse();
     await voiceHub?.close();          // before the page: the notes a call still has to write (summary, competency) must not be lost
+    await stateWriter.flush(4000);    // after the calls: what a call that just ended, or an exchange answered a moment ago, has to keep of the student's work
     await portal?.close();
     for (const ch of channels) await ch.disconnect();
     process.exit(0);
@@ -803,6 +879,10 @@ async function main(): Promise<void> {
     portal = await startPortal(web, {
       registeredGroups: () => registeredGroups,
       registerGroup,
+      // the document viewer (its routes and the page's pane), and, through the portal's context, the calls' show_document: docs/CHAT_OBJECTS.md
+      docs,
+      // a prediction card's Run button runs the card's own program in the sandbox (docs/PREDICT.md)
+      runSandbox,
       // voice calls and the mock interview (src/voice, docs/VOICE.md): none unless TAI_VOICE=1 and a Deepgram key is stored
       createVoice: (ctx) =>
         (voiceHub = createVoiceHub({
@@ -813,6 +893,46 @@ async function main(): Promise<void> {
           publicOrigin: ctx.publicOrigin,
           secretFile: ctx.secretFile,
           ...chatFromPortal(ctx.history, ctx.wakeStudent),
+          // run_code: a student's Go code in the sandbox (docs/GO_SANDBOX.md)
+          runSandbox,
+          // where the student's page says it is looking, and the document viewer's service (docs/CHAT_OBJECTS.md): show_document, point_at, look_at_screen and each turn's screen note use them
+          views: ctx.views,
+          docs: ctx.docs,
+          // the card on line n of the student's chat (a run, a chart ...): what the screen note says of a card they picked a part of
+          objectOf: (folder, n) => {
+            try {
+              const line = ctx.history.forFolder(folder).get(n);
+              return line?.kind === 'object' && line.obj ? line.obj : null;
+            } catch {
+              return null;
+            }
+          },
+          // what TAi remembers of a student's work (docs/STUDENT_STATE.md): read for the conversation and the interviewer, kept by the host when an interview reads a repository and after a call
+          workFacts: (folder) => {
+            try {
+              return listWorkFacts(folder);
+            } catch (err) {
+              logger.warn({ err, folder }, 'The facts of a student work could not be read');
+              return [];
+            }
+          },
+          rememberWork: (folder, fact) => {
+            try {
+              if (!upsertWorkFact(folder, fact)) logger.debug({ folder, category: fact.category }, 'A fact of a student work was refused');
+            } catch (err) {
+              // (the category, never the key: a key is made of what a student said)
+              logger.warn({ err, folder, category: fact.category }, 'A fact of a student work could not be kept');
+            }
+          },
+          forgetWork: (folder, key) => {
+            try {
+              deleteWorkFact(folder, key);
+            } catch (err) {
+              logger.warn({ err, folder }, 'A fact of a student work could not be taken back');
+            }
+          },
+          // a finished call goes through the state writer once: an issue, where the call stopped, a repository the student named
+          workFromCall: (input) => stateWriter.fromCall(input),
           // a row for the text agent's next start; a bot message, so it is read as context but starts nothing
           recordVoiceSummary: (jid, text) =>
             storeMessageDirect({
@@ -858,6 +978,14 @@ async function main(): Promise<void> {
     onProcess: (groupJid, proc, containerName, groupFolder) => queue.registerProcess(groupJid, proc, containerName, groupFolder),
   });
   startIpcWatcher({
+    // a card in a student's chat (a run of their code: docs/CHAT_OBJECTS.md); throws when the chat did not take it
+    postObject: (folder, obj) => {
+      if (!portal) throw new Error('the page is not running');
+      portal.postObject(folder, obj);
+    },
+    runSandbox,
+    // show_document for the text agent: a document prepared for the student's viewer (docs/DOCUMENTS.md)
+    docs,
     // the student page's activity list: a note TAi kept, a reminder it set
     recordActivity: (folder, entry) => portal?.recordActivity(folder, entry),
     sendMessage: (jid, rawText) => {

@@ -27,9 +27,17 @@ import { buildMemoryExport } from '../memory.js';
 import { writeFileAtomicSafe } from '../safe-fs.js';
 import { sourceHosts } from '../sources.js';
 import { RegisteredGroup } from '../types.js';
+import { callVisionOn } from '../vision-env.js';
 import { WebChannel } from '../channels/web.js';
 import { startNotify } from '../notify/start.js';
 import { GoogleVerifier, NonceStore, PortalUser, SessionCodec, UserDirectory, loadSecret } from './auth.js';
+import { createViewStore } from '../chat-objects/view.js';
+import { createTextNotes } from '../voice/screen.js';
+import type { SandboxApi } from '../sandbox/types.js';
+import { predictRoutes } from './predict-routes.js';
+import type { ViewStore } from '../chat-objects/view.js';
+import type { DocsApi } from '../docs/types.js';
+import { docRoutes } from './doc-routes.js';
 import { ADMIN_FOLDER, HistoryStore } from './history.js';
 import { MediaStore } from './media.js';
 import { MemoryDb, StudentMemory, sqliteMemoryStore } from './memory-view.js';
@@ -70,6 +78,21 @@ export const PAGE_FILES = [
   'status.js',
   'sources.js',
   'status.css',
+  'objects.js',
+  'view-state.js',
+  'runcard.js',
+  'doccard.js',
+  'chartcard.js',
+  'tracecard.js',
+  'predictcard.js',
+  'viewer.js',
+  'askhere.js',
+  'runcard.css',
+  'chartcard.css',
+  'tracecard.css',
+  'predictcard.css',
+  'viewer.css',
+  'askhere.css',
   'sw.js',
   'manifest.webmanifest',
   'icon-192.png',
@@ -87,6 +110,10 @@ export interface VoiceContext {
   publicOrigin: string;
   secretFile: string;
   wakeStudent: (folder: string) => void;
+  /** Where the students' pages say they are looking (src/chat-objects/view.ts): the page's `POST /api/view` writes it, a call's socket writes it, and what a model is told of the screen reads it. One for the process. */
+  views: ViewStore;
+  /** The document viewer's service (src/docs), when it is on. */
+  docs?: DocsApi;
 }
 
 export interface PortalDeps {
@@ -94,6 +121,10 @@ export interface PortalDeps {
   registerGroup: (jid: string, group: RegisteredGroup) => void;
   /** Builds the voice hub (src/voice) from what the page shares with it; null or absent: no voice calls. */
   createVoice?: (ctx: VoiceContext) => PortalVoice | null;
+  /** The document viewer's service (src/docs/types.ts DocsApi): its routes and the `viewer` feature are there when it is given. */
+  docs?: DocsApi;
+  /** Runs a student's Go code (src/sandbox): what a prediction card's Run button uses (src/portal/predict-routes.ts); without it the card says running code is not set up. */
+  runSandbox?: SandboxApi['run'];
 }
 
 /** The chat of a signed-in student: registered with the Canvas user and GitHub account the allowlist gives, and kept in step with it. */
@@ -173,6 +204,7 @@ export async function startPortal(web: WebChannel, deps: PortalDeps, env: NodeJS
   const origin = env.TAI_PORTAL_ORIGIN || undefined;
   const groupsDir = env.TAI_PORTAL_GROUPS_DIR || GROUPS_DIR;
   const portalRef: { current: Portal | null } = { current: null };
+  const views = createViewStore();                 // where each student's page says it is looking (src/chat-objects/view.ts)
   // What feature modules add to the page's server: their routes (src/portal/server.ts, PortalRoute) and the entries they put in /api/me's `features`.
   // One line to a module, so that adding one never touches another's: `...prefsRoutes(...)` for a module that has several routes.
   const routes: PortalRoute[] = [];
@@ -184,9 +216,26 @@ export async function startPortal(web: WebChannel, deps: PortalDeps, env: NodeJS
         publicBase: origin.replace(/\/+$/, '') + (basePath === '/' ? '' : basePath.replace(/\/+$/, '')),
         secretFile,
         wakeStudent: (folder) => portalRef.current?.wakeStudent(folder),
+        views,
+        docs: deps.docs,
       }) ?? null
     : null;
   routes.push(...voiceRoutes({ voice }));       // POST /api/voice/warm: the call's tool host starts while the microphone's prompt is on screen
+  routes.push(
+    ...predictRoutes({              // POST api/predict/run, GET api/predict/state: a prediction card's Run button (docs/PREDICT.md)
+      history,
+      core,
+      voice,
+      runSandbox: deps.runSandbox,
+      // the page's own way to leave a card: the history's gate, then the wake-up; it THROWS when the chat refuses the card (the route then does not say it ran)
+      postObject: (folder, obj) => {
+        if (!portalRef.current) throw new Error('the page is not running');
+        portalRef.current.postObject(folder, obj);
+      },
+      wake: (folder) => portalRef.current?.wakeStudent(folder),
+      log: logger,
+    }),
+  );
   const team = teamModule({ env, groupsDir, users, registeredGroups: deps.registeredGroups, db: teamDbOf(() => getDb(), ASSISTANT_NAME) });
   routes.push(...team.routes);                  // GET /api/team/overview and /api/team/student: the teaching view, for the owner only (docs/TEAM_VIEW.md)
   featureFlags.push(team.features);             // features.team: true for the owner, whose account menu then offers the page
@@ -203,6 +252,32 @@ export async function startPortal(web: WebChannel, deps: PortalDeps, env: NodeJS
   });      // preferences, and web push when TAI_NOTIFY=1, e-mail when TAI_NOTIFY_EMAIL=1 (docs/NOTIFICATIONS.md)
   routes.push(...notify.routes);                // GET/POST api/prefs, GET api/push/key, POST api/push/subscribe and api/push/unsubscribe
   featureFlags.push(notify.features);           // features.prefs, features.push (key and TAI_NOTIFY), features.email (false until the mail channel exists)
+  if (deps.docs) {
+    // the document viewer (docs/DOCUMENTS.md): GET api/doc/meta, page and words, POST api/doc/open, GET api/doc/job, and features.viewer for the page to draw its pane. A card made when a document
+    // was prepared in the background goes into the student's own history and the page is woken, as the voice side does for what a call leaves in the chat
+    routes.push(
+      ...docRoutes({
+        docs: deps.docs,
+        history,
+        postObject: (folder, obj) => portalRef.current?.postObject(folder, obj),   // (the page's own way to leave a card: the history's gate, then the wake-up)
+      }),
+    );
+    featureFlags.push(() => ({ viewer: true }));
+  }
+  // what the student has open and selected, as lines for the text agent with a message they send (src/voice/screen.ts, docs/VIEWER_VOICE.md): a call has the relay's note instead
+  const textNotes = createTextNotes({
+    views,
+    docs: deps.docs,
+    now: Date.now,
+    objectOf: (folder, n) => {
+      try {
+        const line = history.forFolder(folder).get(n);
+        return line?.kind === 'object' && line.obj ? line.obj : null;
+      } catch {
+        return null;
+      }
+    },
+  });
   const portal = new Portal({
     core,
     users,
@@ -212,7 +287,8 @@ export async function startPortal(web: WebChannel, deps: PortalDeps, env: NodeJS
     nonces: new NonceStore(),
     history,
     media: mediaStore,
-    uploads: new UploadStore(groupsDir),
+    // (the fourth argument: whether a call's model has look_at_image, so that a picture is named to it with the function instead of with "you cannot see pictures": src/vision-env.ts callVisionOn, docs/RUN_CARDS.md)
+    uploads: new UploadStore(groupsDir, undefined, undefined, () => callVisionOn()),
     transcribe: deepgramTranscriber(env),
     voice,
     memory: new StudentMemory(sqliteMemoryStore(() => getDb() as unknown as MemoryDb), groupsDir, Date.now, (folder) => refreshMemoryExport(deps, groupsDir, folder)),
@@ -223,6 +299,8 @@ export async function startPortal(web: WebChannel, deps: PortalDeps, env: NodeJS
     reactReplyDelayMs: reactReplyDelay(env),
     choices: env.TAI_CHOICES !== '0',
     routes,
+    viewNote: textNotes.note,
+    viewNoteUndo: textNotes.undo,
     presence: notify.presence,                  // each poll says whether the page is open and in front: no push to a page that is looking at the message
     features: (user) => Object.assign({}, ...featureFlags.map((flags) => flags(user))),
     sourceHosts: sourceHosts(readEnvFile, env),           // the hosts a "looked at" chip may link to (src/sources.ts)

@@ -24,8 +24,15 @@ import {
 } from './db.js';
 import { ipcMediaPath } from './ipc-media.js';
 import { buildMemoryExport, MemoryFact, storeMemory } from './memory.js';
+import { isWorkCategory } from './work-facts.js';
 import { logger } from './logger.js';
 import { writeFileAtomicSafe } from './safe-fs.js';
+import { CHAT_OBJECT_ANSWER_CHARS, handleChatObject } from './chat-objects/ipc-verb.js';
+import { DOC_ANSWER_CHARS, startDocOpen } from './docs/ipc-verb.js';
+import { LIBRARY_ANSWER_CHARS, handleCourseDocFind } from './docs/library-verb.js';
+import type { DocsApi } from './docs/types.js';
+import { SANDBOX_ANSWER_CHARS, startSandboxRun } from './sandbox/ipc-verb.js';
+import type { SandboxApi } from './sandbox/types.js';
 import { formatOutbound } from './router.js';
 import { checkNewTask } from './task-limits.js';
 import { RegisteredGroup } from './types.js';
@@ -63,11 +70,12 @@ const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
  * a schedule, another group's task, now a limit) left the agent and the student told something false. Written through writeFileAtomicSafe, which refuses a `results` that
  * is a link leading out of the group's directory; a request with no valid id, or a failure to write, is not an error of the request's (an older container asks for no answer).
  */
-export function answer(sourceGroup: string, requestId: unknown, result: IpcResult): void {
+export function answer(sourceGroup: string, requestId: unknown, result: IpcResult, maxChars = 600): void {
   if (typeof requestId !== 'string' || !REQUEST_ID.test(requestId)) return;
   try {
     const groupIpcDir = path.join(DATA_DIR, 'ipc', sourceGroup);
-    const body: IpcResult = { ok: result.ok, message: String(result.message).slice(0, 600), ...(result.taskId ? { taskId: result.taskId } : {}) };
+    // (600 characters for the task tools' sentences; a run's answer is longer, and is cut at SANDBOX_ANSWER_CHARS, which its framing never reaches)
+    const body: IpcResult = { ok: result.ok, message: String(result.message).slice(0, maxChars), ...(result.taskId ? { taskId: result.taskId } : {}) };
     writeFileAtomicSafe(path.join(groupIpcDir, 'results', `${requestId}.json`), JSON.stringify(body), groupIpcDir);
   } catch (err) {
     logger.warn({ sourceGroup, err: err instanceof Error ? err.message : String(err) }, 'Could not write the answer to an IPC request');
@@ -94,6 +102,12 @@ const WORKING_NOTES = new Set(['checkpoint', 'session']);
 export interface IpcDeps {
   /** The page's activity list: told of a note TAi kept and of a reminder it set (best-effort: a failure here never stops the IPC file being handled). */
   recordActivity?: (folder: string, entry: ActivityEntry) => void;
+  /** Runs a student's Go code (src/sandbox, docs/GO_SANDBOX.md) for the `sandbox_run` request of a container; without it the sandbox is off and every request says so. */
+  runSandbox?: SandboxApi['run'];
+  /** Puts a card in a student's chat (docs/CHAT_OBJECTS.md: the history's `appendObject` and a wake-up of the page); best-effort. Without it no card is made. */
+  postObject?: (folder: string, obj: unknown) => void;
+  /** Prepares a document for a student and leaves its card in their chat (src/docs, docs/DOCUMENTS.md) for the `doc_open` request of a container; without it the viewer is off and every request says so. */
+  docs?: DocsApi;
   sendMessage: (jid: string, text: string) => Promise<void>;
   sendReaction: (jid: string, messageId: string, emoji: string) => Promise<void>;
   sendAudioMessage: (jid: string, audioBuffer: Buffer) => Promise<void>;
@@ -111,6 +125,16 @@ export interface IpcDeps {
 }
 
 let ipcWatcherRunning = false;
+
+/**
+ * What the watcher does with a `memory_store` file: the facts about a student's work (a repository, where a session stopped, a problem: docs/STUDENT_STATE.md, src/work-facts.ts) are the host's own, so a
+ * container's file, which a student's agent can write itself, never writes one, whatever it names and whoever sent it (the admin chat too); any other note is stored for the sender's own
+ * group (the admin chat: for any).
+ */
+export function memoryStoreVerdict(category: unknown, studentFolder: string, sourceGroup: string, isMain: boolean): 'store' | 'host-only' | 'unauthorized' {
+  if (isWorkCategory(category)) return 'host-only';
+  return isMain || studentFolder === sourceGroup ? 'store' : 'unauthorized';
+}
 
 export function startIpcWatcher(deps: IpcDeps): void {
   if (ipcWatcherRunning) {
@@ -203,8 +227,11 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   try { fs.unlinkSync(hostPath); } catch { /* ignore */ }
                 }
               } else if (data.type === 'memory_store' && data.studentFolder && data.fact) {
-                // Verify the agent can only store memories for its own group
-                if (isMain || (data.studentFolder as string) === sourceGroup) {
+                // (memoryStoreVerdict: the host's own categories are never written from here; any other note only for the sender's own group)
+                const verdict = memoryStoreVerdict((data.fact as MemoryFact).category, data.studentFolder as string, sourceGroup, isMain);
+                if (verdict === 'host-only') {
+                  logger.warn({ sourceGroup, category: (data.fact as MemoryFact).category }, 'memory_store of a category the host keeps itself refused');
+                } else if (verdict === 'store') {
                   storeMemory(data.studentFolder as string, data.fact as MemoryFact);
                   logger.info({ studentFolder: data.studentFolder, sourceGroup }, 'IPC memory stored');
                   const fact = data.fact as MemoryFact;
@@ -299,6 +326,8 @@ export async function processTaskIpc(
     taskId?: string;
     // The container's own name for this request: the answer is written to results/<requestId>.json (answer())
     requestId?: string;
+    // For sandbox_run: what the container asks to run (checked by parseSandboxRequest, the one gate); for doc_open: { name, page? } (checked by src/docs/ipc-verb.ts); for course_doc_find: { query } (checked by src/docs/library-verb.ts); for chat_object: { kind, args } (checked by src/chat-objects/ipc-verb.ts)
+    request?: unknown;
     prompt?: string;
     schedule_type?: string;
     schedule_value?: string;
@@ -455,6 +484,98 @@ export async function processTaskIpc(
           deps.recordActivity?.(targetFolder, { type: 'reminder', title: `Reminder · ${whenText(nextRun)}`, text: data.prompt, detail: `${data.prompt}\n\nScheduled for ${whenText(nextRun)}.` });
         } catch { /* the list is a convenience */ }
       }
+      break;
+    }
+
+    case 'sandbox_run': {
+      // A student's Go code is run for the group the IPC directory belongs to, with the account the host bound to it. This function is awaited once for every file of every group
+      // (startIpcWatcher) and a run takes up to a minute: the run is started and NOT waited for, and its answer is written when it ends (src/sandbox/ipc-verb.ts has the rules
+      // and the order of the checks). The admin chat may ask too.
+      startSandboxRun(
+        {
+          folder: sourceGroup,
+          isMain,
+          requestId: typeof data.requestId === 'string' && REQUEST_ID.test(data.requestId) ? data.requestId : null,
+          request: data.request,
+          group: Object.values(registeredGroups).find((g) => g.folder === sourceGroup),
+        },
+        {
+          runSandbox: deps.runSandbox,
+          say: (requestId, ok, message) => answer(sourceGroup, requestId, { ok, message }, SANDBOX_ANSWER_CHARS),
+          // the kind of run and how it ended, never the code or the output
+          audit: (operation, fields) => auditLog(operation, fields),
+          postObject: deps.postObject,
+          log: logger,
+        },
+      );
+      break;
+    }
+
+    case 'doc_open': {
+      // A document is prepared for the group the IPC directory belongs to and left in its chat as a card. Like sandbox_run it is started and NOT waited for (src/docs/ipc-verb.ts has the rules and the
+      // order of the checks): a PDF takes up to a minute and a half. The admin chat may ask too.
+      startDocOpen(
+        {
+          folder: sourceGroup,
+          isMain,
+          requestId: typeof data.requestId === 'string' && REQUEST_ID.test(data.requestId) ? data.requestId : null,
+          request: data.request,
+          group: Object.values(registeredGroups).find((g) => g.folder === sourceGroup),
+        },
+        {
+          docs: deps.docs,
+          uploadsDir: (folder) => path.join(GROUPS_DIR, folder, 'uploads'),
+          say: (requestId, ok, message) => answer(sourceGroup, requestId, { ok, message }, DOC_ANSWER_CHARS),
+          // the kind of source and how it ended, never a name or a title
+          audit: (operation, fields) => auditLog(operation, fields),
+          postObject: deps.postObject,
+          log: logger,
+        },
+      );
+      break;
+    }
+
+    case 'course_doc_find': {
+      // A search of the course library (the decks the operator added for every student) for the group the IPC directory belongs to: a few words in, the slides that matched out, as quoted data. Nothing here
+      // takes long (an index in memory), so the answer is written before this returns (src/docs/library-verb.ts has the rules). The admin chat may ask too.
+      handleCourseDocFind(
+        {
+          folder: sourceGroup,
+          isMain,
+          requestId: typeof data.requestId === 'string' && REQUEST_ID.test(data.requestId) ? data.requestId : null,
+          request: data.request,
+          group: Object.values(registeredGroups).find((g) => g.folder === sourceGroup),
+        },
+        {
+          docs: deps.docs,
+          say: (requestId, ok, message) => answer(sourceGroup, requestId, { ok, message }, LIBRARY_ANSWER_CHARS),
+          // that a search happened and how many slides it found, never the words of the query
+          audit: (operation, fields) => auditLog(operation, fields),
+          log: logger,
+        },
+      );
+      break;
+    }
+
+    case 'chat_object': {
+      // A chart, a sequence or a prediction card for the group the IPC directory belongs to, from the arguments of the container's show_chart, show_trace or ask_to_predict (checked by the type's own cleaner,
+      // the history's one gate). Nothing here takes long, so the answer is written before this returns (src/chat-objects/ipc-verb.ts has the rules and the order of the checks). The admin chat may ask too.
+      handleChatObject(
+        {
+          folder: sourceGroup,
+          isMain,
+          requestId: typeof data.requestId === 'string' && REQUEST_ID.test(data.requestId) ? data.requestId : null,
+          request: data.request,
+          group: Object.values(registeredGroups).find((g) => g.folder === sourceGroup),
+        },
+        {
+          say: (requestId, ok, message) => answer(sourceGroup, requestId, { ok, message }, CHAT_OBJECT_ANSWER_CHARS),
+          // the kind of card and how it ended, never the data
+          audit: (operation, fields) => auditLog(operation, fields),
+          postObject: deps.postObject,
+          log: logger,
+        },
+      );
       break;
     }
 

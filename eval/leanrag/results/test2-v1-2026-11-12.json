@@ -1,0 +1,7123 @@
+{
+ "ran_at": "2026-11-12T03:40:00Z",
+ "now": "2026-11-11T12:00:00Z",
+ "question_set": {
+  "set": "test2",
+  "version": 1,
+  "hash": "592ec1d13ae738295ed813502daeb7a43264c0ec07e14f8f4c493b62f277ab5d",
+  "n": 20
+ },
+ "engine": {
+  "profile": "v1",
+  "constants": {
+   "format": 1,
+   "weights": {
+    "hybrid": [
+     0.5,
+     0.4,
+     0.1
+    ],
+    "entity": [
+     0.0,
+     0.8,
+     0.2
+    ],
+    "bm25": [
+     1.0,
+     0.0,
+     0.0
+    ]
+   },
+   "seeds": 8,
+   "seed_floor": 0.25,
+   "name_bonus": 1.0,
+   "neighbours_per_seed": 3,
+   "per_group": 3,
+   "max_question_terms": 14,
+   "bm25": {
+    "k1": 1.4,
+    "b": 0.75
+   },
+   "texts": 2,
+   "text_share": 0.8,
+   "assignment_cues": "\\b(homework|assignment|assignments|hw\\d*|mastery|midterm|final|project|due|deadline|rubric|syllabus|exam|grading|grade|grades)\\b"
+  },
+  "hash": "255d88ce18e4b132"
+ },
+ "systems": {
+  "standin": {
+   "info": {
+    "chunks": 410,
+    "kinds": {
+     "slides": 287,
+     "outline": 16,
+     "syllabus": 25,
+     "homework": 82
+    },
+    "top_k": 10
+   },
+   "items": {
+    "T2-01": [
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       14,
+       15
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       15,
+       16
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       23,
+       24
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       24,
+       25
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       49,
+       50
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       19
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       48
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       43,
+       44
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       42,
+       43
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-02": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       36,
+       37
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       35,
+       36
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       17,
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       16,
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       15,
+       16
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       18,
+       19
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       47,
+       48
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       48,
+       49
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       11,
+       12
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-03": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       59,
+       60
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       58,
+       59
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       4,
+       5
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       5,
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       57,
+       58
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       1,
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       56,
+       57
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       1,
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       6,
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       5,
+       6
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-04": [
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       1,
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       2,
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "syllabus"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "syllabus"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "syllabus"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       44,
+       45
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       43,
+       44
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       41,
+       42
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-05": [
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       32,
+       33
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       1,
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       2,
+       3
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-06": [
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       13,
+       14
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       14,
+       15
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       16,
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       17,
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       15,
+       16
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       31,
+       32
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       30,
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       37,
+       38
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-07": [
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       9,
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       8,
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       10,
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       22,
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       21,
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       6,
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       20,
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       2,
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       19,
+       20
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       34
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-08": [
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       1,
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       2,
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       49,
+       50
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       48,
+       49
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       1,
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "outline"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       2,
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       52,
+       53
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       13,
+       14
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-09": [
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       17,
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       9,
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       2,
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       1,
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       7,
+       8
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       42,
+       43
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       8,
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       3,
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       10,
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       4,
+       5
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-10": [
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       6,
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       1,
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       7,
+       8
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-11": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       25,
+       26
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       22,
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       23,
+       24
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       26,
+       27
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       13,
+       14
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       12,
+       13
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-12": [
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       51,
+       52
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       48,
+       49
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       1,
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       23,
+       24
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       22,
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       36,
+       37
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       52,
+       53
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-13": [
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       2,
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       10,
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       36,
+       37
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       43,
+       44
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       11,
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       34,
+       35
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       25,
+       26
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       12,
+       13
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-14": [
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       12,
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       11,
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       13,
+       14
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       60
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       20,
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       21,
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       8,
+       9
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-15": [
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       8,
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       9,
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       2,
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       1,
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       5,
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       21,
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       10,
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       8,
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       6,
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       3,
+       4
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-16": [
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       8,
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       7,
+       8
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       23,
+       24
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       27,
+       28
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       26,
+       27
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       22,
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       21,
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       4,
+       5
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       3,
+       4
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-17": [
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       31,
+       32
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       20,
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       19,
+       20
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       30,
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       18,
+       19
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       38,
+       39
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       27,
+       28
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       32,
+       33
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       13,
+       14
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-18": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       47,
+       48
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       17,
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       21,
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       27,
+       28
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       20,
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       48,
+       49
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       20,
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       18,
+       19
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-19": [
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       5,
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       6,
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       17,
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       17,
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       16,
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       16,
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "syllabus"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       7,
+       8
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-20": [
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "syllabus"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       10,
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       17,
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       25,
+       26
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       17,
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       24,
+       25
+      ],
+      "kind": "slide"
+     }
+    ]
+   }
+  },
+  "library": {
+   "info": {},
+   "items": {
+    "T2-01": [
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       15
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       24
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-02": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       36
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-03": [
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       5
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       59
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       57
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       29
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-04": [
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-05": [
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       32
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-06": [
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       14
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       15
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-07": [
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       34
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-08": [
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-09": [
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-10": [],
+    "T2-11": [],
+    "T2-12": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       37
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       52
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       16
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-13": [
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-14": [
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-15": [
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-16": [
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       8
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-17": [
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       22
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-18": [],
+    "T2-19": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-20": [
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     }
+    ]
+   }
+  },
+  "bm25": {
+   "info": {},
+   "items": {
+    "T2-01": [
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       15
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       24
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       43
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       19
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       57
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       48
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       49
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-02": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       36
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       48
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       37
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       19
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-03": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       59
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       5
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       29
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       57
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       53
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-04": [
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       44
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       41
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       35
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       25
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-05": [
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       32
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       29
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       44
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       24
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       51
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-06": [
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       14
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       15
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       29
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       40
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-07": [
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       34
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       5
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       34
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       25
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-08": [
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       49
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       53
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       5
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-09": [
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       43
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-10": [
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       44
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       50
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       58
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       46
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       24
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       25
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-11": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       26
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       14
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       25
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       16
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-12": [
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       37
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       52
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       27
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       19
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       16
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-13": [
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       26
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       34
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       35
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       29
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-14": [
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       60
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       20
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       48
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-15": [
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       8
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       25
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       43
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       34
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-16": [
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       8
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       27
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       16
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       14
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-17": [
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       20
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-18": [
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       27
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       48
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-19": [
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       44
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       26
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       60
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-20": [
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       24
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       27
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       25
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       5
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     }
+    ]
+   }
+  },
+  "entity": {
+   "info": {},
+   "items": {
+    "T2-01": [
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       15
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       24
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       26
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-02": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       36
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       37
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       48
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       14
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-03": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       59
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       57
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       43
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       35
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-04": [
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       8
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-05": [
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       32
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       14
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-06": [
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       14
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       16
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       26
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-07": [
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       34
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       27
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       39
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-08": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       49
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-09": [
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       14
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       26
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       32
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-10": [
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       5
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       25
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       42
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       46
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       47
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-11": [
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       32
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       14
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       15
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-12": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       59
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       8
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       52
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       38
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-13": [
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       43
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       47
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       46
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-14": [
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       25
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-15": [
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       43
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       39
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-16": [
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       8
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       28
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       24
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-17": [
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       20
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       29
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       27
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       8
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       24
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-18": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       48
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       27
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       49
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       19
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-19": [
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       43
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       8
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-20": [
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       24
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       25
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       20
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     }
+    ]
+   }
+  },
+  "hybrid": {
+   "info": {},
+   "items": {
+    "T2-01": [
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       15
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       24
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       43
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       19
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       57
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       48
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       49
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-02": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       36
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       37
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       48
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       14
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       19
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-03": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       59
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       57
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       5
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       53
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-04": [
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       44
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       41
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       35
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       25
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-05": [
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       32
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       29
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       44
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       24
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       51
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-06": [
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       14
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       15
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       29
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       40
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-07": [
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       34
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       5
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       25
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-08": [
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       49
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       53
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-09": [
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       14
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-10": [
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       46
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       25
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       5
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       44
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       50
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-11": [
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       26
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       14
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       25
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       16
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-12": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       52
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       59
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       8
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       37
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       27
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       19
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "",
+      "pages": [],
+      "kind": "homework"
+     }
+    ],
+    "T2-13": [
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       43
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       26
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       34
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       35
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       47
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-14": [
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       60
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       20
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       48
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-15": [
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       43
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       1
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       8
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Observability.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-16": [
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       8
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       4
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       27
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       28
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       16
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-17": [
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       20
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       22
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       29
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-18": [
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       48
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       27
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       21
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       49
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       12
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       23
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       19
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       10
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-19": [
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       7
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       6
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day1 lecture ONLINE 2026.pdf",
+      "pages": [
+       3
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       44
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       26
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       60
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       9
+      ],
+      "kind": "slide"
+     }
+    ],
+    "T2-20": [
+     {
+      "deck": "Day3 More Fundamentals and Concurrency.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       24
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 4 ACID 2PC and Consensus.pdf",
+      "pages": [
+       11
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 5 APIs and Load Balancers.pdf",
+      "pages": [
+       17
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       25
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "day09-caching.pdf",
+      "pages": [
+       31
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 2 Fundamentals.pdf",
+      "pages": [
+       13
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       27
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Day 6 Sneaking up on Microservices!.pdf",
+      "pages": [
+       2
+      ],
+      "kind": "slide"
+     },
+     {
+      "deck": "Goroutines in brief.pdf",
+      "pages": [
+       18
+      ],
+      "kind": "slide"
+     }
+    ]
+   }
+  }
+ },
+ "scores": {
+  "standin": {
+   "@1": {
+    "all": [
+     10,
+     20
+    ],
+    "lookup": [
+     7,
+     8
+    ],
+    "paraphrase": [
+     0,
+     5
+    ],
+    "compare": [
+     3,
+     4
+    ],
+    "cross-deck": [
+     0,
+     3
+    ]
+   },
+   "@3": {
+    "all": [
+     12,
+     20
+    ],
+    "lookup": [
+     7,
+     8
+    ],
+    "paraphrase": [
+     2,
+     5
+    ],
+    "compare": [
+     3,
+     4
+    ],
+    "cross-deck": [
+     0,
+     3
+    ]
+   },
+   "@5": {
+    "all": [
+     14,
+     20
+    ],
+    "lookup": [
+     8,
+     8
+    ],
+    "paraphrase": [
+     2,
+     5
+    ],
+    "compare": [
+     3,
+     4
+    ],
+    "cross-deck": [
+     1,
+     3
+    ]
+   },
+   "pages_per_item": 1.5,
+   "items_per_question": 10.0,
+   "mrr": 0.581
+  },
+  "library": {
+   "@1": {
+    "all": [
+     7,
+     20
+    ],
+    "lookup": [
+     7,
+     8
+    ],
+    "paraphrase": [
+     0,
+     5
+    ],
+    "compare": [
+     0,
+     4
+    ],
+    "cross-deck": [
+     0,
+     3
+    ]
+   },
+   "@3": {
+    "all": [
+     12,
+     20
+    ],
+    "lookup": [
+     8,
+     8
+    ],
+    "paraphrase": [
+     0,
+     5
+    ],
+    "compare": [
+     3,
+     4
+    ],
+    "cross-deck": [
+     1,
+     3
+    ]
+   },
+   "@5": {
+    "all": [
+     12,
+     20
+    ],
+    "lookup": [
+     8,
+     8
+    ],
+    "paraphrase": [
+     0,
+     5
+    ],
+    "compare": [
+     3,
+     4
+    ],
+    "cross-deck": [
+     1,
+     3
+    ]
+   },
+   "pages_per_item": 1.0,
+   "items_per_question": 2.7,
+   "mrr": 0.467
+  },
+  "bm25": {
+   "@1": {
+    "all": [
+     10,
+     20
+    ],
+    "lookup": [
+     8,
+     8
+    ],
+    "paraphrase": [
+     0,
+     5
+    ],
+    "compare": [
+     2,
+     4
+    ],
+    "cross-deck": [
+     0,
+     3
+    ]
+   },
+   "@3": {
+    "all": [
+     13,
+     20
+    ],
+    "lookup": [
+     8,
+     8
+    ],
+    "paraphrase": [
+     1,
+     5
+    ],
+    "compare": [
+     3,
+     4
+    ],
+    "cross-deck": [
+     1,
+     3
+    ]
+   },
+   "@5": {
+    "all": [
+     13,
+     20
+    ],
+    "lookup": [
+     8,
+     8
+    ],
+    "paraphrase": [
+     1,
+     5
+    ],
+    "compare": [
+     3,
+     4
+    ],
+    "cross-deck": [
+     1,
+     3
+    ]
+   },
+   "pages_per_item": 0.97,
+   "items_per_question": 10.35,
+   "mrr": 0.578
+  },
+  "entity": {
+   "@1": {
+    "all": [
+     7,
+     20
+    ],
+    "lookup": [
+     6,
+     8
+    ],
+    "paraphrase": [
+     0,
+     5
+    ],
+    "compare": [
+     1,
+     4
+    ],
+    "cross-deck": [
+     0,
+     3
+    ]
+   },
+   "@3": {
+    "all": [
+     12,
+     20
+    ],
+    "lookup": [
+     8,
+     8
+    ],
+    "paraphrase": [
+     0,
+     5
+    ],
+    "compare": [
+     3,
+     4
+    ],
+    "cross-deck": [
+     1,
+     3
+    ]
+   },
+   "@5": {
+    "all": [
+     13,
+     20
+    ],
+    "lookup": [
+     8,
+     8
+    ],
+    "paraphrase": [
+     0,
+     5
+    ],
+    "compare": [
+     3,
+     4
+    ],
+    "cross-deck": [
+     2,
+     3
+    ]
+   },
+   "pages_per_item": 0.95,
+   "items_per_question": 8.75,
+   "mrr": 0.469
+  },
+  "hybrid": {
+   "@1": {
+    "all": [
+     9,
+     20
+    ],
+    "lookup": [
+     7,
+     8
+    ],
+    "paraphrase": [
+     0,
+     5
+    ],
+    "compare": [
+     2,
+     4
+    ],
+    "cross-deck": [
+     0,
+     3
+    ]
+   },
+   "@3": {
+    "all": [
+     11,
+     20
+    ],
+    "lookup": [
+     8,
+     8
+    ],
+    "paraphrase": [
+     0,
+     5
+    ],
+    "compare": [
+     3,
+     4
+    ],
+    "cross-deck": [
+     0,
+     3
+    ]
+   },
+   "@5": {
+    "all": [
+     12,
+     20
+    ],
+    "lookup": [
+     8,
+     8
+    ],
+    "paraphrase": [
+     0,
+     5
+    ],
+    "compare": [
+     3,
+     4
+    ],
+    "cross-deck": [
+     1,
+     3
+    ]
+   },
+   "pages_per_item": 0.97,
+   "items_per_question": 10.35,
+   "mrr": 0.545
+  }
+ },
+ "per_question": {
+  "T2-01": {
+   "standin": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "library": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "bm25": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "entity": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "hybrid": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   }
+  },
+  "T2-02": {
+   "standin": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "library": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "bm25": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "entity": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "hybrid": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   }
+  },
+  "T2-03": {
+   "standin": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "library": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   },
+   "bm25": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "entity": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "hybrid": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   }
+  },
+  "T2-04": {
+   "standin": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "library": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "bm25": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "entity": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "hybrid": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   }
+  },
+  "T2-05": {
+   "standin": {
+    "@1": false,
+    "@3": false,
+    "@5": true
+   },
+   "library": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "bm25": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "entity": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   },
+   "hybrid": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   }
+  },
+  "T2-06": {
+   "standin": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "library": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "bm25": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "entity": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "hybrid": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   }
+  },
+  "T2-07": {
+   "standin": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "library": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "bm25": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "entity": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "hybrid": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   }
+  },
+  "T2-08": {
+   "standin": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "library": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "bm25": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "entity": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   },
+   "hybrid": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   }
+  },
+  "T2-09": {
+   "standin": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   },
+   "library": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "bm25": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "entity": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "hybrid": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   }
+  },
+  "T2-10": {
+   "standin": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   },
+   "library": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "bm25": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   },
+   "entity": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "hybrid": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   }
+  },
+  "T2-11": {
+   "standin": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "library": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "bm25": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "entity": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "hybrid": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   }
+  },
+  "T2-12": {
+   "standin": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "library": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "bm25": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "entity": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "hybrid": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   }
+  },
+  "T2-13": {
+   "standin": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "library": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "bm25": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "entity": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "hybrid": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   }
+  },
+  "T2-14": {
+   "standin": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "library": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   },
+   "bm25": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   },
+   "entity": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   },
+   "hybrid": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   }
+  },
+  "T2-15": {
+   "standin": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "library": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   },
+   "bm25": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "entity": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   },
+   "hybrid": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   }
+  },
+  "T2-16": {
+   "standin": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "library": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   },
+   "bm25": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "entity": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   },
+   "hybrid": {
+    "@1": true,
+    "@3": true,
+    "@5": true
+   }
+  },
+  "T2-17": {
+   "standin": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "library": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "bm25": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "entity": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "hybrid": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   }
+  },
+  "T2-18": {
+   "standin": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "library": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "bm25": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "entity": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "hybrid": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   }
+  },
+  "T2-19": {
+   "standin": {
+    "@1": false,
+    "@3": false,
+    "@5": true
+   },
+   "library": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   },
+   "bm25": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   },
+   "entity": {
+    "@1": false,
+    "@3": false,
+    "@5": true
+   },
+   "hybrid": {
+    "@1": false,
+    "@3": false,
+    "@5": true
+   }
+  },
+  "T2-20": {
+   "standin": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "library": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "bm25": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   },
+   "entity": {
+    "@1": false,
+    "@3": true,
+    "@5": true
+   },
+   "hybrid": {
+    "@1": false,
+    "@3": false,
+    "@5": false
+   }
+  }
+ },
+ "artifact": {
+  "dir": "data/leanrag/current",
+  "built_at": "2026-11-12T02:37:00Z",
+  "synthetic": false,
+  "graph": {
+   "entities": 1278,
+   "relations": 1512,
+   "clusters": 64,
+   "cluster_relations": 649,
+   "themes": 11,
+   "theme_relations": 109,
+   "naming": {
+    "name_calls": 75,
+    "relation_calls": 40
+   }
+  },
+  "extraction_model_asked": "deepseek-flash",
+  "llm_usage": {
+   "calls": 364,
+   "prompt_tokens": 198451,
+   "completion_tokens": 133276,
+   "cache_hit_tokens": 68864,
+   "models_returned": {
+    "deepseek-flash": 364
+   },
+   "this_run": {
+    "calls": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "cache_hit_tokens": 0,
+    "models_returned": {}
+   }
+  }
+ }
+}

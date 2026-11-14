@@ -24,6 +24,7 @@ import {
   TIMEZONE,
 } from './config.js';
 import { readEnvFile } from './env.js';
+import { leanragGraphMount } from './leanrag-graph.js';
 import { logger } from './logger.js';
 import { buildMemoryContext, buildMemoryExport, pruneExpiredMemories } from './memory.js';
 import { routeModel } from './model-route.js';
@@ -32,7 +33,7 @@ import { writeFileAtomicSafe } from './safe-fs.js';
 import { studentTimeZone } from './student-tz.js';
 import { PROGRESS_MARKER, parseProgressLine, portalStreamOn, withoutTextEvents, type ProgressEvent } from './turn-status.js';
 import { RegisteredGroup } from './types.js';
-import { visionFor, type VisionLaunch } from './vision-env.js';
+import { visionFor, visionForCall, type VisionLaunch } from './vision-env.js';
 
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
@@ -255,13 +256,17 @@ function buildVolumeMounts(
 
   // LeanRAG knowledge graph (read-only, shared across all groups)
   const leanragDir = path.join(projectRoot, 'leanrag');
-  if (fs.existsSync(path.join(leanragDir, 'graph.pkl'))) {
+  // A built graph (docs/LEANRAG.md): only with TAI_LEANRAG=1 and a graph folder the build wrote. Off, this is no mount and the lines below are what they were.
+  const graph = leanragGraphMount(process.env, DATA_DIR);
+  if (graph.on && !graph.mount) logger.warn({ reason: graph.reason }, 'TAI_LEANRAG=1 but no graph is mounted');
+  if (fs.existsSync(path.join(leanragDir, 'graph.pkl')) || graph.mount) {
     mounts.push({
       hostPath: leanragDir,
       containerPath: '/workspace/leanrag',
       readonly: true,
     });
   }
+  if (graph.mount) mounts.push(graph.mount);
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {
@@ -942,7 +947,8 @@ export async function spawnToolHost(group: RegisteredGroup, chatJid: string): Pr
   const mounts = buildVolumeMounts(group, false);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `${CONTAINER_PREFIX}-voice-${safeName}-${Date.now()}`;
-  const args = buildContainerArgs(mounts, containerName, false, studentTimeZone(group.folder, STORE_DIR));
+  // (a call that may look at pictures has its tool host started for the picture tool too, as a student's chat container is: src/vision-env.ts callVisionOn)
+  const args = buildContainerArgs(mounts, containerName, false, studentTimeZone(group.folder, STORE_DIR), false, visionForCall());
   args.splice(args.length - 1, 0, '-e', 'TAI_MODE=tool-host'); // before the image, which buildContainerArgs puts last
 
   // memory_query reads this file, as in a text agent's container; a host kept for the student's next call has it written again (voice/tool-host-pool.ts)

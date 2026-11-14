@@ -76,3 +76,6 @@ terraform/.terraform.lock.hcl
 
 # Evaluation off AWS: the stand-in corpus is course material and stays on the box
 leanrag/stub_corpus.json
+
+# Astryx UI exploration sandbox (prototype, not deployed)
+design-lab/

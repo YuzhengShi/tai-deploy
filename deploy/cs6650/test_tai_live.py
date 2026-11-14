@@ -175,6 +175,28 @@ class LiveScriptTest(unittest.TestCase):
         if os.name != "nt":
             self.assertEqual(files[0].stat().st_mode & 0o777, 0o600)
 
+    def test_a_backup_leaves_out_the_prepared_documents_and_keeps_everything_else_of_the_portal_directory(self):
+        # store/portal/docs holds the page images of students' documents (up to 60 MB each): made again from groups/<folder>/uploads, so not a record
+        doc = self.tree / "store" / "portal" / "docs" / STUDENT / ("ab" * 16)
+        doc.mkdir(parents=True)
+        (doc / "meta.json").write_text("{}", encoding="utf-8")
+        (doc / "p001.png").write_bytes(b"\x89PNG" + b"x" * 5000)
+        (self.tree / "store" / "portal" / "main.jsonl").write_text('{"n":1}\n', encoding="utf-8")
+        (self.tree / "store" / "portal" / "settings").mkdir()
+        (self.tree / "store" / "portal" / "settings" / "prefs.json").write_text("{}", encoding="utf-8")
+        (self.tree / "store" / "portal" / ".hidden").write_text("kept", encoding="utf-8")
+        (self.tree / "store" / "course-docs" / ("cd" * 16)).mkdir(parents=True)
+        (self.tree / "store" / "course-docs" / ("cd" * 16) / "p001.png").write_bytes(b"\x89PNG")
+        code, out = self.run_script("backup", "now")
+        self.assertEqual(code, 0, out)
+        with tarfile.open(sorted((self.live / "backups").glob("tai-*.tgz"))[0]) as tar:
+            names = tar.getnames()
+        for want in (f"./store/portal/{STUDENT}.jsonl", "./store/portal/main.jsonl", "./store/portal/settings/prefs.json", "./store/portal/.hidden"):
+            self.assertIn(want, names)
+        self.assertEqual([n for n in names if "/docs" in n or n.endswith(".png") or ("ab" * 16) in n], [], "prepared documents are not in a backup")
+        self.assertFalse([n for n in names if "course-docs" in n], "nor is the course library (it is made from the course's own files)")
+        self.assertTrue((doc / "p001.png").exists(), "and the live files are untouched")
+
     def test_only_the_newest_fourteen_backups_stay(self):
         folder = self.live / "backups"
         folder.mkdir()
@@ -670,6 +692,651 @@ class NotifyTest(unittest.TestCase):
         self.assertNotEqual(code, 0)
         self.assertIn("tai_live.sh notify status|vapid [--force]", out + err)
         self.assertNotEqual(self.run_script("notify", "vapid", "--now")[0], 0)
+
+
+SANDBOX_DOCKER_STUB = r'''#!/usr/bin/env bash
+echo "$@" >> "$HOME/docker-calls.txt"
+case "$1" in
+  image)
+    [ -f "$HOME/image-present" ] || exit 1
+    case "$*" in
+      *"{{.Created}}"*) echo "2026-11-06T22:00:00.123456789Z" ;;
+    esac
+    exit 0 ;;
+  images) echo 1.59GB; exit 0 ;;
+  ps) [ ! -f "$HOME/running" ] || cat "$HOME/running"; exit 0 ;;
+  build) if [ -f "$HOME/build-fails" ]; then cat "$HOME/build-fails"; exit 1; fi; exit 0 ;;
+  run)
+    for a in "$@"; do case "$a" in *:/in:ro) cat "${a%%:/in:ro}/files/go.mod" >> "$HOME/warm-gomod-seen" ;; esac; done
+    [ ! -f "$HOME/run-fails" ] || exit 1
+    echo "go: downloading github.com/example/mod v1.0.0"; exit 0 ;;
+esac
+exit 0
+'''
+
+
+@unittest.skipIf(BASH is None, "needs Git Bash (or bash on Linux/macOS)")
+class SandboxCommandsTest(unittest.TestCase):
+    """`tai_live.sh sandbox build|warm|status|smoke`: the operator's side of running a student's Go code, against a stand-in docker."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        tmp = Path(self.tmp.name)
+        self.home = tmp / "home"
+        self.live = self.home / "tai-live"
+        self.tree = self.live / "tai"
+        self.bin = tmp / "bin"
+        self.sandbox = self.tree / "data" / "sandbox"
+        for d in (self.home, self.bin, self.tree / "store", self.live / "node" / "bin", self.live / "logs"):
+            d.mkdir(parents=True, exist_ok=True)
+        (self.bin / "docker").write_text(SANDBOX_DOCKER_STUB, encoding="utf-8", newline="\n")
+        (self.bin / "python3").write_text(f'#!/usr/bin/env bash\nexec "{posix(sys.executable)}" "$@"\n', encoding="utf-8", newline="\n")
+        (self.live / "node" / "bin" / "node").write_text('#!/usr/bin/env bash\necho "$PWD $*" >> "$HOME/node-calls.txt"\nexit ${NODE_EXIT:-0}\n', encoding="utf-8", newline="\n")
+        for path in (self.bin / "docker", self.bin / "python3", self.live / "node" / "bin" / "node"):
+            os.chmod(path, 0o755)
+        self.env = dict(os.environ, HOME=posix(self.home), TAI_LIVE_DIR=posix(self.live), PATH=str(self.bin) + os.pathsep + os.environ["PATH"])
+
+    def run_script(self, *args, env=None):
+        try:
+            result = subprocess.run([BASH, posix(SCRIPT), "--on-host", "sandbox", *args], capture_output=True, text=True, env=dict(self.env, **(env or {})), timeout=60)
+        except subprocess.TimeoutExpired as err:
+            self.fail("the script hung: " + str(err.stdout or b"") + str(err.stderr or b""))
+        return result.returncode, result.stdout + result.stderr
+
+    def flag(self, name, text=""):
+        (self.home / name).write_text(text, encoding="utf-8", newline="\n")
+
+    def docker_calls(self):
+        path = self.home / "docker-calls.txt"
+        return path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+
+    def context(self, with_warm=True):
+        ctx = self.live / "sandbox-build"
+        (ctx / "warm").mkdir(parents=True, exist_ok=True)
+        (ctx / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8", newline="\n")
+        if with_warm:
+            for group, requirement in (("web", "github.com/google/uuid v1.6.0"), ("kafka", "github.com/segmentio/kafka-go v0.4.51")):
+                (ctx / "warm" / group).mkdir(parents=True, exist_ok=True)
+                (ctx / "warm" / group / "go.mod").write_text(f"module warm{group}\n\ngo 1.27\n\nrequire {requirement}\n", encoding="utf-8", newline="\n")
+        return ctx
+
+    # ---- status
+
+    def test_status_without_the_image_says_running_code_is_off(self):
+        code, out = self.run_script("status")
+        self.assertEqual(code, 0, out)
+        self.assertIn("NOT built", out)
+        self.assertIn("running code is off", out)
+
+    def test_status_says_the_image_the_cache_the_containers_the_directories_and_the_runs_of_the_last_hour(self):
+        self.flag("image-present")
+        self.flag("running", "tai-sandbox-0123456789ab\ntai-sandbox-aaaaaaaaaaaa\n")
+        (self.sandbox / "gomodcache").mkdir(parents=True)
+        (self.sandbox / "gomodcache" / "blob").write_bytes(b"x" * (3 * 1024 * 1024))
+        (self.sandbox / "run-0123456789abcdef").mkdir()
+        (self.sandbox / "other").mkdir()
+        import time
+        now = int(time.time() * 1000)
+        con = sqlite3.connect(self.tree / "store" / "messages.db")
+        con.execute("create table sandbox_runs (student_folder text not null, started_at integer not null)")
+        for folder, ago_h in (("ana", 0.1), ("bo", 0.5), ("ana", 0.9), ("ana", 5), ("cy", 30)):
+            con.execute("insert into sandbox_runs values (?, ?)", (folder, now - int(ago_h * 3600 * 1000)))
+        con.commit()
+        con.close()
+        code, out = self.run_script("status")
+        self.assertEqual(code, 0, out)
+        self.assertIn("tai-go-sandbox:live present, 1.59GB, built 2026-11-06T22:00:00", out)
+        self.assertIn("module cache: 3 MB", out)
+        self.assertIn("2 sandbox container(s) running", out)
+        self.assertIn("run dirs:     1 left", out)
+        self.assertIn("runs:         3 in the last hour (2 student(s)), 4 in the last day", out)
+        self.assertNotIn("ana", out)                                                    # counts only: no student's name
+
+    def test_status_says_so_when_the_table_is_not_there_yet_or_the_database_cannot_be_read(self):
+        sqlite3.connect(self.tree / "store" / "messages.db").close()
+        self.assertIn("n/a (no sandbox_runs table yet", self.run_script("status")[1])
+        (self.tree / "store" / "messages.db").unlink()
+        self.assertIn("no data", self.run_script("status")[1])
+
+    # ---- build
+
+    def test_build_without_the_shipped_context_says_where_it_comes_from(self):
+        code, out = self.run_script("build")
+        self.assertNotEqual(code, 0)
+        self.assertIn("run this from the PC", out)
+        self.assertEqual(self.docker_calls(), [])
+
+    def test_build_makes_the_image_with_at_most_two_cpus_and_names_a_mirror_only_when_asked(self):
+        ctx = self.context()
+        code, out = self.run_script("build")
+        self.assertEqual(code, 0, out)
+        calls = [c for c in self.docker_calls() if c.startswith("build ")]
+        self.assertEqual(len(calls), 1, calls)
+        self.assertIn("--cpu-quota=200000", calls[0])
+        self.assertIn("--cpu-period=100000", calls[0])
+        self.assertIn("--memory=3g --memory-swap=3g", calls[0])
+        self.assertIn("-t tai-go-sandbox:live", calls[0])
+        self.assertTrue(calls[0].endswith(posix(ctx)), calls[0])
+        self.assertNotIn("GO_IMAGE", calls[0])
+        code, out = self.run_script("build", "--base", "mirror.gcr.io/library/golang:1.27.3-bookworm")
+        self.assertEqual(code, 0, out)
+        self.assertIn("--build-arg GO_IMAGE=mirror.gcr.io/library/golang:1.27.3-bookworm", [c for c in self.docker_calls() if c.startswith("build ")][-1])
+
+    def test_build_refuses_what_is_not_an_image_name_and_what_it_does_not_know(self):
+        self.context()
+        for args in (("--base", "a b"), ("--base", "x;rm -rf /"), ("--base", "$(id)"), ("--base",), ("--frobnicate",)):
+            code, out = self.run_script("build", *args)
+            self.assertNotEqual(code, 0, args)
+        self.assertEqual([c for c in self.docker_calls() if c.startswith("build ")], [])
+
+    def test_a_build_that_hits_the_pull_limit_says_what_to_do_about_it(self):
+        self.context()
+        self.flag("build-fails", "toomanyrequests: You have reached your unauthenticated pull rate limit.\n")
+        code, out = self.run_script("build")
+        self.assertNotEqual(code, 0)
+        self.assertIn("pull limit", out)
+        self.assertIn("sandbox build --base mirror.gcr.io/library/golang", out)
+        self.assertIn("did not build", out)
+
+    # ---- warm
+
+    def test_warm_needs_the_image_and_the_list(self):
+        self.context()
+        code, out = self.run_script("warm")
+        self.assertNotEqual(code, 0)
+        self.assertIn("no tai-go-sandbox:live yet", out)
+        self.flag("image-present")
+        shutil.rmtree(self.live / "sandbox-build" / "warm")
+        self.context(with_warm=False)
+        code, out = self.run_script("warm")
+        self.assertNotEqual(code, 0)
+        self.assertIn("no warm list", out)
+
+    def test_warm_downloads_through_a_hardened_container_that_runs_only_the_modules_script_and_cleans_up(self):
+        self.flag("image-present")
+        self.context()
+        code, out = self.run_script("warm")
+        self.assertEqual(code, 0, out)
+        run = [c for c in self.docker_calls() if c.startswith("run ")]
+        self.assertEqual(len(run), 2, run)                                             # one download for each module of the warm list
+        for line in run:
+            self.check_warm_container(line)
+        seen = (self.home / "warm-gomod-seen").read_text(encoding="utf-8")
+        warm = self.live / "sandbox-build" / "warm"
+        self.assertEqual(seen, (warm / "kafka" / "go.mod").read_text(encoding="utf-8") + (warm / "web" / "go.mod").read_text(encoding="utf-8"))
+        self.assertTrue((self.sandbox / "gomodcache").is_dir())
+        self.assertEqual(list(self.live.glob(".sandbox-warm.*")), [])                  # the temporary directories are gone
+        self.assertIn("module cache:", out)
+        self.assertIn("2 module(s) of the warm list", out)
+
+    def check_warm_container(self, line):
+        for flag in ("--cap-drop ALL", "--security-opt no-new-privileges", "--read-only", "--pids-limit 128", "--cpus 1", "--memory 1g", "--ulimit core=0", "--label tai-sandbox=1",
+                     "--name tai-sandbox-warm-", ":/in:ro", f"{posix(self.sandbox / 'gomodcache')}:/gomodcache:rw", "GOPROXY=https://proxy.golang.org", "GOSUMDB=sum.golang.org",
+                     "GOTOOLCHAIN=local", "-modcacherw", "tai-go-sandbox:live /usr/local/bin/sandbox-modules 600 -"):
+            self.assertIn(flag, line)
+        for bad in ("--privileged", "--network none", "docker.sock", "--cap-add", "--device", "/home", ":/etc"):
+            self.assertNotIn(bad, line.replace(posix(self.home), "HOME"))
+
+    def test_a_download_that_fails_says_so_and_leaves_nothing_behind(self):
+        self.flag("image-present")
+        self.flag("run-fails")
+        self.context()
+        code, out = self.run_script("warm")
+        self.assertNotEqual(code, 0)
+        self.assertIn("the download of kafka failed", out)
+        self.assertEqual(list(self.live.glob(".sandbox-warm.*")), [])
+
+    # ---- smoke
+
+    def test_smoke_needs_a_build_that_has_it_and_the_image(self):
+        code, out = self.run_script("smoke")
+        self.assertNotEqual(code, 0)
+        self.assertIn("deploy first", out)
+        (self.tree / "dist" / "sandbox").mkdir(parents=True)
+        (self.tree / "dist" / "sandbox" / "smoke.js").write_text("", encoding="utf-8")
+        code, out = self.run_script("smoke")
+        self.assertNotEqual(code, 0)
+        self.assertIn("no tai-go-sandbox:live yet", out)
+
+    def test_smoke_runs_the_compiled_checks_from_the_tree_with_the_arguments_and_returns_their_exit_code(self):
+        (self.tree / "dist" / "sandbox").mkdir(parents=True)
+        (self.tree / "dist" / "sandbox" / "smoke.js").write_text("", encoding="utf-8")
+        self.flag("image-present")
+        code, out = self.run_script("smoke", "--only", "hello")
+        self.assertEqual(code, 0, out)
+        seen = (self.home / "node-calls.txt").read_text(encoding="utf-8").strip()
+        self.assertTrue(seen.endswith("dist/sandbox/smoke.js --only hello"), seen)
+        self.assertTrue(seen.startswith(posix(self.tree)), seen)
+        self.assertEqual(self.run_script("smoke", env={"NODE_EXIT": "1"})[0], 1)
+
+    def test_an_unknown_sandbox_command_says_what_there_is(self):
+        code, out = self.run_script("frobnicate")
+        self.assertNotEqual(code, 0)
+        self.assertIn("tai_live.sh sandbox build [--base IMAGE] | warm | status | smoke", out)
+
+
+@unittest.skipIf(BASH is None, "needs Git Bash (or bash on Linux/macOS)")
+class DocCommandsTest(unittest.TestCase):
+    """`tai_live.sh doc build|status|smoke`: the operator's side of the document viewer's renderer, against a stand-in docker."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        tmp = Path(self.tmp.name)
+        self.home = tmp / "home"
+        self.live = self.home / "tai-live"
+        self.tree = self.live / "tai"
+        self.bin = tmp / "bin"
+        self.docs_dir = self.tree / "data" / "docs"
+        self.store = self.tree / "store" / "portal" / "docs"
+        for d in (self.home, self.bin, self.tree / "store", self.live / "node" / "bin", self.live / "logs"):
+            d.mkdir(parents=True, exist_ok=True)
+        (self.bin / "docker").write_text(SANDBOX_DOCKER_STUB, encoding="utf-8", newline="\n")
+        (self.live / "node" / "bin" / "node").write_text('#!/usr/bin/env bash\necho "$PWD $*" >> "$HOME/node-calls.txt"\nexit ${NODE_EXIT:-0}\n', encoding="utf-8", newline="\n")
+        for path in (self.bin / "docker", self.live / "node" / "bin" / "node"):
+            os.chmod(path, 0o755)
+        self.env = dict(os.environ, HOME=posix(self.home), TAI_LIVE_DIR=posix(self.live), PATH=str(self.bin) + os.pathsep + os.environ["PATH"])
+
+    def run_script(self, *args, env=None):
+        try:
+            result = subprocess.run([BASH, posix(SCRIPT), "--on-host", "doc", *args], capture_output=True, text=True, env=dict(self.env, **(env or {})), timeout=60)
+        except subprocess.TimeoutExpired as err:
+            self.fail("the script hung: " + str(err.stdout or b"") + str(err.stderr or b""))
+        return result.returncode, result.stdout + result.stderr
+
+    def flag(self, name, text=""):
+        (self.home / name).write_text(text, encoding="utf-8", newline="\n")
+
+    def docker_calls(self):
+        path = self.home / "docker-calls.txt"
+        return path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+
+    def context(self):
+        ctx = self.live / "doc-build"
+        ctx.mkdir(parents=True, exist_ok=True)
+        (ctx / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8", newline="\n")
+        return ctx
+
+    def keep(self, student, doc_id, size=1024):
+        folder = self.store / student / doc_id
+        folder.mkdir(parents=True)
+        (folder / "p001.png").write_bytes(b"x" * size)
+
+    # ---- status
+
+    def test_status_without_the_image_says_opening_documents_is_off(self):
+        code, out = self.run_script("status")
+        self.assertEqual(code, 0, out)
+        self.assertIn("NOT built", out)
+        self.assertIn("opening documents is off", out)
+        self.assertIn("0 prepared document(s) of 0 student(s)", out)
+
+    def test_status_says_the_image_the_documents_kept_the_containers_left_and_the_directories_and_never_names_a_student_or_a_document(self):
+        self.flag("image-present")
+        self.flag("running", "tai-doc-0123456789ab\ntai-doc-aaaaaaaaaaaa\n")
+        self.keep("s_" + "a1" * 10, "0" * 31 + "1", 2 * 1024 * 1024)
+        self.keep("s_" + "a1" * 10, "0" * 31 + "2", 1024 * 1024)
+        self.keep("s_" + "b2" * 10, "0" * 31 + "3", 1024 * 1024)
+        (self.store / ("s_" + "b2" * 10) / ".tmp-half").mkdir()          # a half made one is not a document
+        (self.store / ("s_" + "b2" * 10) / "notes").mkdir()
+        (self.tree / "store" / "course-docs" / ("cd" * 16)).mkdir(parents=True)
+        (self.docs_dir / "run-0123456789abcdef").mkdir(parents=True)
+        (self.docs_dir / "other").mkdir()
+        code, out = self.run_script("status")
+        self.assertEqual(code, 0, out)
+        self.assertIn("tai-doc:live present, 1.59GB, built 2026-11-06T22:00:00", out)
+        self.assertRegex(out, r"3 prepared document\(s\) of 2 student\(s\), [45] MB")        # (du counts the blocks of the directories too)
+        self.assertIn("kept 30 days after the last open, at most 8 documents and 60 MB a student; the backup leaves them out", out)
+        self.assertIn("course docs:  1 in", out)
+        self.assertIn("2 renderer container(s) running or left", out)
+        self.assertIn("run dirs:     1 left", out)
+        for private in ("a1a1", "b2b2", "0" * 31):
+            self.assertNotIn(private, out)
+
+    # ---- build
+
+    def test_build_without_the_shipped_context_says_where_it_comes_from(self):
+        code, out = self.run_script("build")
+        self.assertNotEqual(code, 0)
+        self.assertIn("run this from the PC", out)
+        self.assertEqual(self.docker_calls(), [])
+
+    def test_build_makes_the_image_with_at_most_two_cpus_and_3_gb_and_names_another_base_only_when_asked(self):
+        ctx = self.context()
+        code, out = self.run_script("build")
+        self.assertEqual(code, 0, out)
+        calls = [c for c in self.docker_calls() if c.startswith("build ")]
+        self.assertEqual(len(calls), 1, calls)
+        self.assertIn("--cpu-quota=200000", calls[0])
+        self.assertIn("--cpu-period=100000", calls[0])
+        self.assertIn("--memory=3g --memory-swap=3g", calls[0])
+        self.assertIn("-t tai-doc:live", calls[0])
+        self.assertTrue(calls[0].endswith(posix(ctx)), calls[0])
+        self.assertNotIn("BASE_IMAGE", calls[0])
+        self.assertIn("built tai-doc:live", out)
+        code, out = self.run_script("build", "--base", "mirror.gcr.io/library/python:3.12-slim")
+        self.assertEqual(code, 0, out)
+        self.assertIn("--build-arg BASE_IMAGE=mirror.gcr.io/library/python:3.12-slim", [c for c in self.docker_calls() if c.startswith("build ")][-1])
+
+    def test_build_refuses_what_is_not_an_image_name_and_what_it_does_not_know(self):
+        self.context()
+        for args in (("--base", "a b"), ("--base", "x;rm -rf /"), ("--base", "$(id)"), ("--base",), ("--frobnicate",)):
+            code, out = self.run_script("build", *args)
+            self.assertNotEqual(code, 0, args)
+        self.assertEqual([c for c in self.docker_calls() if c.startswith("build ")], [])
+
+    def test_a_build_that_hits_the_pull_limit_says_what_to_do_about_it(self):
+        self.context()
+        self.flag("build-fails", "toomanyrequests: You have reached your unauthenticated pull rate limit.\n")
+        code, out = self.run_script("build")
+        self.assertNotEqual(code, 0)
+        self.assertIn("pull limit", out)
+        self.assertIn("doc build --base mirror.gcr.io/library/python", out)
+        self.assertIn("did not build", out)
+
+    # ---- smoke
+
+    def test_smoke_needs_a_build_that_has_it_and_the_image(self):
+        code, out = self.run_script("smoke")
+        self.assertNotEqual(code, 0)
+        self.assertIn("deploy first", out)
+        (self.tree / "dist" / "docs").mkdir(parents=True)
+        (self.tree / "dist" / "docs" / "smoke.js").write_text("", encoding="utf-8")
+        code, out = self.run_script("smoke")
+        self.assertNotEqual(code, 0)
+        self.assertIn("no tai-doc:live yet", out)
+
+    def test_smoke_runs_the_compiled_checks_from_the_tree_with_the_arguments_and_returns_their_exit_code(self):
+        (self.tree / "dist" / "docs").mkdir(parents=True)
+        (self.tree / "dist" / "docs" / "smoke.js").write_text("", encoding="utf-8")
+        self.flag("image-present")
+        code, out = self.run_script("smoke", "--only", "ten pages")
+        self.assertEqual(code, 0, out)
+        seen = (self.home / "node-calls.txt").read_text(encoding="utf-8").strip()
+        self.assertTrue(seen.endswith("dist/docs/smoke.js --only ten pages"), seen)
+        self.assertTrue(seen.startswith(posix(self.tree)), seen)
+        self.assertEqual(self.run_script("smoke", env={"NODE_EXIT": "1"})[0], 1)
+
+    def test_an_unknown_doc_command_says_what_there_is(self):
+        code, out = self.run_script("frobnicate")
+        self.assertNotEqual(code, 0)
+        self.assertIn("tai_live.sh doc build [--base IMAGE] | status | smoke", out)
+
+
+NODE_RECORDER = r'''#!/usr/bin/env bash
+echo "$PWD $*" >> "$HOME/node-calls.txt"
+{ echo "CANVAS_API_TOKEN=${CANVAS_API_TOKEN:-}"; echo "CANVAS_BASE_URL=${CANVAS_BASE_URL:-}"; echo "CANVAS_COURSE_ID=${CANVAS_COURSE_ID:-}"; } > "$HOME/node-env.txt"
+[ -z "${SHIPPED_LOG:-}" ] || find "${TAI_LIVE_DIR}/course-in" -type f 2>/dev/null | sed "s#^${TAI_LIVE_DIR}/course-in/##" | sort >> "$SHIPPED_LOG"
+[ -z "${NODE_SAYS:-}" ] || echo "$NODE_SAYS"
+exit ${NODE_EXIT:-0}
+'''
+
+# a stand-in for ssh that runs the command it is given here, with the fake home, so that the PC side and the host side of a command run together
+SSH_HERE = r'''#!/usr/bin/env bash
+echo "ssh $*" >> "$HOME/ssh-calls.txt"
+cmd="${@: -1}"
+exec bash -c "$cmd"
+'''
+
+
+@unittest.skipIf(BASH is None, "needs Git Bash (or bash on Linux/macOS)")
+class CourseDocsCommandsTest(unittest.TestCase):
+    """`tai_live.sh course-docs add|list|remove|canvas`: the operator's side of the course library, against a stand-in node, docker and ssh."""
+
+    TOKEN = "canvas-token-1234567890-SECRET"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        tmp = Path(self.tmp.name)
+        self.home = tmp / "home"
+        self.live = self.home / "tai-live"
+        self.tree = self.live / "tai"
+        self.bin = tmp / "bin"
+        for d in (self.home, self.bin, self.tree / "store", self.live / "node" / "bin", self.live / "logs"):
+            d.mkdir(parents=True, exist_ok=True)
+        (self.bin / "docker").write_text(SANDBOX_DOCKER_STUB, encoding="utf-8", newline="\n")
+        (self.bin / "ssh").write_text(SSH_HERE, encoding="utf-8", newline="\n")
+        (self.live / "node" / "bin" / "node").write_text(NODE_RECORDER, encoding="utf-8", newline="\n")
+        for path in (self.bin / "docker", self.bin / "ssh", self.live / "node" / "bin" / "node"):
+            os.chmod(path, 0o755)
+        (self.live / "credentials.env").write_text(
+            'CANVAS_BASE_URL="https://canvas.example.edu/api/v1"\nCANVAS_COURSE_ID="260797"\nCANVAS_API_TOKEN="%s"\nGITHUB_TOKEN="another-secret-token"\n' % self.TOKEN, encoding="utf-8", newline="\n")
+        self.env = dict(os.environ, HOME=posix(self.home), TAI_LIVE_DIR=posix(self.live), PATH=str(self.bin) + os.pathsep + os.environ["PATH"], TAI_LIVE_HOST="ubuntu@nowhere.example")
+
+    def built(self):
+        (self.tree / "dist" / "docs").mkdir(parents=True, exist_ok=True)
+        (self.tree / "dist" / "docs" / "course-docs.js").write_text("", encoding="utf-8")
+
+    def flag(self, name, text=""):
+        (self.home / name).write_text(text, encoding="utf-8", newline="\n")
+
+    def on_host(self, *args, env=None):
+        try:
+            result = subprocess.run([BASH, posix(SCRIPT), "--on-host", "course-docs", *args], capture_output=True, text=True, env=dict(self.env, **(env or {})), timeout=60)
+        except subprocess.TimeoutExpired as err:
+            self.fail("the script hung: " + str(err.stdout or b"") + str(err.stderr or b""))
+        return result.returncode, result.stdout + result.stderr
+
+    def from_pc(self, *args, env=None):
+        # (the stand-in ssh is put first on the PATH INSIDE bash: a Windows checkout of Git Bash has its own /usr/bin/ssh ahead of what a parent process passes in)
+        launcher = 'export PATH="$1:$PATH"; shift; exec bash "$@"'
+        try:
+            result = subprocess.run([BASH, "-c", launcher, "x", posix(self.bin), posix(SCRIPT), "course-docs", *args], capture_output=True, text=True, env=dict(self.env, **(env or {})), timeout=90)
+        except subprocess.TimeoutExpired as err:
+            self.fail("the script hung: " + str(err.stdout or b"") + str(err.stderr or b""))
+        return result.returncode, result.stdout + result.stderr
+
+    def node_calls(self):
+        path = self.home / "node-calls.txt"
+        return path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+
+    def ssh_calls(self):
+        path = self.home / "ssh-calls.txt"
+        return path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+
+    # ---- list, remove
+
+    def test_without_a_build_that_has_the_command_every_subcommand_says_deploy_first_and_runs_nothing(self):
+        for args in (("list",), ("remove", "abcdef"), ("rename", "abcdef", "--title", "x"), ("canvas",)):
+            code, out = self.on_host(*args)
+            self.assertNotEqual(code, 0, args)
+            self.assertIn("deploy first", out, args)
+        self.assertEqual(self.node_calls(), [])
+
+    def test_list_and_remove_run_the_compiled_command_from_the_tree_with_the_store_and_the_operators_own_run_directory(self):
+        self.built()
+        code, out = self.on_host("list", env={"NODE_SAYS": "library: 2 deck(s)"})
+        self.assertEqual(code, 0, out)
+        self.assertIn("library: 2 deck(s)", out)
+        code, out = self.on_host("remove", "0123456789ab")
+        self.assertEqual(code, 0, out)
+        calls = self.node_calls()
+        self.assertEqual(len(calls), 2, calls)
+        self.assertTrue(calls[0].startswith(posix(self.tree)), calls[0])
+        self.assertTrue(calls[0].endswith(f"dist/docs/course-docs.js list --store {posix(self.tree)}/store --data {posix(self.tree)}/data/docs-operator"), calls[0])
+        self.assertTrue(calls[1].endswith(f"dist/docs/course-docs.js remove 0123456789ab --store {posix(self.tree)}/store --data {posix(self.tree)}/data/docs-operator"), calls[1])
+        self.assertEqual(self.on_host("list", env={"NODE_EXIT": "1"})[0], 1)  # the command's own exit code is the script's
+
+    def test_rename_runs_the_compiled_command_with_its_arguments_as_they_were_given(self):
+        self.built()
+        code, out = self.on_host("rename", "0123456789ab", "--title", "Day 5 - APIs and Load Balancers", "--week", "5")
+        self.assertEqual(code, 0, out)
+        calls = self.node_calls()
+        self.assertEqual(len(calls), 1, calls)
+        self.assertTrue(calls[0].endswith(f"dist/docs/course-docs.js rename 0123456789ab --title Day 5 - APIs and Load Balancers --week 5 --store {posix(self.tree)}/store --data {posix(self.tree)}/data/docs-operator"), calls[0])
+        self.assertEqual(self.on_host("rename", "0123456789ab", "--week", "none", env={"NODE_EXIT": "1"})[0], 1)  # the command's own exit code is the script's
+
+    def test_rename_from_the_pc_passes_a_title_on_as_one_word_of_data_and_runs_nothing_it_says(self):
+        self.built()
+        marker = Path(self.tmp.name) / "marker"
+        marker2 = Path(self.tmp.name) / "marker2"
+        title = "Raft; touch " + posix(marker) + " $(touch " + posix(marker2) + ") 'q' (x)"
+        code, out = self.from_pc("rename", "0123456789ab", "--title", title)
+        self.assertEqual(code, 0, out)
+        self.assertFalse(marker.exists() or marker2.exists(), "the title was run as a command")
+        calls = self.node_calls()
+        self.assertEqual(len(calls), 1, calls)
+        self.assertIn("rename 0123456789ab --title " + title + " --store ", calls[0])
+
+    def test_an_unknown_subcommand_says_what_there_is(self):
+        for args in ((), ("frobnicate",)):
+            code, out = self.on_host(*args)
+            self.assertNotEqual(code, 0)
+            self.assertIn("tai_live.sh course-docs add <file-or-directory> [--title T] [--week N] | list | remove <id> | rename <id> [--title T] [--week N|none] | canvas [--course ID] [--yes] [--allow-host HOST]", out)
+
+    # ---- add
+
+    def test_add_needs_the_shipped_files_the_build_and_the_image_and_says_where_each_comes_from(self):
+        code, out = self.on_host("add")
+        self.assertNotEqual(code, 0)
+        self.assertIn("run this from the PC", out)
+        (self.live / "course-in").mkdir()
+        code, out = self.on_host("add")
+        self.assertIn("deploy first", out)
+        self.assertFalse((self.live / "course-in").exists())  # what was shipped is not left lying around
+        (self.live / "course-in").mkdir()
+        self.built()
+        code, out = self.on_host("add")
+        self.assertIn("no tai-doc:live yet", out)
+        self.assertFalse((self.live / "course-in").exists())
+        self.assertEqual(self.node_calls(), [])
+
+    def test_add_runs_the_command_on_the_shipped_directory_with_the_arguments_and_removes_the_files_even_when_it_fails(self):
+        self.built()
+        self.flag("image-present")
+        (self.live / "course-in").mkdir()
+        (self.live / "course-in" / "deck.pptx").write_bytes(b"x")
+        code, out = self.on_host("add", "--title", "Raft, the deck", "--week", "5")
+        self.assertEqual(code, 0, out)
+        self.assertIn("every student will see what is added", out)
+        self.assertIn("nothing that solves a graded assignment", out)
+        call = self.node_calls()[0]
+        self.assertTrue(call.endswith(f"dist/docs/course-docs.js add --dir {posix(self.live)}/course-in --title Raft, the deck --week 5 --store {posix(self.tree)}/store --data {posix(self.tree)}/data/docs-operator"), call)
+        self.assertFalse((self.live / "course-in").exists())
+        (self.live / "course-in").mkdir()
+        self.assertEqual(self.on_host("add", env={"NODE_EXIT": "1"})[0], 1)
+        self.assertFalse((self.live / "course-in").exists())
+
+    def test_from_the_pc_a_directory_is_shipped_with_the_decks_in_it_and_nothing_else_and_the_host_adds_and_clears_them(self):
+        self.built()
+        self.flag("image-present")
+        decks = Path(self.tmp.name) / "decks"
+        (decks / "week5").mkdir(parents=True)
+        (decks / ".git").mkdir()
+        for name in ("Week 5 Raft.pptx", "syllabus.PDF", "week5/notes.docx", "week5/sheet.xlsx", "notes.txt", "old.ppt", ".hidden.pdf", ".git/x.pdf"):
+            (decks / name).write_bytes(b"x")
+        (decks / "huge.pdf").write_bytes(b"x" * (21 * 1024 * 1024))
+        shipped = self.home / "shipped.txt"
+        code, out = self.from_pc("add", str(decks), "--week", "5", env={"SHIPPED_LOG": posix(shipped)})
+        self.assertEqual(code, 0, out)
+        self.assertEqual(shipped.read_text(encoding="utf-8").split("\n")[:-1], ["Week 5 Raft.pptx", "syllabus.PDF", "week5/notes.docx", "week5/sheet.xlsx"])
+        call = self.node_calls()[0]
+        # the host is told the command and its flags and nothing of this machine: the path is a place here, and the host adds what was shipped
+        self.assertTrue(call.endswith(f"dist/docs/course-docs.js add --dir {posix(self.live)}/course-in --week 5 --store {posix(self.tree)}/store --data {posix(self.tree)}/data/docs-operator"), call)
+        self.assertNotIn("decks", call)
+        self.assertFalse((self.live / "course-in").exists())
+        self.assertEqual(len([c for c in self.ssh_calls() if "tar -xzf" in c]), 1)
+
+    def test_from_the_pc_a_single_file_is_shipped_by_itself(self):
+        self.built()
+        self.flag("image-present")
+        deck = Path(self.tmp.name) / "Week 7 Paxos.pptx"
+        deck.write_bytes(b"x")
+        shipped = self.home / "shipped.txt"
+        code, out = self.from_pc("add", str(deck), "--title", "Paxos", env={"SHIPPED_LOG": posix(shipped)})
+        self.assertEqual(code, 0, out)
+        self.assertEqual(shipped.read_text(encoding="utf-8").split("\n")[:-1], ["Week 7 Paxos.pptx"])
+        call = self.node_calls()[0]
+        self.assertTrue(call.endswith(f"dist/docs/course-docs.js add --dir {posix(self.live)}/course-in --title Paxos --store {posix(self.tree)}/store --data {posix(self.tree)}/data/docs-operator"), call)
+        self.assertNotIn("Week 7", call)
+        # the flags may come before the path, and a title with a comma in it is one argument
+        code, out = self.from_pc("add", "--week", "7", "--title", "Paxos, the deck", str(deck))
+        self.assertEqual(code, 0, out)
+        self.assertTrue(self.node_calls()[1].endswith(f"course-in --week 7 --title Paxos, the deck --store {posix(self.tree)}/store --data {posix(self.tree)}/data/docs-operator"), self.node_calls()[1])
+
+    def test_from_the_pc_it_refuses_what_it_cannot_ship_before_anything_leaves(self):
+        empty = Path(self.tmp.name) / "empty"
+        empty.mkdir()
+        (empty / "readme.txt").write_text("x", encoding="utf-8")
+        text = Path(self.tmp.name) / "notes.txt"
+        text.write_text("x", encoding="utf-8")
+        big = Path(self.tmp.name) / "big.pdf"
+        big.write_bytes(b"x" * (21 * 1024 * 1024))
+        for args, code_wanted, words in (
+            (("add",), 2, "course-docs add <file-or-directory>"),
+            (("add", str(Path(self.tmp.name) / "nope")), 2, "no such file or directory"),
+            (("add", str(empty), str(empty)), 2, "takes ONE file or directory"),
+            (("add", str(text)), 2, "not a PDF, PPTX, DOCX or XLSX file"),
+            (("add", str(big)), 1, "over 20 MB"),
+            (("add", str(empty)), 1, "no PDF, PPTX, DOCX or XLSX file of at most 20 MB"),
+        ):
+            code, out = self.from_pc(*args)
+            self.assertEqual(code, code_wanted, (args, out))
+            self.assertIn(words, out)
+        self.assertEqual(self.ssh_calls(), [])
+        self.assertEqual(self.node_calls(), [])
+
+    # ---- canvas
+
+    def test_canvas_hands_the_token_and_the_address_over_in_the_environment_only_and_never_prints_a_secret(self):
+        self.built()
+        code, out = self.on_host("canvas", env={"NODE_SAYS": "Canvas course 260797: 3 file(s)"})
+        self.assertEqual(code, 0, out)
+        env = (self.home / "node-env.txt").read_text(encoding="utf-8")
+        self.assertIn(f"CANVAS_API_TOKEN={self.TOKEN}", env)
+        self.assertIn("CANVAS_BASE_URL=https://canvas.example.edu/api/v1", env)
+        self.assertIn("CANVAS_COURSE_ID=260797", env)
+        self.assertNotIn("GITHUB", env)
+        call = self.node_calls()[0]
+        self.assertTrue(call.endswith(f"dist/docs/course-docs.js canvas --store {posix(self.tree)}/store --data {posix(self.tree)}/data/docs-operator"), call)
+        for secret in (self.TOKEN, "another-secret-token"):
+            self.assertNotIn(secret, out)
+            self.assertNotIn(secret, call)
+            for log in (self.live / "logs").glob("*"):
+                self.assertNotIn(secret, log.read_text(encoding="utf-8", errors="replace"))
+
+    def test_canvas_passes_the_course_and_the_flags_on_and_a_download_needs_the_image(self):
+        self.built()
+        code, out = self.on_host("canvas", "--course", "12345")
+        self.assertEqual(code, 0, out)
+        self.assertIn("canvas --course 12345 --store", self.node_calls()[0])
+        code, out = self.on_host("canvas", "--yes")
+        self.assertNotEqual(code, 0)
+        self.assertIn("no tai-doc:live yet", out)
+        self.assertEqual(len(self.node_calls()), 1)  # the listing alone needs no image: a download does
+        self.flag("image-present")
+        code, out = self.on_host("canvas", "--yes", "--allow-host", "files.school.example")
+        self.assertEqual(code, 0, out)
+        self.assertIn("canvas --yes --allow-host files.school.example --store", self.node_calls()[1])
+
+    def test_canvas_says_what_is_missing_when_no_credentials_are_stored_and_runs_nothing(self):
+        self.built()
+        (self.live / "credentials.env").write_text('CANVAS_COURSE_ID="260797"\n', encoding="utf-8")
+        code, out = self.on_host("canvas")
+        self.assertNotEqual(code, 0)
+        self.assertIn("no Canvas address or token is stored on this host: tai_credentials.sh canvas", out)
+        (self.live / "credentials.env").unlink()
+        code, out = self.on_host("canvas")
+        self.assertNotEqual(code, 0)
+        self.assertIn("run tai_credentials.sh first", out)
+        self.assertEqual(self.node_calls(), [])
+
+    def test_doc_status_counts_the_library_by_its_decks_and_the_operators_own_containers(self):
+        self.flag("image-present")
+        self.flag("running", "tai-doc-0123456789ab\n")
+        (self.tree / "store" / "course-docs" / ("cd" * 16)).mkdir(parents=True)
+        (self.tree / "store" / "course-docs" / ".tmp-half").mkdir()
+        (self.tree / "store" / "course-docs" / ".lock").mkdir()
+        try:
+            result = subprocess.run([BASH, posix(SCRIPT), "--on-host", "doc", "status"], capture_output=True, text=True, env=self.env, timeout=60)
+        except subprocess.TimeoutExpired as err:
+            self.fail(str(err))
+        out = result.stdout + result.stderr
+        self.assertIn("course docs:  1 in", out)
+        self.assertIn("tai_live.sh course-docs list", out)
+        self.assertIn("of the operator's", out)
 
 
 if __name__ == "__main__":

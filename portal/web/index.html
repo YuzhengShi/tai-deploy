@@ -17,6 +17,12 @@
   <link rel="stylesheet" href="highlight.css">
   <link rel="stylesheet" href="settings.css">
   <link rel="stylesheet" href="status.css">
+  <link rel="stylesheet" href="runcard.css">
+  <link rel="stylesheet" href="chartcard.css">
+  <link rel="stylesheet" href="tracecard.css">
+  <link rel="stylesheet" href="predictcard.css">
+  <link rel="stylesheet" href="viewer.css">
+  <link rel="stylesheet" href="askhere.css">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script type="module" src="voice.js"></script>
   <script type="module" src="app.js"></script>
@@ -178,6 +184,9 @@
         </div>
       </section>
     </div>
+
+    <!-- the document viewer (viewer.js, docs/CHAT_OBJECTS.md): a pane beside the conversation, a sheet on a phone; the script fills it and shows it when a document is opened -->
+    <aside class="viewer" id="viewer" hidden aria-label="Document viewer"></aside>
 
     <aside class="drawer" id="drawer" hidden aria-label="Chats">
       <div class="drawer-head">

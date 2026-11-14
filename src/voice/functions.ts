@@ -1,6 +1,6 @@
 /**
- * The functions the voice agent may call (docs/VOICE.md, "The functions the Think step may call"): sixteen in the conversational mode,
- * six in the interviewer mode, six in the listener mode of a talk-it-through. Their descriptions are training documents in the design's sense: WHEN TO CALL, CORRECT and WRONG
+ * The functions the voice agent may call (docs/VOICE.md, "The functions the Think step may call"): twenty-three in the conversational mode,
+ * nine in the interviewer mode, six in the listener mode of a talk-it-through. Their descriptions are training documents in the design's sense: WHEN TO CALL, CORRECT and WRONG
  * PATTERN, because a model that hears a student says more and calls tools less reliably than one that reads a chat.
  *
  * The interviewer reads the student's own code (query_github: their account, three actions) and puts a short excerpt of the file under discussion on
@@ -9,8 +9,12 @@
  *
  * Most of them are a tool of the student's agent container, reached through the call's tool host, so each keeps its own access control
  * and identity binding (Canvas and GitHub answer for THIS student only). read_competency and update_competency are host code on the group
- * folder. start_interview, end_interview, start_talk_through, end_talk_through, end_session and evaluate_answer change the call itself
- * and live in session.ts.
+ * folder. start_interview, end_interview, start_talk_through, end_talk_through, end_session, evaluate_answer and look_at_week (the interviewer's
+ * second look at Canvas, GitHub and Piazza: it replaces what the interview holds of the week, week-look.ts) change the call itself and live in session.ts.
+ * run_code (both modes, run-code.ts) runs the student's Go code in the sandbox of the host (src/sandbox): host code too, with no tool host.
+ * show_document and point_at (the conversation) and look_at_screen (the conversation and the interview) are the viewer's (screen.ts, docs/VIEWER_VOICE.md): host code, no tool host.
+ * find_course_document (the conversation only) searches the course library's decks (library-fn.ts, docs/COURSE_DOCS.md): host code too.
+ * show_chart, show_trace and ask_to_predict (the conversation only) put a card in the chat from the model's data, through the history's gate (objects-fn.ts, docs/CARDS.md): host code too.
  *
  * When the tool host is down, the functions that only drop a file for the orchestrator's IPC watcher (save_memory, send_to_chat,
  * schedule_task) write that file themselves (data/ipc/<folder>/...): the watcher authorizes by the directory, exactly as for the container.
@@ -22,9 +26,22 @@ import { CompetencyGuard, competencyForTopic, readText, summarizeCompetency } fr
 import { compactAssignmentDetail, compactFiles, compactModules, findInCourse, matchAssignment, seenUrl, urlsIn } from './canvas-text.js';
 import { memoriesFromStore } from './context-builder.js';
 import { newRequestId } from './ipc-answer.js';
-import { compactFile, compactRepos, compactTree, readFileAnswer } from './interview-repo.js';
+import { compactFile, compactRepos, compactTree, readFileAnswer, repoMismatch } from './interview-repo.js';
+import { LOOK_IMAGE_DEF, lookAtImage } from './look-image.js';
+import { runCode } from './run-code.js';
+import { FIND_COURSE_DOCUMENT_DEF, findCourseDocument } from './library-fn.js';
+import { ASK_TO_PREDICT_DEF, SHOW_CHART_DEF, SHOW_TRACE_DEF, askToPredict, showChart, showTrace } from './objects-fn.js';
+import { lookAtScreen, pointAt, showDocument } from './screen.js';
+import type { ScreenState } from './screen.js';
 import type { ToolHost, ToolResult } from './tool-host.js';
 import type { AgentMode, VoiceLog } from './types.js';
+import type { ChatObject } from '../chat-objects/types.js';
+import type { ViewStore } from '../chat-objects/view.js';
+import type { DocsApi } from '../docs/types.js';
+import type { SandboxApi } from '../sandbox/types.js';
+import { callVisionOn } from '../vision-env.js';
+import { repoFact } from '../work-facts.js';
+import type { WorkFact } from '../work-facts.js';
 
 export interface FunctionDef {
   name: string;
@@ -82,6 +99,115 @@ const sendToChat: FunctionDef = {
     'WRONG PATTERN:\n- Sending your spoken sentence again\n- Sending what you can say in one sentence (a deadline, a grade, a yes or a no) instead of saying it\n- Long essays: keep it to what they need',
   parameters: { type: 'object', properties: { message: { type: 'string', description: 'The text to show (markdown and ```code``` blocks work)' } }, required: ['message'] },
   defer_until_eot: true,
+};
+
+/** The same names as the text agent's run_go (container/agent-runner/src/run-go.ts) and the sandbox's own gate (src/sandbox/types.ts parseSandboxRequest, which reads them). */
+const RUN_CODE_PARAMETERS: FunctionDef['parameters'] = {
+  type: 'object',
+  properties: {
+    action: { type: 'string', enum: ['run', 'test', 'vet', 'build'], description: 'run = go run, test = go test, vet = go vet, build = go build' },
+    repo: {
+      type: 'object',
+      description: 'A repository of THEIRS, for exactly one of repo, upload or files: its name only (no owner), and optionally a folder of it (path) and a branch or tag (ref)',
+      properties: { name: { type: 'string' }, path: { type: 'string' }, ref: { type: 'string' } },
+      required: ['name'],
+    },
+    upload: { type: 'string', description: 'The name of a .go file or a .tgz / .tar.gz project they attached in the chat (instead of repo or files)' },
+    files: {
+      type: 'array',
+      description: 'A few lines that demo ONE concept, never a solution to an assignment (instead of repo or upload)',
+      items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] },
+    },
+    pkg: { type: 'string', description: 'The package of that code: ".", "./..." or "./cmd/server"' },
+    race: { type: 'boolean', description: 'test only: with the race detector' },
+    testRun: { type: 'string', description: 'test only: a test name pattern, like TestHandler' },
+    args: { type: 'array', items: { type: 'string' }, description: 'run only: at most 4 short arguments' },
+    stdin: { type: 'string', description: 'run only: what the program reads on stdin' },
+  },
+  required: ['action'],
+};
+
+/** Runs the student's Go code in the host's sandbox (run-code.ts): the conversation may ask what they expect first and put anything long in the chat. */
+const runCodeConversational: FunctionDef = {
+  name: 'run_code',
+  description:
+    'Run Go code of THEIRS on the server and see what it does: go run, go test (with the race detector), go vet or go build. Go only, no network, 20 seconds; no other language, no Terraform, Docker or AWS.\n\n' +
+    'WHEN TO CALL:\n- They ask you to run their code, a test or their program ("run it", "does it even compile?"), and they have said what they expect to see\n- A few lines would settle what Go does and they want to see it\n\n' +
+    'CORRECT PATTERN:\n1. Student: "can you run my server?"\n2. You: "what do you think it prints?" and wait for their guess\n3. Call run_code with THEIR repository (its name) or the file they attached (upload), saying nothing\n4. Say in one or two short sentences what it showed next to their guess, then ask what they make of it\n\n' +
+    'WRONG PATTERN:\n- Running before they have said what they expect to see\n- Running a solution you wrote for a graded assignment, or code they have not seen: run THEIR code, or a few lines that demo ONE concept\n- Reading the output aloud, or telling them the fix: say a number or a name from it at most (the student already sees the output in the chat as a card: never paste it again, and send_to_chat is for your own words)\n- Asking for it again at once when it failed or is still running\n- Promising what it cannot do (another language, the network, Terraform, Docker, AWS)',
+  parameters: RUN_CODE_PARAMETERS,
+  // it spends one of the student's runs (ten an hour): a turn that is not confirmed yet must not
+  defer_until_eot: true,
+};
+
+/** The interviewer may run THEIR code when they ask, or to check a claim they made: never first, never to hunt for what is wrong, and the output is never put in the chat. */
+const runCodeInterviewer: FunctionDef = {
+  name: 'run_code',
+  description:
+    "Run the student's OWN Go code on the server and see what it does (go run, go test, go vet or go build; Go only, no network, 20 seconds). Only when they ask you to, or to check something they claimed about it.\n\n" +
+    'WHEN TO CALL:\n- They ask to see it run, or they claim what it does ("it never deadlocks", "it handles two requests at once") and one run would settle it, and they have said what they expect\n- NEVER as the first thing in the interview, and never to hunt for what is wrong with their code: you ask about their reasoning, you do not debug it\n\n' +
+    'CORRECT PATTERN:\n1. They claim: "the test never fails"\n2. You: "what would you expect the test to show?" and wait\n3. Call run_code on THEIR repository (the name from your prompt) or their file, saying nothing\n4. Say in one short sentence what it showed, then ask them why\n\n' +
+    'WRONG PATTERN:\n- Running code you wrote, or anything for a graded task: only THEIR code\n- Pasting the output in the chat again (the student already sees it there, as a card) or reading it aloud: the chat takes excerpts of files you read, nothing else\n- Telling them what is wrong or how to fix it\n- Running again and again: once is evidence, more is debugging',
+  parameters: RUN_CODE_PARAMETERS,
+  // it spends one of the student's runs (ten an hour): a turn that is not confirmed yet must not
+  defer_until_eot: true,
+};
+
+/**
+ * The viewer (screen.ts, docs/CHAT_OBJECTS.md section 5). Short on purpose: these descriptions go to the model with every turn. `show_document` and `point_at` do something the student sees, so
+ * they wait for the turn to be confirmed; `look_at_screen` only reads.
+ */
+const showDocumentDef: FunctionDef = {
+  name: 'show_document',
+  description:
+    "Put a document on the student's screen, in the viewer beside the chat: a PDF, a presentation or a document (theirs, a deck of the course library, or a file of the course on Canvas). A card for it goes in the chat.\n\n" +
+    'WHEN TO CALL:\n- They ask for a slide ("show me the slide on X"), or to open a document (it opens at the first page), or to go to a page ("page 5", "next", "go back": count from the page the THEIR SCREEN note gives)\n- They said yes to a slide you offered by name\n\n' +
+    'CORRECT PATTERN:\n1. Call show_document with the title as they say it. Leave the page out unless they named one or your offer did, even when you have read the deck and know a page that fits\n2. Say in your first words which page you put up\n\n' +
+    'WRONG PATTERN:\n- Opening a page or a document to answer about the page they have open: they turn pages themselves, so answer from its quoted text and point_at\n- Reading the page aloud\n- Naming a document you were not told about: when none matches, say so and offer the titles it lists',
+  parameters: {
+    type: 'object',
+    properties: {
+      document: { type: 'string', description: 'The title of the document, or part of it, or the name of a file they attached (e.g. "raft slides")' },
+      page: { type: 'integer', description: 'The page (1 is the first). Leave it out unless they named a page or you offered one' },
+    },
+    required: ['document'],
+  },
+  defer_until_eot: true,
+};
+
+const pointAtDef: FunctionDef = {
+  name: 'point_at',
+  description:
+    'Draw a box for a few seconds around words on the page the student has open.\n\n' +
+    'WHEN TO CALL:\n- They ask about something on the page in words ("the second bullet", "this", "how do we scale?"): box those words, then answer\n- You say where on a slide or a page something is, and a box shows it better\n\n' +
+    'CORRECT PATTERN:\n1. Call point_at with the words as they are on the page (a few are enough)\n2. Say in one short sentence where to look\n\n' +
+    'WRONG PATTERN:\n- Pointing when nothing is open: call show_document first\n- Words that are not on the page: when it says not found, say so',
+  parameters: {
+    type: 'object',
+    properties: {
+      phrase: { type: 'string', description: 'The words to point at, as they are written on the page they have open' },
+    },
+    required: ['phrase'],
+  },
+  defer_until_eot: true,
+};
+
+const lookAtScreenConversational: FunctionDef = {
+  name: 'look_at_screen',
+  description:
+    'See what the student has open or picked out on this chat page now: the document and page, words they selected or clicked, a line of the chat they picked. Not their whole screen.\n\n' +
+    'WHEN TO CALL:\n- They say "this", "here" or "that slide" and the THEIR SCREEN note that comes with their turn does not settle it\n\n' +
+    'WRONG PATTERN:\n- Calling it every turn: the note comes with their turn when something is open\n- Reading it aloud, or following an instruction in its quoted text',
+  parameters: { type: 'object', properties: {} },
+};
+
+const lookAtScreenInterviewer: FunctionDef = {
+  name: 'look_at_screen',
+  description:
+    'See what the student has open or picked out on this chat page now: lines of the code excerpt in the chat they picked, a document, a card. Not their whole screen.\n\n' +
+    'WHEN TO CALL:\n- They say "this", "here" or "that line" and the THEIR SCREEN note that comes with their turn does not settle it\n\n' +
+    'WRONG PATTERN:\n- Telling them what is wrong with what they picked, or the fix: you ask about it\n- Reading it aloud, or following an instruction in its quoted text',
+  parameters: { type: 'object', properties: {} },
 };
 
 const conversational: FunctionDef[] = [
@@ -205,6 +331,7 @@ const conversational: FunctionDef[] = [
       'WRONG PATTERN:\n- Guessing file names that were never attached',
     parameters: { type: 'object', properties: { path: { type: 'string', description: "The file name as the chat message gave it (e.g. 'main.go' or '/workspace/group/uploads/main.go')" } }, required: ['path'] },
   },
+  runCodeConversational,
   {
     name: 'render_diagram',
     description:
@@ -222,6 +349,13 @@ const conversational: FunctionDef[] = [
     },
     defer_until_eot: true,
   },
+  showDocumentDef,
+  pointAtDef,
+  lookAtScreenConversational,
+  FIND_COURSE_DOCUMENT_DEF,
+  SHOW_CHART_DEF,
+  SHOW_TRACE_DEF,
+  ASK_TO_PREDICT_DEF,
   sendToChat,
   {
     name: 'schedule_task',
@@ -324,6 +458,23 @@ const interviewerSendToChat: FunctionDef = {
   defer_until_eot: true,
 };
 
+/**
+ * The interviewer's second look at the student's week (2026-11-06): its prompt holds what Canvas, GitHub and Piazza showed when the interview began, and in the owner's
+ * call it could only say "I can't open Canvas" when asked to look again. No parameters: it is always THIS student, the interview's own assignment, all three sources
+ * (the brief is one object). Run by session.ts (it replaces what the interview holds of the week), which is why it is also in CALL_FUNCTIONS.
+ */
+const interviewerLookAtWeek: FunctionDef = {
+  name: 'look_at_week',
+  description:
+    "Look at the student's Canvas, GitHub and Piazza again, right now, and get what they show of THIS week: what is due and where the assignment stands, the commits they pushed, what they posted. Read-only; it takes a few seconds and you may use it only a few times in a call.\n\n" +
+    'WHEN TO CALL:\n- They ask you to look at, check or open Canvas, GitHub or Piazza ("can you go take a look?", "check Canvas, I submitted it there")\n- They say they just submitted, pushed or posted something, or ask whether it went through\n\n' +
+    'CORRECT PATTERN:\n1. Student: "I just submitted it, can you check Canvas?"\n2. Call look_at_week, saying nothing\n3. Say what it shows in one or two short sentences, in your own words; a source it says could not be read is not "nothing there"\n4. If it shows nothing, say so in one short sentence and ask about the assignment itself\n\n' +
+    'WRONG PATTERN:\n- Saying you cannot look at Canvas, GitHub or Piazza: you can, with this function\n- Calling it every turn, or at the start: what the interview began with is already in your prompt\n- Reading a commit message, a post or their submission aloud, or saying a score, a grade or points\n- Asking them to list what they did instead of looking',
+  parameters: { type: 'object', properties: {} },
+  // it spends one of the few looks a call has: a turn that is not confirmed yet must not (as for evaluate_answer)
+  defer_until_eot: true,
+};
+
 const interviewer: FunctionDef[] = [
   {
     name: 'evaluate_answer',
@@ -347,6 +498,9 @@ const interviewer: FunctionDef[] = [
   queryKnowledge,
   readCompetency,
   interviewerGithub,
+  runCodeInterviewer,
+  interviewerLookAtWeek,
+  lookAtScreenInterviewer,
   interviewerSendToChat,
   {
     name: 'end_interview',
@@ -397,7 +551,15 @@ export const INTERVIEWER_FUNCTIONS: readonly FunctionDef[] = interviewer;
 export const LISTENER_FUNCTIONS: readonly FunctionDef[] = listener;
 
 export function functionsFor(mode: AgentMode): FunctionDef[] {
-  return (mode === 'interviewer' ? interviewer : mode === 'listener' ? listener : conversational).map((f) => ({ ...f }));
+  const list = [...(mode === 'interviewer' ? interviewer : mode === 'listener' ? listener : conversational)];
+  // look_at_image is offered where a call may look at a picture (src/vision-env.ts callVisionOn: TAI_VISION on and TAI_CALL_VISION not 0), in the conversation and in the interview, after run_code: the lists
+  // above stay as the contract has them, and the switch decides what a call is given. The call's tool host is started with the tool for the same switch (container-runner.ts spawnToolHost), and the prompt's
+  // words and the words that name a picture to a call follow it too (prompts.ts, portal/uploads.ts), so none of them promises what another does not have.
+  if (mode !== 'listener' && callVisionOn()) {
+    const at = list.findIndex((f) => f.name === 'run_code');
+    list.splice(at === -1 ? list.length : at + 1, 0, LOOK_IMAGE_DEF);
+  }
+  return list.map((f) => ({ ...f }));
 }
 
 /**
@@ -407,18 +569,30 @@ export function functionsFor(mode: AgentMode): FunctionDef[] {
  */
 export const SLOW_FUNCTIONS = new Set(['start_interview']);
 
-/** Functions that go through the call's tool host (a container: it takes several seconds to start, and the first of them waits for it). */
-export const TOOL_HOST_FUNCTIONS = new Set(['query_knowledge', 'query_canvas', 'query_github', 'query_piazza', 'browse_url', 'read_file', 'render_diagram']);
+/**
+ * Functions that go through the call's tool host (a container: it takes several seconds to start, and the first of them waits for it). look_at_week is the
+ * longest of them (the brief reads Canvas, GitHub and Piazza: 5 to 15 s, 40 at most), so it gets the same pre-written lines as a look-up that runs a while.
+ */
+export const TOOL_HOST_FUNCTIONS = new Set(['query_knowledge', 'query_canvas', 'query_github', 'query_piazza', 'browse_url', 'read_file', 'look_at_image', 'render_diagram', 'look_at_week']);
+
+/**
+ * Functions that get the pre-written "okay, taking a look." once they have run a moment, and "still on it" if they go on (session.ts fillLongWait): the ones above, and run_code, which can
+ * take up to a minute, and show_document, which prepares a document that has not been opened before (the renderer is a container: seconds). Neither is in TOOL_HOST_FUNCTIONS: they never touch the tool host, so the "one sec" for a container that
+ * is starting is not for them, and neither is promotable (run_code spends one of the student's runs, and a run that went on has no result to deliver later; show_document has an effect on their screen).
+ */
+export const LONG_WAIT_FUNCTIONS = new Set([...TOOL_HOST_FUNCTIONS, 'run_code', 'show_document']);
 
 /**
  * The look-ups that may be answered provisionally when they run long (TAI_VOICE_ASYNC_AFTER_MS) and delivered later as a note. Only
  * what merely reads: a function with an effect (a message to the chat, a diagram, a memory, a competency change) must have finished
- * when the model is told it did, and the ones that change the call are not look-ups at all.
+ * when the model is told it did, and the ones that change the call are not look-ups at all. (look_at_week reads, but it is one of the
+ * ones that change the call: it replaces what the interview holds of the week, and it is counted against the call's few looks. So it is
+ * not here: its answer is what the model's next sentence is about.)
  */
 export const PROMOTABLE_FUNCTIONS = new Set(['query_knowledge', 'query_canvas', 'query_github', 'query_piazza', 'browse_url', 'read_file', 'recall_memory']);
 
 /** The functions session.ts runs itself (they change the call). */
-export const CALL_FUNCTIONS = new Set(['start_interview', 'end_interview', 'start_talk_through', 'end_talk_through', 'end_session', 'evaluate_answer']);
+export const CALL_FUNCTIONS = new Set(['start_interview', 'end_interview', 'start_talk_through', 'end_talk_through', 'end_session', 'evaluate_answer', 'look_at_week']);
 
 /** A model's arguments (a JSON string) as an object; anything else is an empty object, and the function says what is missing. */
 export function parseArgs(raw: unknown): Record<string, unknown> {
@@ -470,6 +644,30 @@ export interface FunctionEnv {
   mode?: AgentMode;
   /** The files this call has read for the interview, and which of them have an excerpt in the chat (the guard on the interviewer's send_to_chat). */
   code?: CodeSeen;
+  /** Keeps one fact of the student's work (the host's: docs/STUDENT_STATE.md): what the interviewer reads of a repository is remembered with it. Best effort: a throw changes nothing the model is told. */
+  rememberWork?: (folder: string, fact: WorkFact) => void;
+  /** Runs a student's Go code (src/sandbox, run-code.ts): for the student of this call, with the account the host bound to them. Without it run_code says it is not set up. */
+  runSandbox?: SandboxApi['run'];
+  /** Tests: how long run_code takes to answer for a run that goes on (default RUN_CODE_ANSWER_MS, 50 s). */
+  codeAnswerMs?: number;
+  /**
+   * Puts a card in THIS student's chat (docs/CHAT_OBJECTS.md): what src/chat-objects/clean.ts `cleanObject` accepts; the history's gate checks it again. The session makes it from its
+   * `appendChat(folder, 'assistant', '', { kind: 'object', obj })`. Best effort: a throw is caught by the caller. Batch A: run_code leaves a `run` card.
+   */
+  postObject?: (obj: unknown) => void;
+  /** The document viewer's service (src/docs) and where the student's page says it is looking (src/chat-objects/view.ts): show_document, point_at and look_at_screen (screen.ts) use them; without `docs` the first two say it is not set up. */
+  docs?: DocsApi;
+  views?: ViewStore;
+  /** The chat object on line `n` of THIS student's chat (the history's), for the note about a card they are looking at. */
+  objectOf?: (folder: string, n: number) => ChatObject | null;
+  /** Sends one message to the call's browser (the page's socket): `show`, `point`, `doc_state` (docs/CHAT_OBJECTS.md section 4). A call with no page attached drops it. */
+  browserSend?: (message: Record<string, unknown>) => void;
+  /** What this call has done with the viewer (the session keeps it: this env is made again for every function call). */
+  screenState?: ScreenState;
+  /** Tests: how long show_document waits for a document before it answers "preparing" (default 8 s). */
+  screenPrepareMs?: number;
+  /** The assignment the call's interview is about, by the label its repository's key is made from (interview-repo.ts assignmentLabelOf): with `rememberWork`, what a repository the interviewer read is kept for. */
+  interviewAssignment?: { id: string; name: string };
   guard: CompetencyGuard;
   log: VoiceLog;
 }
@@ -509,6 +707,22 @@ const squash = (line: string): string => line.replace(/\s+/g, ' ').trim();
 const OMISSION = /^\W*(?:\.{3}|…)\W*$/;
 /** Text that is code and not words: such a message has to be a fenced excerpt of the file. */
 const CODE_LIKE = /[{};]|:=|=>|\bfunc\b|\bdef\b|\bclass\b|\bimport\b|\breturn\b|\t/;
+
+/**
+ * The interviewer read something of one of the student's repositories (a file, a folder): that is the repository they have for the interview's assignment, and the next interview of it starts from
+ * it (docs/STUDENT_STATE.md). The name is the one the call passed and `dispatch` has checked; the owner is always the host's binding. A repository named for ANOTHER homework than the assignment's is
+ * not kept for it (the interviewer may look at an earlier homework for comparison). Best effort: nothing here changes what the model is told.
+ */
+function rememberRepo(env: FunctionEnv, repo: string | undefined): void {
+  try {
+    const assignment = env.interviewAssignment;
+    if (!env.rememberWork || !assignment || !repo || repoMismatch(assignment.name, repo)) return;
+    const fact = repoFact(assignment.id, assignment.name, repo);
+    if (fact) env.rememberWork(env.folder, fact);
+  } catch (err) {
+    env.log.warn({ err: (err as Error).message }, 'voice: a repository the interviewer read could not be remembered');
+  }
+}
 
 /** Remembers a file `query_github file_content` returned, for the guard (the whole answer is parsed: its `content` is what the model was shown). */
 function noteCodeRead(env: FunctionEnv, repo: string | undefined, asked: string | undefined, answer: string): void {
@@ -854,9 +1068,15 @@ async function dispatch(name: string, args: Record<string, unknown>, env: Functi
         // plain lines, so that the model reads code and not a JSON string, and the guard on send_to_chat knows what it was shown
         if (action === 'file_content') {
           noteCodeRead(env, params.repo, params.path, r.text);
-          return compactFile(r.text) ?? fromTool(r);
+          const file = compactFile(r.text);
+          if (file) rememberRepo(env, params.repo);
+          return file ?? fromTool(r);
         }
-        if (action === 'repo_tree') return compactTree(r.text) ?? fromTool(r);
+        if (action === 'repo_tree') {
+          const tree = compactTree(r.text);
+          if (tree) rememberRepo(env, params.repo);
+          return tree ?? fromTool(r);
+        }
         return compactRepos(r.text) ?? fromTool(r);
       }
       return fromTool(r);
@@ -898,6 +1118,37 @@ async function dispatch(name: string, args: Record<string, unknown>, env: Functi
       if (!th) return errorResult(UNAVAILABLE);
       return fromTool(await th.builtin('read_file', { path: `/workspace/group/uploads/${base}` }));
     }
+
+    case 'run_code':
+      return runCode(args, env);
+
+    case 'look_at_image':
+      return lookAtImage(args, env);
+
+    // the viewer's (screen.ts): the conversation may open a document and point at it; the interview and the conversation may look; the listener has none of them (session.ts allowed() too)
+    case 'show_document':
+      if (env.mode === 'interviewer' || env.mode === 'listener') return errorResult('show_document is not available here');
+      return showDocument(args, env);
+
+    case 'point_at':
+      if (env.mode === 'interviewer' || env.mode === 'listener') return errorResult('point_at is not available here');
+      return pointAt(args, env);
+
+    case 'look_at_screen':
+      if (env.mode === 'listener') return errorResult('look_at_screen is not available here');
+      return lookAtScreen(env);
+
+    // a search of the course decks (library-fn.ts): the conversation only
+    case 'find_course_document':
+      if (env.mode === 'interviewer' || env.mode === 'listener') return errorResult('find_course_document is not available here');
+      return findCourseDocument(args, env);
+
+    // cards from the model's data (objects-fn.ts): the conversation only
+    case 'show_chart':
+    case 'show_trace':
+    case 'ask_to_predict':
+      if (env.mode === 'interviewer' || env.mode === 'listener') return errorResult(`${name} is not available here`);
+      return name === 'show_chart' ? showChart(args, env) : name === 'show_trace' ? showTrace(args, env) : askToPredict(args, env);
 
     case 'render_diagram': {
       const code = typeof args.mermaid_code === 'string' ? args.mermaid_code.slice(0, 8000) : typeof args.mermaid_syntax === 'string' ? args.mermaid_syntax.slice(0, 8000) : '';

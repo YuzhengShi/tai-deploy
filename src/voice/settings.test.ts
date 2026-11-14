@@ -4,7 +4,7 @@ import path from 'path';
 import { describe, expect, it } from 'vitest';
 
 import { loadVoiceConfig } from './config.js';
-import { clampSpeed, isFluxVoice, listenConfig, listenUpdate, speakConfig, turnFields } from './settings.js';
+import { PACE_OF, clampSpeed, isFluxVoice, listenConfig, listenUpdate, speakConfig, turnFields } from './settings.js';
 import { PREF_SPEED_MAX, PREF_SPEED_MIN, prefsFile, speedFor, speedFromPrefs } from './speed.js';
 
 const config = (env: Record<string, string> = {}) => loadVoiceConfig((key) => env[key]);
@@ -89,11 +89,27 @@ describe('the voices', () => {
     expect(speakConfig('aura-2-mars-en')).toEqual({ provider: { type: 'deepgram', model: 'aura-2-mars-en' } });
   });
 
-  it('starts with the Flux voices and keeps the Aura ones to fall back to', () => {
+  it('talks in a Flux voice, interviews in a steady Aura one, and keeps Aura voices to fall back to', () => {
     const c = config();
-    expect([c.voiceChat, c.voiceInterview]).toEqual(['flux-hannah-en', 'flux-miles-en']);
+    expect([c.voiceChat, c.voiceInterview]).toEqual(['flux-hannah-en', 'aura-2-mars-en']);
     expect([c.fallbackVoiceChat, c.fallbackVoiceInterview]).toEqual(['aura-2-thalia-en', 'aura-2-mars-en']);
     expect(config({ TAI_VOICE_VOICE_CHAT: 'aura-2-thalia-en' }).voiceChat).toBe('aura-2-thalia-en');
+    // flux-miles-en, the interviewer's voice until 2026-11-06, is one setting away
+    expect(config({ TAI_VOICE_VOICE_INTERVIEW: 'flux-miles-en' }).voiceInterview).toBe('flux-miles-en');
+  });
+
+  it('gives a voice that does not speak at the common pace the student\'s pace times its factor, and only a voice with a measurement', () => {
+    // the interviewer's default voice has one (a voice without a measured factor would run at another pace than the conversation's: the owner's "voice slower than the text")
+    expect(PACE_OF[config().voiceInterview]).toBe(0.9);
+    expect(speakConfig('aura-2-mars-en', { speed: 1.2 })).toEqual({ provider: { type: 'deepgram', model: 'aura-2-mars-en', speed: 1.1 } });
+    expect(speakConfig('aura-2-mars-en', { speed: 1.0 })).toEqual({ provider: { type: 'deepgram', model: 'aura-2-mars-en', speed: 0.9 } });
+    expect(speakConfig('aura-2-mars-en', { speed: 1.4 })).toEqual({ provider: { type: 'deepgram', model: 'aura-2-mars-en', speed: 1.25 } });
+    expect(speakConfig('aura-2-mars-en', { speed: 0.8 })).toEqual({ provider: { type: 'deepgram', model: 'aura-2-mars-en', speed: 0.7 } }); // 0.72: Aura starts at 0.7
+    expect(speakConfig('aura-2-mars-en', {}).provider).not.toHaveProperty('speed');
+    // the others are as they were
+    expect(speakConfig('flux-hannah-en', { speed: 1.2 })).toEqual({ provider: { type: 'deepgram', version: 'v2', model: 'flux-hannah-en', speed: 1.2 } });
+    expect(speakConfig('aura-2-thalia-en', { speed: 1.2 })).toEqual({ provider: { type: 'deepgram', model: 'aura-2-thalia-en', speed: 1.2 } });
+    expect(speakConfig('flux-miles-en', { speed: 1.2 })).toMatchObject({ provider: { speed: 1.2 } });
   });
 
   it('speaks faster than the voice\'s own pace (the owner found it slow), in the steps Deepgram takes, and sends speed and expressivity only when they differ from the voice\'s own', () => {

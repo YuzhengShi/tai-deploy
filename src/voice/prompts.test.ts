@@ -12,6 +12,7 @@ const ctx: StudentContext = {
   competencySummary: 'Raft: confidence 0.4, stability 0.2',
   competencyText: null,
   memories: ['prefers analogies to real systems'],
+  work: [],
   recentChat: [],
   courseStatus: '',
 };

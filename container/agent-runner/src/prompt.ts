@@ -70,13 +70,14 @@ const RECENT_HEADING = '## Recent conversation history';
 
 /**
  * The memory without the recent-chat section: a resumed session already holds those exchanges, and the stored memories (picked by the
- * host for the question at hand) are the part that is new to it. Empty when there are none.
+ * host for the question at hand) are the part that is new to it, and so is what the host remembers of the student's work (a repository, where a session stopped, a problem:
+ * docs/STUDENT_STATE.md), which is kept even when that is all there is. Empty when there are none.
  */
 export function storedMemoriesOnly(memory: string): string {
   const text = memory.trim();
   const cut = text.indexOf(RECENT_HEADING);
   const head = (cut === -1 ? text : text.slice(0, cut)).trimEnd();
-  if (!/^## Stored memories/m.test(head)) return '';
+  if (!/^## (?:Stored memories|Their work, from earlier sessions)/m.test(head)) return '';
   return cut === -1 ? head : `${head}\n</memory_context>`;
 }
 

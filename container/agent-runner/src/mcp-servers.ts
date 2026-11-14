@@ -16,10 +16,14 @@ export interface McpServerSpec {
   env: Record<string, string>;
 }
 
+/** Where the host mounts a built course knowledge graph (src/leanrag-graph.ts GRAPH_CONTAINER_PATH). */
+export const LEANRAG_GRAPH_DIR = '/workspace/leanrag-graph';
+
 export function buildMcpServers(
   mcpServerPath: string,
   containerInput: ContainerInput,
   sdkEnv: Record<string, string | undefined>,
+  fileExists: (p: string) => boolean = (p) => fs.existsSync(p),   // (a seam for the tests: what the container's file system has)
 ): Record<string, McpServerSpec> {
   // AWS credentials for MCP tools that call boto3 scripts (tts.py, image_gen.py)
   const awsEnv = Object.fromEntries(
@@ -58,7 +62,7 @@ export function buildMcpServers(
         // The student's own time zone (the orchestrator sets it from their page's preferences): canvas_api.py puts their clock next to the Pacific one of a deadline
         ...(sdkEnv['TAI_STUDENT_TZ'] ? { TAI_STUDENT_TZ: sdkEnv['TAI_STUDENT_TZ'] } : {}),
         // look_at_image (vision.ts): the gateway the model already uses, its key and the alias that looks at pictures, only for a container the host started
-        // for the tool (TAI_VISION=1: a student's own chat) and never for the voice tool host, which runs this same function
+        // for the tool (TAI_VISION=1: a student's own chat, or a voice call's tool host: src/vision-env.ts visionForCall)
         ...visionServerEnv(sdkEnv),
         ...(sdkEnv['YOUTUBE_API_KEY'] ? { YOUTUBE_API_KEY: sdkEnv['YOUTUBE_API_KEY'] } : {}),
         ...(sdkEnv['VOICE_INTERVIEW_SECRET'] ? { VOICE_INTERVIEW_SECRET: sdkEnv['VOICE_INTERVIEW_SECRET'] } : {}),
@@ -78,14 +82,18 @@ export function buildMcpServers(
   // LeanRAG is at /workspace/leanrag for non-main groups (dedicated mount)
   // or /workspace/project/leanrag for main (project root mount).
   const leanragPaths = ['/workspace/leanrag', '/workspace/project/leanrag'];
-  const leanragRoot = leanragPaths.find(p => fs.existsSync(`${p}/graph.pkl`));
+  // A built graph (docs/LEANRAG.md) is in the container only when the host mounted it (TAI_LEANRAG=1, src/leanrag-graph.ts): its being here is the switch, and
+  // without it nothing below differs from what it was. With it, the code at /workspace/leanrag is enough to register the server (graph.pkl is only the old flag).
+  const graphDir = fileExists(`${LEANRAG_GRAPH_DIR}/manifest.json`) ? LEANRAG_GRAPH_DIR : '';
+  const leanragRoot = leanragPaths.find(p => fileExists(`${p}/graph.pkl`) || (graphDir !== '' && fileExists(`${p}/mcp_server.py`)));
   if (leanragRoot) {
-    log(`LeanRAG registered: ${leanragRoot}/graph.pkl`);
+    log(graphDir ? `LeanRAG registered: ${leanragRoot} with the built graph at ${graphDir}` : `LeanRAG registered: ${leanragRoot}/graph.pkl`);
     servers.leanrag = {
       command: '/opt/leanrag/bin/python3',
       args: ['-m', 'leanrag.mcp_server'],
       env: {
         PYTHONPATH: path.dirname(leanragRoot),
+        ...(graphDir ? { LEANRAG_GRAPH_DIR: graphDir } : {}),
         ...awsEnv,
       },
     };

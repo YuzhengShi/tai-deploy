@@ -49,12 +49,12 @@ beforeEach(async () => {
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
 describe('the function definitions', () => {
-  it('are the sixteen, the five and the six of the contract, each with its WHEN TO CALL and a valid schema', () => {
+  it('are the twenty-four, the nine and the six of the contract, each with its WHEN TO CALL and a valid schema', () => {
     expect(CONVERSATIONAL_FUNCTIONS.map((f) => f.name)).toEqual([
       'query_knowledge', 'recall_memory', 'save_memory', 'read_competency', 'update_competency', 'query_canvas', 'query_github',
-      'query_piazza', 'browse_url', 'read_file', 'render_diagram', 'send_to_chat', 'schedule_task', 'start_interview', 'start_talk_through', 'end_session',
+      'query_piazza', 'browse_url', 'read_file', 'run_code', 'render_diagram', 'show_document', 'point_at', 'look_at_screen', 'find_course_document', 'show_chart', 'show_trace', 'ask_to_predict', 'send_to_chat', 'schedule_task', 'start_interview', 'start_talk_through', 'end_session',
     ]);
-    expect(INTERVIEWER_FUNCTIONS.map((f) => f.name)).toEqual(['evaluate_answer', 'query_knowledge', 'read_competency', 'query_github', 'send_to_chat', 'end_interview']);
+    expect(INTERVIEWER_FUNCTIONS.map((f) => f.name)).toEqual(['evaluate_answer', 'query_knowledge', 'read_competency', 'query_github', 'run_code', 'look_at_week', 'look_at_screen', 'send_to_chat', 'end_interview']);
     // the listener checks facts, credits what was explained, remembers, and hands the call back: it cannot put anything in the chat
     expect(LISTENER_FUNCTIONS.map((f) => f.name)).toEqual(['query_knowledge', 'read_competency', 'update_competency', 'save_memory', 'end_talk_through', 'end_session']);
     expect(functionsFor('listener').map((f) => f.name)).toEqual(LISTENER_FUNCTIONS.map((f) => f.name));
@@ -80,6 +80,30 @@ describe('the function definitions', () => {
     }
     // the ones that go to the container are the ones that can run long
     for (const name of PROMOTABLE_FUNCTIONS) if (name !== 'recall_memory') expect(TOOL_HOST_FUNCTIONS.has(name)).toBe(true);
+  });
+
+  it('has look_at_week in the interviewer\'s list only, with no parameters and a description in the style of the others; session.ts runs it, through the tool host', () => {
+    const look = INTERVIEWER_FUNCTIONS.find((f) => f.name === 'look_at_week')!;
+    expect(look).toBeDefined();
+    for (const part of ['WHEN TO CALL:', 'CORRECT PATTERN:', 'WRONG PATTERN:']) expect(look.description).toContain(part);
+    expect(look.parameters).toEqual({ type: 'object', properties: {} }); // it is always THIS student, the interview's own assignment, all three sources
+    expect(look.description).toMatch(/Canvas, GitHub and Piazza again, right now/);
+    expect(look.description).toMatch(/They ask you to look at, check or open Canvas, GitHub or Piazza/);
+    expect(look.description).toMatch(/they just submitted, pushed or posted/);
+    expect(look.description).toMatch(/Saying you cannot look at Canvas, GitHub or Piazza: you can/);
+    expect(look.description).toMatch(/a source it says could not be read is not "nothing there"/);
+    expect(look.defer_until_eot).toBe(true); // it spends one of a call's few looks: an unconfirmed turn must not
+    // the other two modes are as they were
+    for (const list of [CONVERSATIONAL_FUNCTIONS, LISTENER_FUNCTIONS]) expect(list.map((f) => f.name)).not.toContain('look_at_week');
+    expect(functionsFor('conversational')).toHaveLength(24);
+    expect(functionsFor('listener')).toHaveLength(6);
+    expect(functionsFor('interviewer')).toHaveLength(9);
+    // session.ts runs it (it replaces what the interview holds of the week) and it goes through the tool host (a look that runs a while gets the pre-written lines); it
+    // changes the call, so it is not one of the look-ups answered for now, and it is not slow at once
+    expect(CALL_FUNCTIONS.has('look_at_week')).toBe(true);
+    expect(TOOL_HOST_FUNCTIONS.has('look_at_week')).toBe(true);
+    expect(PROMOTABLE_FUNCTIONS.has('look_at_week')).toBe(false);
+    expect(SLOW_FUNCTIONS.has('look_at_week')).toBe(false);
   });
 });
 
@@ -471,7 +495,7 @@ describe('the interviewer reads the student\'s own code', () => {
     expect(CONVERSATIONAL_FUNCTIONS.find((f) => f.name === 'query_github')!.parameters.properties).toHaveProperty('owner');
     expect((CONVERSATIONAL_FUNCTIONS.find((f) => f.name === 'query_github')!.parameters.properties.action as { enum: string[] }).enum).toContain('commits');
     expect(CONVERSATIONAL_FUNCTIONS.find((f) => f.name === 'send_to_chat')!.description).not.toMatch(/25 lines/);
-    expect(functionsFor('interviewer').map((f) => f.name)).toEqual(['evaluate_answer', 'query_knowledge', 'read_competency', 'query_github', 'send_to_chat', 'end_interview']);
+    expect(functionsFor('interviewer').map((f) => f.name)).toEqual(['evaluate_answer', 'query_knowledge', 'read_competency', 'query_github', 'run_code', 'look_at_week', 'look_at_screen', 'send_to_chat', 'end_interview']);
   });
 
   it('reads only the student\'s own account: the bound username fills the owner, and one the model names is ignored', async () => {

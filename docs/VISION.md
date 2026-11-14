@@ -65,7 +65,7 @@ always thought). The alias must stay on the OpenAI-compatible endpoint with `thi
 | time | 45 s for the whole call, both attempts | a call took 2.3 to 3.9 s; pi gives an MCP tool call 120 s (`pi-support.ts` `mcpEntries`), so the tool always answers inside it |
 | retry | once, after 429, 5xx or a connection failure; waits 2 s (or the gateway's `Retry-After`, 0.5 to 8 s); only if 10 s of the 45 remain after the wait | no retry storm. A timeout, a 4xx and a redirect are not retried; error bodies are read and thrown away, never used |
 | use | 5 per session (`TOOL_LIMITS.look_at_image`), counted when the request is about to be sent | a refused path costs nothing (a model that mistypes a name keeps its five); the sixth is "Rate limit exceeded for look_at_image: max 5 calls per session." Each look sends a picture to z.ai and costs about a thousand tokens; the number is one line in `tool-limits.ts` |
-| who | a student's own text chat | not the admin's chat (it has no student uploads), not a scheduled task (tasks are never counted against the limits), never the voice tool host |
+| who | a student's own text chat | not the admin's chat (it has no student uploads), not a scheduled task (tasks are never counted against the limits); a voice call's tool host only where a call may look at pictures (`callVisionOn`: `TAI_VISION=1` and not `TAI_CALL_VISION=0`) |
 
 ## The description is data
 
@@ -88,10 +88,19 @@ shown) is written to a log or an error message: the failure words are fixed and 
 (`docs/SETTINGS.md` has both, and the two names the container makes for itself.) How a container comes to have the tool: (1) `runContainerAgent` adds `-e TAI_VISION=1` (and
 `-e TAI_VISION_MODEL=<alias>`) for a student's own run; no key is ever on a command line. (2) `buildMcpServers` (`mcp-servers.ts`, `vision.ts` `visionServerEnv`) gives the
 nanoclaw server `TAI_VISION_URL` (`ANTHROPIC_BASE_URL` + `/v1/chat/completions`), `TAI_VISION_API_KEY` (`ANTHROPIC_AUTH_TOKEN`, else `ANTHROPIC_API_KEY`) and `TAI_VISION_MODEL`,
-from the secrets the container already has: the host makes no second copy of the key. Nothing for the voice tool host, which runs the same function. (3) The server registers the tool only with
-all three and not in tool-host mode, and takes the key out of its own environment once it has read it, so the Canvas, GitHub and Piazza scripts (`...process.env`) do not inherit it;
-`/proc/<pid>/environ` still holds it, as it holds `CANVAS_API_TOKEN`, and the Bash guards refuse that path. `TAI_DISABLED_TOOLS=look_at_image` drops the tool as well. The tool is kept out of the
-voice tool host three ways: the host does not start it with the switch, `buildMcpServers` gives it nothing, the server does not register the tool there.
+from the secrets the container already has: the host makes no second copy of the key. A voice call's tool host is started the same way where a call may look at pictures (`visionForCall`) and gets the same. (3) The server registers the tool only with
+all three, and takes the key out of its own environment once it has read it, so the Canvas, GitHub and Piazza scripts (`...process.env`) do not inherit it;
+`/proc/<pid>/environ` still holds it, as it holds `CANVAS_API_TOKEN`, and the Bash guards refuse that path. `TAI_DISABLED_TOOLS=look_at_image` drops the tool as well. A call's tool host has the tool
+only when the host started it for pictures: the host starts it so for `callVisionOn` alone (`TAI_CALL_VISION=0` takes it away from calls), and otherwise `buildMcpServers` gives it nothing and the server does not register the tool.
+
+## In a voice call (2026-11-07)
+
+The owner decided that a call may look at pictures too (docs/RUN_CARDS.md has the wiring). It is the same tool, run by the call's tool host for the student of the call: the voice function `look_at_image(name, question?)` (`src/voice/look-image.ts`) checks the name and builds the
+path under that student's own uploads, the tool host runs the container's tool (the same checks, the five looks of a call, the same framing of the answer as data), and a picture is looked at once in a call (the first description is kept for the call). ONE switch, `callVisionOn`
+(`TAI_VISION=1` and not `TAI_CALL_VISION=0`), decides the tool host's start, the function lists (conversation and interview), the prompt's words and the words that name a picture to a call, so that none of them promises what another does not have. The picture goes to z.ai, as it does
+from the chat; the function's description tells the model to say so if the student asks.
+
+**Checked live after the deploy of 2026-11-07 (16:38 UTC).** A real voice tool host, started as a call starts it (the live agent image, the live `.env` and the service's own settings), was ready in 12.3 s and looked at a bar chart drawn for the purpose (four bars, the last the tallest) through the real tool, gateway and z.ai vision model: it answered in 10.3 s the first time and in 4.3 s and then 3.2 s on a second run (the first look of a cold tool host can be slow; a call says its pre-written "taking a look" lines meanwhile) and the description named four bars and the tallest, framed as data; a path outside the uploads folder was refused; nothing was left behind (no container, no folder). A synthetic call afterwards went through with no error. Not checked: a real student's call with a real picture.
 
 ## What is logged
 
@@ -107,8 +116,8 @@ While a look runs the student's page says "Working" (`src/turn-status.ts` has no
 - `container/agent-runner/test/vision.test.ts`: 63 tests, 62 run here (the one that needs `O_NOFOLLOW` is for Linux; the container run below covers it). A loopback server stands in for the
   gateway: the request shape, the answer, an empty answer, 401, 429 then 200, 429 twice, the timeout, an unreachable gateway, the refusals of path, link, size, kind and pixels, the framing
   against forged markers, no key in any failure, the five uses.
-- `container/agent-runner/test/vision-mcp-env.test.ts` (8): the settings reach the nanoclaw server, not the tool host, not LeanRAG, intact through pi's escaping and, where pi is installed,
-  through its own resolver. `tool-limits.test.ts`. `src/vision-env.test.ts` (19): the switch, the alias check, the `docker run` arguments for a student, the admin, a task and the tool host, no key
+- `container/agent-runner/test/vision-mcp-env.test.ts` (8): the settings reach the nanoclaw server (and a tool host's, when the host started it for pictures), not LeanRAG, intact through pi's escaping and, where pi is installed,
+  through its own resolver. `tool-limits.test.ts`. `src/vision-env.test.ts` (22): the switch and the calls' switch, the alias check, the `docker run` arguments for a student, the admin, a task and a call's tool host, no key
   on a command line, no second copy of it. `src/portal/uploads-vision.test.ts` (8): the words, off and on.
 - A mutation check of `vision.ts` (12 changes: the forged-marker strip, the folder check, the redirect, the retry, the key in an error, the use counted too early, the tool host, the caps ...):
   the tests killed 11; the survivor is equivalent (the size is checked twice).
@@ -118,7 +127,7 @@ While a look runs the student's page says "Working" (`src/turn-status.ts` has no
 **In a throwaway container of the live agent image** (nothing deployed): the real MCP server compiled by the image's `tsc`, driven by the real MCP client against a fake gateway on a loopback
 port, started as the runner starts it (`buildMcpServers`).
 
-- The tool is listed with its schema, and only where it should be: not with `TAI_VISION` unset, not in a tool host, not when disabled, not without a key.
+- The tool is listed with its schema, and only where it should be: not with `TAI_VISION` unset, not in a tool host the host did not start for pictures, not when disabled, not without a key.
 - A Chromium PNG goes out as `image/png`, byte for byte, with the gateway's key in the header and nowhere else; JPEG, GIF and WebP as their own types.
 - Ten refusals (outside the folder, `..`, a link out, a FIFO that did not hang, a folder, text named `.png`, 4 MB and a byte, a 40000 x 40000 header, empty, missing) sent nothing and used none
   of the five; the sixth look was refused; a description that gives orders stayed inside the markers; `O_NOFOLLOW` refused a link; the log held no key, question or description word.

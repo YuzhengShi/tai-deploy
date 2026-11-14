@@ -818,9 +818,11 @@ describe('the settings of the tool', () => {
     for (const flag of [undefined, '', '0', 'true', 'yes', ' 1', '1 ', '2']) expect(visionServerEnv({ ...full, TAI_VISION: flag }), String(flag)).toEqual({});
   });
 
-  it('are nothing for the voice tool host, flag or no flag', () => {
-    expect(visionServerEnv({ ...full, TAI_MODE: 'tool-host' })).toEqual({});
-    expect(visionConfigFromEnv({ TAI_MODE: 'tool-host', TAI_VISION_URL: 'http://g/v1/chat/completions', TAI_VISION_API_KEY: 'k' })).toBeNull();
+  it('are the same for the voice tool host when the host started it for pictures, and nothing when it did not', () => {
+    const host = { ...full, TAI_MODE: 'tool-host' };
+    expect(visionServerEnv(host)).toEqual(visionServerEnv(full));
+    expect(visionConfigFromEnv({ ...visionServerEnv(host), TAI_MODE: 'tool-host' })).toEqual({ url: 'http://tai-live-litellm:4000/v1/chat/completions', apiKey: 'gateway-key', model: 'glm-vision' });
+    for (const flag of [undefined, '', '0', 'true']) expect(visionServerEnv({ ...host, TAI_VISION: flag }), String(flag)).toEqual({});
   });
 
   it('are nothing without a gateway address or a key, or with an address that is no http(s) URL', () => {
@@ -846,10 +848,13 @@ describe('the settings of the tool', () => {
     expect(JSON.stringify(env)).not.toContain('gateway-key');
     expect(env.PATH).toBe('/usr/bin');                       // nothing else is touched
     expect(env.GITHUB_TOKEN).toBe('ghp_x');
-    // taken out whether or not the tool is offered: a tool host that somehow had it keeps none either
-    const host: Record<string, string | undefined> = { ...visionServerEnv(full), TAI_MODE: 'tool-host' };
-    expect(takeVisionConfig(host)).toBeNull();
+    // taken out in a tool host too (the tool is offered there as in a chat), and whether or not the tool is offered
+    const host: Record<string, string | undefined> = { ...visionServerEnv({ ...full, TAI_MODE: 'tool-host' }), TAI_MODE: 'tool-host' };
+    expect(takeVisionConfig(host)).toEqual({ url: 'http://tai-live-litellm:4000/v1/chat/completions', apiKey: 'gateway-key', model: 'glm-vision' });
     expect('TAI_VISION_API_KEY' in host).toBe(false);
+    const none: Record<string, string | undefined> = { TAI_VISION_API_KEY: 'k', TAI_VISION_URL: 'not a url' };
+    expect(takeVisionConfig(none)).toBeNull();
+    expect('TAI_VISION_API_KEY' in none).toBe(false);
   });
 });
 

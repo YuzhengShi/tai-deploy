@@ -12,7 +12,7 @@ import path from 'path';
 
 import { WebSocket } from 'ws';
 
-import { createVoiceHub, VoiceHub } from '../hub.js';
+import { createVoiceHub, VoiceHub, type VoiceDeps } from '../hub.js';
 import type { VoiceTiming } from '../session.js';
 import { FakeToolHost, ToolResult } from '../tool-host.js';
 import type { Caller, VoiceLog } from '../types.js';
@@ -110,6 +110,8 @@ export interface HarnessOptions {
   toolStartDelayMs?: number;
   now?: () => number;
   readEnv?: Record<string, string>;
+  /** More of the hub's own dependencies: a test's fake of what src/index.ts wires in (the work of a student, the state writer's pass over a call). They win over the harness's own, except `timing` and `deepgramUrl`, which the options above and the fake Deepgram set. */
+  deps?: Partial<VoiceDeps>;
 }
 
 export interface Harness {
@@ -222,6 +224,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     },
     now: opts.now,
     log,
+    ...(opts.deps ?? {}),
     deepgramUrl: dg.url,
     timing: {
       keepAliveMs: 200,

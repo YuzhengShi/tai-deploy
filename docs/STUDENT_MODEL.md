@@ -45,6 +45,33 @@ counted in memory: a restart starts the day again). The gateway is the voice sid
 answer with no JSON costs one warning. A value of `TAI_COMPETENCY_WRITER` that is not `on`, `shadow` or `off` runs as `shadow`. **Shadow** runs the same call and the same guard on the file in memory and logs (`student model (shadow)`, info) the concepts, numbers and
 labels it would have written: no file is changed or made, and no belief appears above debug level. Normal runs log `student model: recorded` the same way. Every log line is concept names, numbers and labels; never a word of the student's.
 
+## What the student worked on: the state writer
+
+The same pattern for three small facts about a student's *work*, which go to the `memories` table, not to `COMPETENCY.md` (`docs/STUDENT_STATE.md` has the design, `src/work-facts.ts` the contract): a concrete **problem** they ran into
+(`issue`), **where the last session stopped** (`thread`) and the **repository** they named as the home of an assignment's code (`repo`). `src/student-state-writer.ts` makes one cheap structured model call per input and code keeps what passes.
+A conceptual confusion is *not* an issue: the misconceptions above hold those.
+
+| Input | When | Kept |
+| --- | --- | --- |
+| a typed exchange | after the reply, only when the student's message shows code, an error, a broken run or a repository (a code fence, a panic or `error:` line, `.go`/`.tf`/Dockerfile or a `go`/`terraform`/`docker` command, "crashes", "doesn't work", "repo", the same in Chinese); greetings, apologies, a failed run and everything the competency writer's pre-filter skips never reach a model | issues and a repository |
+| a finished voice call | once, from `postSessionSync` (`workFromCall` on the hub's and the session's deps): the merged transcript (10,000 characters at most: its beginning and, more, its end) and the call's facts lines; a call in which the student said fewer than 8 words is skipped | issues, a thread and a repository |
+
+The model sees the student's words as **data** (angle brackets made harmless, one line a turn in a call), is told to report only what the *student* said or showed (what TAi said or guessed is never evidence), and answers one JSON object with at most 2 issues, 1 thread and 1 repo, each with a
+confidence. Code keeps **0.85 or more** only, builds each fact with `issueFact`/`threadFact`/`repoFact` (one line, 160 characters, no angle brackets, links, addresses or long ids; a repository name only by GitHub's own pattern; a repository only for a homework number), keeps a repository only when its
+name is in what the student said and is not just the label of the assignment ("HW3": a model makes that up from "my HW3 code"), and keeps a thread for a call only. The model is also shown the issues already on record (`recorded`, from `listWorkFacts`) and told to repeat the opening words of one that shows again, so that it replaces its note instead of adding a thirteenth. Nothing here runs or reads code.
+
+Hooks: `src/index.ts` makes the same `turnStarted` / `turnFinished` calls as the competency writer's, and `flush` after the voice hub has closed at shutdown. The call's pass is started *beside* the summary's model call and waited for at most `workWaitMs` (2 s) after the other post-call writes; it goes on in the writer's own
+queue, and a student may start another call meanwhile.
+
+`TAI_STATE_WRITER` `on` (default) | `shadow` (runs the model and logs `student state (shadow)` with counts, writes nothing; anything that is not `on`, `shadow` or `off` runs as `shadow`) | `off`. `TAI_STATE_MODEL` (default: the competency writer's model, then the same gateway, `TAI_VOICE_LLM_URL` and `TAI_VOICE_LLM_KEY`).
+`TAI_STATE_DAILY_CAP` (default **20 model calls per student per day**, counted per folder in memory (a restart starts the day again) and apart from the competency writer's, which is per student too; a student's typed exchanges may use three quarters of their day (15), so a long chat cannot take the places of that student's calls, and a call may use all of it; a student at the cap stops nobody else; the line that says so is written once for each student and kind a day, at info, with counts only). A failed call costs one warning and no retry, and a 60 s pause for typed exchanges of every student, the deployment over (not for a call);
+an answer with no JSON costs one warning; a student's queue holds 3 typed exchanges (a call is always taken). Log lines carry counts and reasons, never a word of the student's or of the model's above debug level (a fact is named by its category, not its key: an issue's key is a slug of the model's words).
+
+Checked: `src/student-state-writer.test.ts` (58) and `src/voice/hub-state.test.ts` (5, through the voice harness with a fake gateway); 20 deliberate breakages of the writer (one of them a cap shared by all students) and 4 of the hooks each fail a test. A real-model pass on 2026-11-06, 32 scripted students three times each
+on `deepseek` through the gateway, with the shipped prompt (every case was sent to the model, which production's pre-filter would not do for 8 of them): a pasted deadlock, a panic, a Terraform problem and a Docker build error told in calls, a repository named in words, in a link and aloud, two problems in one message, and also the cases that must give
+nothing: a question about an idea, small talk, a belief, a hypothetical, a spec pasted with the word "error" in it, "stuck on how to split the input", a mock-interview call, a TAi claim the student never made, a repository only TAi named, and five kinds of injection (in the message, a fake system line, a closed tag, the call's
+transcript, an instruction inside a recorded issue). 96 of 96 kept what they should and nothing else, about 1 s a call. **Not verified**: the database path (`upsertWorkFact`, `listWorkFacts`: `memory.ts` runs only on the host), a live call or chat, extraction on real students or on any model but DeepSeek.
+
 ## Verified, and not
 
 Unit tests (`src/competency-writer.test.ts`, 71): the pre-filter cases, the parser on good, fenced, repaired, partial and garbage answers, every bound, the guard's limits (and that its arithmetic equals the voice method's on a grid), an injection in the student's

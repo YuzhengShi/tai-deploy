@@ -1,0 +1,136 @@
+/* predictcard.css: the styles of predictcard.js (docs/CHAT_OBJECTS.md, docs/PREDICT.md): a small program to read, a guess to make, and Run. It uses the page's own tokens (style.css: --bubble, --code-bg,
+   --line, --pill, --text, --muted, --blue, --focus, --danger, --composer, --mono) and highlight.css's colours for the code, so the three themes (light, auto, dark) come with them. The words say
+   what is going on (Running, You guessed); the colour is never the only signal, and nothing here is coloured as right or wrong: the card does not judge the guess. */
+
+/* the row of a card is a flex row like the others: the card takes the width it can, up to a comfortable one, and never more than the page has */
+.row.object[data-type="predict"] { align-items: flex-start; }
+
+.predictcard {
+  --pc-btn: #0b63c5;
+  --pc-btn-hover: #0a56ab;
+  --pc-danger: var(--danger);
+  flex: 1 1 auto; min-width: 0; max-width: min(100%, 760px);
+  background: var(--bubble); border: 1px solid var(--line); border-radius: 18px; overflow: hidden;
+  font-size: 14px; line-height: 1.5;
+}
+/* where the browser can mix colours: a button that holds white text at 4.5:1 and more in both themes, and a red that reads on the card's background */
+@supports (color: color-mix(in srgb, red, blue)) {
+  .predictcard {
+    --pc-btn: color-mix(in srgb, var(--blue) 72%, #000);
+    --pc-btn-hover: color-mix(in srgb, var(--blue) 62%, #000);
+    --pc-danger: color-mix(in srgb, var(--danger) 78%, var(--text));
+  }
+}
+.predictcard [hidden] { display: none !important; }
+/* the page sets color-scheme to "light dark" and lets the system pick, so with a theme forced against the system's the browser's own controls (the radio buttons) would be drawn for the wrong one */
+:root[data-theme="light"] .predictcard { color-scheme: light; }
+:root[data-theme="dark"] .predictcard { color-scheme: dark; }
+
+/* the question */
+.pc-head { padding: 11px 14px 9px; }
+.pc-tag { display: block; color: var(--muted); font-size: 12px; font-weight: 650; letter-spacing: 0.03em; text-transform: uppercase; }
+.pc-question { margin: 2px 0 0; color: var(--text); font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+
+/* the program: each file with its name, numbered lines in a column of their own, scrolling sideways inside the card (never the page), and upward only once it has been unfolded */
+.pc-file { border-top: 1px solid var(--line); }
+.pc-fhead { padding: 6px 14px; background: var(--pill); }
+.pc-fname { color: var(--text); font-family: var(--mono); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.pc-body {
+  background: var(--code-bg); overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain;
+  font-family: var(--mono); font-size: 13.5px; line-height: 1.55;
+}
+.predictcard[data-folded="false"] .pc-body { max-height: min(max(70vh, 480px), 900px); overflow-y: auto; }
+.pc-body:focus-visible { outline-offset: -3px; }
+.pc-grid { display: flex; min-width: max-content; }
+/* the numbers are no text of the program: a selection and a copy never carry them, and they stay in view while the lines scroll sideways */
+.pc-nums {
+  position: sticky; left: 0; z-index: 1; flex: none; margin: 0; padding: 10px 10px 10px 14px;
+  text-align: right; white-space: pre; color: var(--muted); background: var(--code-bg); border-right: 1px solid var(--line);
+  font-variant-numeric: tabular-nums; -webkit-user-select: none; user-select: none;
+}
+.pc-code { flex: 1 0 auto; margin: 0; padding: 10px 16px 10px 12px; font: inherit; color: var(--text); white-space: pre; tab-size: 4; }
+/* the colours of the code are highlight.css's (its variables are the page's, set for each theme and held to 4.5:1 on --code-bg); its rules are scoped to a block of a reply (.code), so the same ones are here for this one */
+.pc-code .hl-keyword { color: var(--hl-keyword); }
+.pc-code .hl-type { color: var(--hl-type); }
+.pc-code .hl-string { color: var(--hl-string); }
+.pc-code .hl-comment { color: var(--hl-comment); font-style: italic; }
+.pc-code .hl-number { color: var(--hl-number); }
+.pc-code .hl-function { color: var(--hl-function); }
+.pc-code .hl-operator { color: var(--hl-operator); }
+.pc-code .hl-punctuation { color: var(--hl-punctuation); }
+.pc-code .hl-variable { color: var(--hl-variable); }
+@media (forced-colors: active) {
+  .pc-code .hl-keyword, .pc-code .hl-type, .pc-code .hl-string, .pc-code .hl-comment, .pc-code .hl-number,
+  .pc-code .hl-function, .pc-code .hl-operator, .pc-code .hl-punctuation, .pc-code .hl-variable { color: inherit; }
+}
+
+/* the foot of the program: the rest of it, and what it runs as */
+.pc-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 4px 8px 4px 14px; border-top: 1px solid var(--line); }
+.pc-foot .pc-fold { margin-left: -6px; }
+.pc-foot .pc-cmd { margin-left: auto; }
+.pc-cmd { color: var(--muted); font-family: var(--mono); font-size: 12.5px; padding: 5px 0; overflow-wrap: anywhere; }
+.pc-btn {
+  min-height: 32px; padding: 4px 12px; background: transparent; border: 0; border-radius: 10px; color: var(--muted);
+  font-size: 13px; font-weight: 600; -webkit-tap-highlight-color: transparent;
+}
+.pc-btn:hover { background: var(--pill); color: var(--text); }
+
+/* the guess: options to pick, or one line to type */
+.pc-ask { margin: 0; padding: 12px 14px 12px; border-top: 1px solid var(--line); }
+.pc-set { min-width: 0; margin: 0; padding: 0; border: 0; }
+.pc-legend { display: block; margin: 0 0 8px; padding: 0; color: var(--text); font-size: 14px; font-weight: 600; }
+.pc-choice {
+  display: flex; align-items: center; gap: 12px; min-height: 44px; margin: 0 0 6px; padding: 6px 12px;
+  border: 1px solid var(--line); border-radius: 12px; color: var(--text); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.pc-choice:hover { background: var(--pill); }
+.pc-choice:has(.pc-radio:checked) { border-color: var(--blue); background: var(--focus); }
+.pc-choice:has(.pc-radio:focus-visible) { outline: 2px solid var(--blue); outline-offset: 2px; }
+.pc-radio { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--blue); }
+.pc-radio:focus-visible { outline: none; }
+.pc-choice-text { min-width: 0; font-family: var(--mono); font-size: 13.5px; overflow-wrap: anywhere; }
+.pc-input {
+  display: block; box-sizing: border-box; width: 100%; min-height: 44px; margin: 0; padding: 8px 12px;
+  background: var(--composer); border: 1px solid var(--composer-line, var(--line)); border-radius: 12px; color: var(--text);
+  font-family: var(--mono); font-size: 15px;
+}
+.pc-input:read-only { opacity: 0.75; }
+.pc-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+.pc-run {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 20px; border: 0; border-radius: 999px;
+  background: var(--pc-btn); color: #fff; font-size: 14px; font-weight: 650; -webkit-tap-highlight-color: transparent;
+}
+.pc-run:hover { background: var(--pc-btn-hover); }
+.pc-run[disabled] { background: var(--pill); color: var(--muted); cursor: not-allowed; }
+.pc-run[aria-busy="true"] { cursor: progress; }
+/* a ring turns while a run is going; with reduced motion the page's rule stops it and it stays a ring */
+.pc-run[aria-busy="true"]::before {
+  content: ""; width: 12px; height: 12px; border: 2px solid rgba(255, 255, 255, 0.45); border-top-color: #fff; border-radius: 50%;
+  animation: pc-spin 0.8s linear infinite;
+}
+@keyframes pc-spin { to { transform: rotate(360deg); } }
+.pc-note, .pc-hint { margin: 0; color: var(--muted); font-size: 13px; }
+.pc-hint { margin-top: 8px; }
+.pc-msg { margin: 8px 0 0; color: var(--pc-danger); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+
+/* the record: what was guessed, and what happened */
+.pc-record { padding: 12px 14px 12px; border-top: 1px solid var(--line); }
+.pc-record:focus-visible { outline-offset: -3px; }
+.pc-record p { margin: 0; overflow-wrap: anywhere; }
+.pc-record p + p { margin-top: 6px; }
+.pc-label { color: var(--muted); font-weight: 600; }
+.pc-guess { color: var(--text); font-family: var(--mono); font-size: 13.5px; font-weight: 600; }
+.pc-result { color: var(--text); }
+.pc-after { color: var(--muted); font-size: 13px; }
+
+@media (max-width: 720px) {
+  .predictcard { border-radius: 16px; font-size: 13.5px; }
+  .pc-head { padding: 10px 12px 8px; }
+  .pc-body { font-size: 12.5px; }
+  .pc-nums { padding-left: 10px; }
+  .pc-ask, .pc-record { padding-left: 12px; padding-right: 12px; }
+  .pc-foot { padding-left: 12px; }
+  .pc-btn { min-height: 36px; }
+  .pc-run { flex: 1 1 100%; justify-content: center; min-height: 44px; }
+  .pc-input { font-size: 16px; }
+}

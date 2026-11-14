@@ -8,6 +8,7 @@ import io
 import subprocess
 import tempfile
 import time
+import unicodedata
 from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -329,11 +330,80 @@ def read_attachment(url, filename, content_type, size=0):
     return None, f"[{filename} ({ct}): unsupported format]"
 
 
+# ── What a caller may put into a request path (docs/SECURITY.md, "Opening documents, the view and the course library") ────────────────────────────────
+#
+# Every request below is built from text: api_get(f"/courses/{c}/assignments/{aid}"). `requests` reads that text as a URL, so a value that a model supplies must
+# never go into it as it is. The values this script reads into a path are `assignment_id`, `user_id`, `topic_id`, `module_id`, `page_url` and `file_id` (PATH_PARAMS:
+# nothing else is read into one; `now` and `budget_seconds` are read but are no part of a path). Probed with requests 2.33.0 and urllib3 2.7.0 (`.prepare()`, which
+# sends nothing; test_canvas_api_paths.py repeats the two lines that matter): a `page_url` of `../files/456` goes out as /courses/1/files/456, the metadata of ANY course
+# file, a hidden one too, with its download address; an `assignment_id` of `77/submissions/999?` puts another student's submission into the path and the user the host
+# bound into the query; `?` starts the query, a lone `.` or `..` is removed, and `%2e%2e/files/456` is sent as the literal /pages/../files/456 (requests decodes %2e AFTER
+# it has removed the dot segments), while `%2f` goes out as an encoded slash that a server may decode. Encoding the value (quote with safe='') would not be enough
+# either: a bare `..` or `.` has nothing to encode and is removed all the same. So a value is not repaired, it is refused: `path_segment` is the only way into a
+# path, a refusal is one plain sentence as the answer (handle()) and no request at all, and `api_get` checks the finished path once more, whatever built it.
+#   id    ASCII digits, 1 to 20 (a JSON number is accepted as its digits). Not `\d`, which is every script's digits, and not `$`, which lets a final newline through.
+#   slug  the url slug of a Canvas page, as `pages` and `modules` hand it out: 1 to 200 characters, none of / \ ? # %, no `..`, not a lone `.`, and no space, control,
+#         format (zero-width, bidi) or other invisible character; and all of that again after NFKC folding, because a fullwidth `／` or `．` (or `‥`, `…`, `？`) is the
+#         `/` or `.` it looks like to anything that folds compatibility forms. A percent sign is refused, not decoded: a slug is a name, not an address.
+
+class Refused(Exception):
+    """A value the caller supplied that may not become part of a request path, or a path that may not be sent. str() is the one plain sentence the caller is given as
+    the answer (handle() turns it into {"error": ...}); nothing was asked of Canvas."""
+
+
+_ID = re.compile(r'[0-9]{1,20}')          # the one definition of "a Canvas id", for every action
+SLUG_MAX = 200
+# name -> (rule, what it is: the refusal says "<name> must be <what>")
+PATH_PARAMS = {
+    'assignment_id': ('id', "a Canvas assignment id (digits, from the 'assignments' action)"),
+    'user_id': ('id', "a Canvas user id (digits)"),
+    'topic_id': ('id', "a Canvas discussion topic id (digits, from the 'discussions' action)"),
+    'module_id': ('id', "a Canvas module id (digits, from the 'modules' action)"),
+    'file_id': ('id', "a Canvas file id (digits, from the 'files' action)"),
+    'page_url': ('slug', "the url slug of a page as the 'pages' and 'modules' actions give it, one short name such as 'week-8-intro' (no '/', '?', '#', '%', '..' or space)"),
+}
+
+
+def _forms(text):
+    """`text` as it is and as NFKC folds it: a fullwidth `／` or `．` (category Po, so no category test sees it) is the `/` or `.` it looks like to anything that folds
+    compatibility forms, and is refused as that."""
+    return text, unicodedata.normalize('NFKC', text)
+
+
+def _plain(text):
+    """True when no character of `text`, as it is or folded, is one that `requests` or a server may read as more than a letter of a name: none of \\ ? # %, and no
+    control, format, separator or unassigned character (a space, a newline, a zero-width or bidi mark)."""
+    return not any(ch in '\\?#%' or unicodedata.category(ch)[0] in 'CZ' for form in _forms(text) for ch in form)
+
+
+def _is_slug(text):
+    return 0 < len(text) <= SLUG_MAX and _plain(text) and all('/' not in form and '..' not in form and form != '.' for form in _forms(text))
+
+
+def path_segment(name, value):
+    """`value`, the caller's `name` parameter (a key of PATH_PARAMS), as one segment of a request path; Refused, with the sentence to answer, when it is not what `name`
+    is. Every other value this file puts into a path is the course (the operator's setting) or an id that Canvas itself gave."""
+    rule, what = PATH_PARAMS[name]
+    text = str(value) if isinstance(value, int) and not isinstance(value, bool) else value          # a JSON number is its digits; True, 1.5, a list, an object are no id
+    if not isinstance(text, str) or not (_ID.fullmatch(text) if rule == 'id' else _is_slug(text)):
+        raise Refused('%s must be %s' % (name, what))
+    return text
+
+
+def checked_endpoint(endpoint):
+    """`endpoint` (the path after the API's base address) when it is what the code meant to ask for: no `.` or `..` segment, none of \\ ? # %, no space or control
+    character, so that what `requests` sends is the path that was built here, and neither a climb nor a query. The second line behind `path_segment`: Refused otherwise."""
+    if (not isinstance(endpoint, str) or not endpoint.startswith('/') or not _plain(endpoint)
+            or any(part in ('.', '..') for form in _forms(endpoint) for part in form.split('/'))):
+        raise Refused("That Canvas request was not sent: its path holds a '..', a '?', a '#', a '%', a backslash, a space or a control character.")
+    return endpoint
+
+
 # ── Core API helpers ──────────────────────────────────────────────────────────
 
 def api_get(endpoint, params=None):
-    """GET with pagination, returns combined list or single object."""
-    url = f"{BASE_URL}{endpoint}"
+    """GET with pagination, returns combined list or single object. The endpoint is checked (checked_endpoint); the addresses of the next pages are Canvas's own."""
+    url = f"{BASE_URL}{checked_endpoint(endpoint)}"
     headers = {"Authorization": f"Bearer {TOKEN}"}
     all_results = []
     pages = 0
@@ -508,7 +578,6 @@ COMMENT_TEXT_MAX = 300
 BRIEF_COMMENTS_MAX = 5
 BRIEF_RUBRIC_MAX = 8
 BRIEF_LINKS_MAX = 5
-_DIGITS = re.compile(r'\d{1,20}')
 
 
 def utc_now():
@@ -728,10 +797,10 @@ def week_status(c, params):
     """The window, the week and the week's assignments with the student's status on each (see the block comment above for what it costs)."""
     global TIMEOUT
     uid = str(params.get('user_id') or '')
-    if not _DIGITS.fullmatch(uid):
+    if not _ID.fullmatch(uid):
         return {"error": "user_id required (the Canvas user id, digits; bound automatically for students)"}
     wanted = str(params.get('assignment_id') or '')
-    if wanted and not _DIGITS.fullmatch(wanted):
+    if wanted and not _ID.fullmatch(wanted):
         return {"error": "assignment_id must be a Canvas assignment id (digits)"}
     now = parse_utc(params.get('now')) or utc_now()
     try:
@@ -743,6 +812,10 @@ def week_status(c, params):
 
     listed = api_get(f"/courses/{c}/assignments", {"per_page": 100, "order_by": "due_at"})
     listed = [a for a in listed if isinstance(a, dict)] if isinstance(listed, list) else []
+    student = student_view()
+    at = utc_ms(now)                                       # the student's rule is judged at the same instant as every date of this answer
+    if student:
+        listed = [a for a in listed if why_assignment_hidden(a) is None]          # an unpublished assignment is not in the week, not even when the caller names its id
     primary = pick_primary(listed, wanted, now)
     since, until = week_window(primary, now)
     chosen = week_assignments(listed, primary, now)
@@ -753,11 +826,12 @@ def week_status(c, params):
     primary_id = str(primary.get('id'))
     if not budget.expired():
         try:
-            answer["week"] = find_week(api_get(f"/courses/{c}/modules", {"include[]": "items", "per_page": 50}), primary_id)
+            modules = api_get(f"/courses/{c}/modules", {"include[]": "items", "per_page": 50})
+            answer["week"] = find_week(student_modules(modules, at) if student else modules, primary_id)      # (no listing of files here: the budget has no request to spare)
         except Exception:
             pass                                          # the week's name is a nicety: the assignments are what the interview needs
     detail = dict(primary)
-    if not budget.expired():
+    if not budget.expired() and not (student and unlock_ahead_ms(primary, at) is not None):         # the detail of an assignment that has not opened is not asked for: its text is not for a student
         try:
             fetched = api_get(f"/courses/{c}/assignments/{primary_id}", {"include[]": "rubric"})
             if isinstance(fetched, dict):
@@ -777,6 +851,7 @@ def week_status(c, params):
             except Exception:
                 sub = None
         status, line = submission_status(source, sub, now)
+        not_open = student and unlock_ahead_ms(a, at) is not None          # listed, as in Canvas, but its text is not a student's yet: no requirements
         due_iso = (sub or {}).get('cached_due_date') or a.get('due_at')
         answer["assignments"].append({
             "id": aid,
@@ -786,7 +861,7 @@ def week_status(c, params):
             "dueAt": due_iso or None,
             "due": due_text(due_iso, now),
             "points": a.get('points_possible') if isinstance(a.get('points_possible'), (int, float)) and not isinstance(a.get('points_possible'), bool) else None,
-            "requirements": plain(source.get('description'), PRIMARY_REQUIREMENTS_MAX if is_primary else OTHER_REQUIREMENTS_MAX),
+            "requirements": '' if not_open else plain(source.get('description'), PRIMARY_REQUIREMENTS_MAX if is_primary else OTHER_REQUIREMENTS_MAX),
             "status": status,
             "statusLine": plain(line, 300),
             "submission": brief_submission(source, sub, PRIMARY_TEXT_MAX if is_primary else OTHER_TEXT_MAX) if sub is not None else None,
@@ -797,7 +872,7 @@ def week_status(c, params):
 def user_contact(c, uid):
     """{name, email, login_id} of one Canvas user, any of them None: the profile first (primary_email, login_id), then the course's user record
     (email), whichever Canvas allows this token to read. It is what the Piazza lookup identifies a student by."""
-    if not _DIGITS.fullmatch(str(uid or '')):
+    if not _ID.fullmatch(str(uid or '')):
         return {"error": "user_id required (the Canvas user id, digits; bound automatically for students)"}
     name = email = login = None
     try:
@@ -817,22 +892,351 @@ def user_contact(c, uid):
     return {"name": clean(name, 120), "email": clean(email, 200), "login_id": clean(login, 200)}
 
 
+# ── What a student could open in Canvas: the course's files (docs/SECURITY.md, "Opening documents, the view and the course library") ──────────────
+#
+# The token this script carries is the instructor's, and the instructor sees every file of the course, those that Canvas hides from students too (hidden,
+# locked, not released yet, no longer offered). `files` and `file_content` therefore apply the student's rule themselves, in every call that is not the admin chat's.
+# The rule is the one of `whySkipped` in src/docs/canvas-files.ts, which the viewer's Canvas path (src/docs/canvas-source.ts) uses. This script cannot import
+# TypeScript, so it is written twice, and test_canvas_api_student_files.py runs this copy on canvas_file_visibility_cases.json, the table the TypeScript one was
+# checked on. Only the visibility part is copied: the viewer's own size limits (20 MB, PDF and Office files) are not a student's rule.
+#
+# Who is held to it: container/agent-runner/src/access.ts decides everything by NANOCLAW_IS_MAIN (the host sets it from the group's folder; only the text "1" is a
+# yes). The MCP server hands its environment on to this script, so a student's chat, a task (the host's own patrol and bootstrap included), a voice call's tool host
+# and the lookups of start_mock_interview in a student's container all run it as NOT the admin chat. So does a call with no such variable at all: an operator's
+# shell, the course-status container (its file is read by every student's agent), a test. The instructor's whole view is asked for, never the default.
+
+STUDENTS_CANNOT_OPEN_FILE = "This file is not available to students."
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+# the ISO 8601 forms Canvas sends ('2026-12-01T08:00:00Z') and the others of that kind that JavaScript's Date.parse reads the same way: a day alone (UTC
+# midnight), seconds left out, any number of fraction digits, 'Z' or an offset with its minutes ('-08:00', '+0530'). Node's older parser reads more (a month
+# alone, 'Nov 7, 2026', a lower-case t or z, 31 April as 1 May): Canvas sends none of those, and such a date is no limit here.
+_CANVAS_INSTANT = re.compile(r'(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-]\d{2}:?\d{2})?)?', re.ASCII)
+
+
+def now_ms():
+    """Milliseconds since the epoch, now (the clock the files' release dates are compared with)."""
+    return int(time.time() * 1000)
+
+
+def instant_ms(value):
+    """A Canvas date as milliseconds since the epoch, read as JavaScript's Date.parse reads it (the offset counts, a fraction is cut to milliseconds). A datetime
+    with no offset is read as UTC (JavaScript says local time; Canvas always sends 'Z', so it does not arise). None when `value` is not a string or does not read
+    as a date: such a date is no limit, as in the viewer's rule (`parse_utc` is not used: it throws the offset away)."""
+    if not isinstance(value, str):
+        return None
+    found = _CANVAS_INSTANT.fullmatch(value)
+    if not found:
+        return None
+    year, month, day, hour, minute, second, fraction, zone = found.groups()
+    try:
+        moment = datetime(int(year), int(month), int(day), int(hour or 0), int(minute or 0), int(second or 0), tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    ms = (moment - _EPOCH) // timedelta(milliseconds=1) + int((fraction or '0')[:3].ljust(3, '0'))
+    if zone and zone != 'Z':
+        digits = zone[1:].replace(':', '')
+        hours, minutes = int(digits[:2]), int(digits[2:])
+        if hours > 23 or minutes > 59:
+            return None
+        ms -= (-1 if zone[0] == '-' else 1) * (hours * 60 + minutes) * 60000
+    return ms
+
+
+def utc_day(ms):
+    try:
+        return (_EPOCH + timedelta(milliseconds=ms)).strftime('%Y-%m-%d')
+    except (OverflowError, ValueError):
+        return '?'
+
+
+def why_not_for_students(item, at_ms=None):
+    """Why a student could not open this file in Canvas, in the words of `whySkipped` (src/docs/canvas-files.ts), or None when they could. `item` is a file as
+    Canvas describes it (the listing's, or GET /courses/<id>/files/<id>'s): a flag counts only when it is exactly true, a date only when it reads as one, the
+    release date is checked before the withdrawal date, and a file that is released at this very moment is open and one that is withdrawn at this very moment is
+    not. Anything that is not a record is not a file a student may have. The words are for tests and logs: no answer to a model quotes them."""
+    if not isinstance(item, dict):
+        return 'not a file record'
+    at = now_ms() if at_ms is None else at_ms
+    if item.get('hidden') is True or item.get('hidden_for_user') is True or item.get('locked') is True or item.get('locked_for_user') is True:
+        return 'hidden or locked for students'
+    unlock = instant_ms(item.get('unlock_at'))
+    if unlock is not None and unlock > at:
+        return 'not released to students yet (unlocks %s)' % utc_day(unlock)
+    lock = instant_ms(item.get('lock_at'))
+    if lock is not None and lock <= at:
+        return 'no longer available to students (locked %s)' % utc_day(lock)
+    return None
+
+
+def students_may_open(item, at_ms=None):
+    return why_not_for_students(item, at_ms) is None
+
+
+def student_view():
+    """True unless this call is the admin chat's: NANOCLAW_IS_MAIN is exactly "1" there (access.ts `accessFlagsFromEnv`), and in no other case."""
+    return os.environ.get('NANOCLAW_IS_MAIN') != '1'
+
+
+def get_or_none(endpoint, params=None):
+    """api_get, or None when Canvas does not know the thing in this course (404): for a call that asks for ONE thing by an id the caller gave, where "Canvas does not
+    know it" and "a student may not have it" are answered in the same words. Any other failure (401, 403, 500, a timeout) is raised, as it always was."""
+    try:
+        return api_get(endpoint, params)
+    except requests.exceptions.HTTPError as err:
+        if err.response is not None and err.response.status_code == 404:      # (a response is falsy when its status is an error: compare with None)
+            return None
+        raise
+
+
+def student_file_meta(course, file_id):
+    """The metadata of one course file as a student could have it, or None: Canvas does not know the file in this course (it is asked of the course, not of
+    /files/<id>, which answers for any file the token can read: another course's, a person's own), or it is one Canvas hides from students. Reads the
+    metadata and nothing else of the file."""
+    meta = get_or_none(f"/courses/{course}/files/{file_id}")
+    return meta if students_may_open(meta) else None
+
+
+# ── What a student could see of the rest of the course: assignments, pages, discussions, announcements, modules (docs/SECURITY.md, "Opening documents, ...") ──────
+#
+# The instructor's token also sees what Canvas keeps from students: assignments, pages and modules that are not published, an assignment before its unlock date, a topic whose
+# posting is delayed, a page or a topic that is only for some students or sections. Every action below that answers with such things applies the student's rule itself, in every
+# call that is not the admin chat's (student_view(): the key of `files`), and in the same way: a thing a student could not see is left out of a listing whole (no name, no
+# count: a module's item count is worked out from the items that are left), and one asked for by an id answers with ONE plain sentence, the same whether it is hidden or
+# Canvas does not know it (404), so that an id says nothing about what is behind it. Only a 404 is "does not know": any other failure is raised, as it always was. The admin
+# chat is answered exactly as before (the same requests, the same rows). A flag counts only when it is exactly what the rule says (as for files), and a date only when it reads as
+# one. The rule, per kind:
+#   assignment  HIDDEN (not listed, not opened by id, not in my_grades or week_status): published is false, or workflow_state is something but 'published', or
+#               only_visible_to_overrides is true (it is for some students or sections, and the tool cannot tell whether this one is among them: it is left out for all).
+#               LISTED BUT NOT OPENED: unlock_at still ahead. Canvas lists such an assignment (title, dates) and shows no text, and the owner decided (2026-11-08) that a student's
+#               TAi has no text either: the listings keep it, assignment_detail answers it WITHOUT its words and with a note (ASSIGNMENT_TEXT_FIELDS: withheld, never an
+#               {"error"}, so that the mock interview and the weekly brief go on quietly without the spec), and week_status keeps it in the week (its unlock date has always
+#               played no part in which assignment is the week's: test_week_status.py) with no requirements. lock_at passed hides nothing: a student still reads the assignment.
+#   page        HIDDEN: published is false, hide_from_students is true, workflow_state is unpublished or deleted, publish_at ahead.
+#   topic       (a discussion or an announcement: one endpoint) HIDDEN: published is false, workflow_state is unpublished or deleted, delayed_post_at ahead (or workflow_state
+#               post_delayed with no date), is_section_specific is true, or the assignment it carries (a graded discussion) is hidden. `locked` and lock_at hide NOTHING: a
+#               closed topic is read-only for a student, not invisible.
+#   module      HIDDEN: published is false, workflow_state is unpublished or deleted, unlock_at ahead (Canvas shows a student the locked module's name; this tool does not: it
+#               cannot tell its items apart from a student's, so the module goes whole).
+#   module item HIDDEN: published is false; a File item whose file a student could not open (`students_may_open`: the rule of `files`, from one listing of the course's files
+#               that is asked for only when a File item has to be judged: OpenableFiles).
+# `locked_for_user` and the like are computed for the TOKEN's user, the instructor, so they say nothing about a student and are not read (the student's assignment_detail drops
+# them: STUDENT_ASSIGNMENT_FIELDS). NOT done here, and said so in docs/SECURITY.md: content that sits in a module Canvas locks for a student (a date, prerequisites, sequential
+# progress) but whose own flags say nothing; the sections and overrides a student is in; whether a grade has been posted.
+
+NOT_FOR_STUDENTS = {
+    'assignment': "This assignment is not available to students.",
+    'page': "This page is not available to students.",
+    'discussion': "This discussion or announcement is not available to students.",
+    'module': "This module is not available to students.",
+}
+REPLIES_AFTER_POSTING = "This discussion shows its replies only to students who have posted in it, and this tool cannot tell whether this student has: they can read them in Canvas."
+# The fields of an assignment that a student's assignment_detail keeps: Canvas's own object for a student, less what is the instructor's (the grading counters, the download
+# address of all submissions, overrides, the visibility list, LTI parameters, moderation settings) and what Canvas computes for the token's user (locked_for_user, lock_info,
+# can_submit). Written from Canvas's documentation of the object: a field that is not listed is not passed on. due_pacific, due_local, due_relative and rubric_criteria are
+# added by this script afterwards and are not in the list.
+STUDENT_ASSIGNMENT_FIELDS = frozenset((
+    'id', 'name', 'description', 'created_at', 'updated_at', 'due_at', 'unlock_at', 'lock_at', 'course_id', 'html_url', 'assignment_group_id', 'position', 'published',
+    'workflow_state', 'points_possible', 'grading_type', 'grading_standard_id', 'submission_types', 'allowed_extensions', 'allowed_attempts', 'max_name_length',
+    'due_date_required', 'omit_from_final_grade', 'hide_in_gradebook', 'peer_reviews', 'automatic_peer_reviews', 'peer_review_count', 'peer_reviews_assign_at',
+    'intra_group_peer_reviews', 'anonymous_peer_reviews', 'anonymous_submissions', 'group_category_id', 'grade_group_students_individually', 'is_quiz_assignment', 'quiz_id',
+    'discussion_topic', 'external_tool_tag_attributes', 'turnitin_enabled', 'vericite_enabled', 'turnitin_settings', 'use_rubric_for_grading', 'rubric_settings', 'rubric',
+    'freeze_on_copy', 'frozen', 'frozen_attributes', 'require_lockdown_browser', 'important_dates',
+))
+
+
+def utc_ms(moment):
+    """Milliseconds since the epoch of a naive UTC datetime."""
+    return (moment - datetime(1970, 1, 1)) // timedelta(milliseconds=1)
+
+
+def pacific_of_ms(ms):
+    """'Mon Nov 9, 9:00 AM PST' for a moment given in milliseconds since the epoch; None when it is out of range."""
+    try:
+        return pacific(iso_z((_EPOCH + timedelta(milliseconds=ms)).replace(tzinfo=None)))
+    except (OverflowError, ValueError):
+        return None
+
+
+def unlock_ahead_ms(item, at_ms):
+    """When `item` opens, in milliseconds, while that is still ahead of `at_ms` (a moment that is exactly now is open: as for files); None when it is open already, has no
+    unlock date, or has one that does not read as a date."""
+    unlock = instant_ms(item.get('unlock_at'))
+    return unlock if unlock is not None and unlock > at_ms else None
+
+
+def why_assignment_hidden(item):
+    """Why a student could not see this assignment in Canvas at all, or None when they could (they may still not be able to open it yet: why_assignment_locked). The words
+    are for tests and logs: no answer to a model quotes them."""
+    if not isinstance(item, dict):
+        return 'not an assignment record'
+    state = item.get('workflow_state')
+    if item.get('published') is False or (isinstance(state, str) and state != 'published'):
+        return 'not published'
+    if item.get('only_visible_to_overrides') is True:
+        return 'assigned to some students or sections only'
+    return None
+
+
+def why_assignment_locked(item, at_ms):
+    """Why a student could see this (visible) assignment in a list but not read it yet, or None."""
+    unlock = unlock_ahead_ms(item, at_ms)
+    return None if unlock is None else 'not open yet (unlocks %s)' % utc_day(unlock)
+
+
+def sentence_for_assignment(item):
+    """The one sentence a student's call is given for an assignment it asked for by id that a student could not see in Canvas at all: the same for every reason it is not
+    there for them and for an id Canvas does not know (`item` None). None when a student could see it (it may not be open yet: not_open_note)."""
+    return NOT_FOR_STUDENTS['assignment'] if why_assignment_hidden(item) is not None else None
+
+
+# What a student is NOT given of an assignment that has not opened yet (`unlock_at` ahead): its words. Canvas lists such an assignment with its dates and shows no text, and the
+# owner decided on 2026-11-08 that a student's TAi does not have the text either. It is WITHHELD, not refused: the answer is the assignment without these fields and with a note,
+# never an {"error"}, because start_mock_interview prints every {"error"} a lookup answered under "Context errors", and the interview and the weekly brief must go on without the
+# spec, quietly (an empty description is a spec that is simply absent: `String(detail.description || '')`, the brief leaves out an empty `requirements`).
+ASSIGNMENT_TEXT_FIELDS = ('description', 'rubric', 'rubric_settings', 'discussion_topic', 'external_tool_tag_attributes')
+
+
+def not_open_note(item, at_ms):
+    """The note that goes into the assignment_detail of an assignment that has not opened yet, or None when it has (or has no unlock date that reads as one)."""
+    unlock = unlock_ahead_ms(item, at_ms)
+    if unlock is None:
+        return None
+    when = pacific_of_ms(unlock)
+    return 'Not open to students yet' + (': it unlocks %s' % when if when else '') + '. Its description and rubric are not shown until then.'
+
+
+def why_page_hidden(item, at_ms):
+    """Why a student could not see this page in Canvas, or None when they could."""
+    if not isinstance(item, dict):
+        return 'not a page record'
+    if item.get('published') is False or item.get('hide_from_students') is True or item.get('workflow_state') in ('unpublished', 'deleted'):
+        return 'not published'
+    publish = instant_ms(item.get('publish_at'))
+    if publish is not None and publish > at_ms:
+        return 'to be published %s' % utc_day(publish)
+    return None
+
+
+def why_topic_hidden(item, at_ms):
+    """Why a student could not see this discussion topic or announcement in Canvas, or None when they could. A topic that is closed (`locked`, lock_at passed) is NOT
+    hidden: a student reads it and cannot reply. `item` is a topic as Canvas describes it (the listing's or GET .../discussion_topics/<id>'s)."""
+    if not isinstance(item, dict):
+        return 'not a discussion record'
+    state = item.get('workflow_state')
+    if item.get('published') is False or state in ('unpublished', 'deleted'):
+        return 'not published'
+    delay = instant_ms(item.get('delayed_post_at'))
+    if delay is not None:
+        if delay > at_ms:                                   # a date that has passed counts over a state that has not caught up with it yet
+            return 'posting is delayed until %s' % utc_day(delay)
+    elif state == 'post_delayed':
+        return 'posting is delayed'
+    if item.get('is_section_specific') is True:
+        return 'for some sections only'
+    graded = item.get('assignment')
+    if isinstance(graded, dict) and why_assignment_hidden(graded) is not None:
+        return 'its assignment is not available to students'
+    return None
+
+
+def why_module_hidden(item, at_ms):
+    """Why this tool does not show a student this module, or None."""
+    if not isinstance(item, dict):
+        return 'not a module record'
+    if item.get('published') is False or item.get('workflow_state') in ('unpublished', 'deleted'):
+        return 'not published'
+    unlock = unlock_ahead_ms(item, at_ms)
+    return None if unlock is None else 'locked until %s' % utc_day(unlock)
+
+
+class OpenableFiles:
+    """The ids of the course files a student could open (`students_may_open`), from ONE listing of the course's files that is asked for the first time a File item has to
+    be judged: a module with no File item costs no request. A listing that is not a list leaves no file open, and a file that is not in the listing (past the last page
+    api_get reads, deleted) is not open either: a File item is hidden, never shown on a guess."""
+
+    def __init__(self, course, at_ms):
+        self.course, self.at_ms, self.ids = course, at_ms, None
+
+    def __contains__(self, file_id):
+        if self.ids is None:
+            listing = api_get(f"/courses/{self.course}/files", {"per_page": 100, "sort": "updated_at", "order": "desc"})
+            self.ids = {str(f.get('id')) for f in listing if students_may_open(f, self.at_ms)} if isinstance(listing, list) else set()
+        return str(file_id) in self.ids
+
+
+def why_item_hidden(item, files=None):
+    """Why this tool does not show a student this module item, or None. `files` (OpenableFiles) judges a File item; without it a File item is judged like any other."""
+    if not isinstance(item, dict):
+        return 'not an item record'
+    if item.get('published') is False:
+        return 'not published'
+    if files is not None and item.get('type') == 'File' and item.get('content_id') not in files:
+        return 'a file a student could not open'
+    return None
+
+
+def student_modules(modules, at_ms, files=None):
+    """The modules a student could be shown, as copies: `items` holds only the items a student could see, and `items_count` is their number (None when Canvas left the items
+    out of the listing: the count it gives includes the items that are hidden). `files` as for why_item_hidden."""
+    shown = []
+    for module in modules:
+        if why_module_hidden(module, at_ms) is not None:
+            continue
+        inline = module.get('items')
+        if isinstance(inline, list):
+            items = [i for i in inline if why_item_hidden(i, files) is None]
+            shown.append(dict(module, items=items, items_count=len(items)))
+        else:
+            shown.append(dict(module, items=[], items_count=None))
+    return shown
+
+
+def visible_to_students(items, why, *args):
+    """The items of a listing as the admin chat gets them (all of them); in every other call only those for which why(item, *args) finds nothing to say."""
+    return [item for item in items if why(item, *args) is None] if student_view() else items
+
+
 # ── Action dispatcher ─────────────────────────────────────────────────────────
 
 def handle(req):
+    """The answer to one request: what the action returns, or {"error": <one sentence>} for a value that may not go into a request path, whoever asks (the admin chat
+    too: nothing was asked of Canvas)."""
+    try:
+        return _dispatch(req)
+    except Refused as refusal:
+        return {"error": str(refusal)}
+
+
+def _dispatch(req):
     action = req.get("action", "")
     params = req.get("params", {})
     c = COURSE_ID
 
     if action == "assignments":
         data = api_get(f"/courses/{c}/assignments", {"per_page": 50, "order_by": "due_at"})
+        data = visible_to_students(data, why_assignment_hidden)           # an unpublished assignment is left out, with no name and no count
         return [fmt_assignment(a) for a in data]
 
     elif action == "assignment_detail":
         aid = params.get("assignment_id", "")
         if not aid:
             return {"error": "assignment_id required"}
-        data = api_get(f"/courses/{c}/assignments/{aid}", {"include[]": "rubric"})
+        aid = path_segment("assignment_id", aid)
+        if student_view():
+            data = get_or_none(f"/courses/{c}/assignments/{aid}", {"include[]": "rubric"})
+            at = now_ms()
+            sentence = sentence_for_assignment(data)
+            if sentence:                                                  # unpublished, for other students, or not in this course: one sentence, and nothing of the assignment
+                return {"error": sentence}
+            note = not_open_note(data, at)
+            data = {key: value for key, value in data.items() if key in STUDENT_ASSIGNMENT_FIELDS}
+            if why_topic_hidden(data.get('discussion_topic'), at) is not None:            # a graded discussion carries its topic: it goes when a student could not see that topic
+                data.pop('discussion_topic', None)
+            if note:                                                      # listed, as in Canvas, but not open: its words are withheld and the answer says so (no error: see ASSIGNMENT_TEXT_FIELDS)
+                data = {key: value for key, value in data.items() if key not in ASSIGNMENT_TEXT_FIELDS}
+                data['note'] = note
+        else:
+            data = api_get(f"/courses/{c}/assignments/{aid}", {"include[]": "rubric"})
         # Canvas's object has only the UTC due date, which a model reads as "5 pm" for a deadline at 9 in the morning: it gets the fields every list has
         data.update(due_fields(data.get("due_at")))
         # Extract rubric if present, attach as top-level fields
@@ -853,6 +1257,7 @@ def handle(req):
         aid = params.get("assignment_id", "")
         if not aid:
             return {"error": "assignment_id required"}
+        aid = path_segment("assignment_id", aid)
         data = api_get(f"/courses/{c}/assignments/{aid}/submissions", {"per_page": 50, "include[]": "user"})
         return [fmt_submission(s) for s in data]
 
@@ -861,6 +1266,7 @@ def handle(req):
         uid = params.get("user_id", "")
         if not aid or not uid:
             return {"error": "assignment_id and user_id required"}
+        aid, uid = path_segment("assignment_id", aid), path_segment("user_id", uid)      # the host binds user_id, and only a path that is exactly this one keeps it bound
         sub = api_get(f"/courses/{c}/assignments/{aid}/submissions/{uid}",
                       {"include[]": ["submission_history", "submission_comments", "rubric_assessment"]})
         result = extract_submission_content(sub)
@@ -887,8 +1293,10 @@ def handle(req):
         uid = params.get("user_id", "")
         if not uid:
             return {"error": "user_id required (bound automatically for students)"}
+        uid = path_segment("user_id", uid)             # before the first request: a refused id must not cost the assignment list, nor turn every row into "Could not fetch"
         # Fetch all submissions for this single student
         subs = api_get(f"/courses/{c}/assignments", {"per_page": 50, "order_by": "due_at"})
+        subs = visible_to_students(subs, why_assignment_hidden)           # no row, and no request, for an assignment a student cannot see (its name and due date would be the leak)
         results = []
         for a in subs:
             aid = a.get("id")
@@ -919,31 +1327,52 @@ def handle(req):
 
     elif action == "announcements":
         data = api_get(f"/courses/{c}/discussion_topics", {"only_announcements": "true", "per_page": 20})
+        data = visible_to_students(data, why_topic_hidden, now_ms())      # one that is not posted yet is not an announcement to a student
         return [{"id": a["id"], "title": a.get("title"), "message": strip_html(a.get("message") or "")[:500], "posted_at": a.get("posted_at")} for a in data]
 
     elif action == "discussions":
         data = api_get(f"/courses/{c}/discussion_topics", {"per_page": 20})
+        data = visible_to_students(data, why_topic_hidden, now_ms())
         return [{"id": d["id"], "title": d.get("title"), "message": strip_html(d.get("message") or "")[:300], "posted_at": d.get("posted_at")} for d in data]
 
     elif action == "discussion_detail":
         tid = params.get("topic_id", "")
         if not tid:
             return {"error": "topic_id required"}
+        tid = path_segment("topic_id", tid)
+        if student_view():
+            topic = get_or_none(f"/courses/{c}/discussion_topics/{tid}")
+            if why_topic_hidden(topic, now_ms()) is not None:             # an announcement is a topic too: by its id it is answered the same way
+                return {"error": NOT_FOR_STUDENTS['discussion']}
+            return topic
         return api_get(f"/courses/{c}/discussion_topics/{tid}")
 
     elif action == "upcoming":
         data = api_get(f"/courses/{c}/assignments", {"bucket": "upcoming", "per_page": 20, "order_by": "due_at"})
+        data = visible_to_students(data, why_assignment_hidden)
         return [fmt_assignment(a) for a in data]
 
     elif action == "modules":
         data = api_get(f"/courses/{c}/modules", {"include[]": "items", "per_page": 50})
+        if student_view():
+            at = now_ms()
+            data = student_modules(data, at, OpenableFiles(c, at))        # unpublished and locked modules, unpublished items and files a student cannot open are left out
         return [{"id": m["id"], "name": m.get("name"), "position": m.get("position"), "items_count": m.get("items_count"), "items": [{"title": i.get("title"), "type": i.get("type"), "content_id": i.get("content_id"), "external_url": i.get("external_url"), "html_url": i.get("html_url"), "page_url": i.get("page_url")} for i in (m.get("items") or [])[:20]]} for m in data]
 
     elif action == "module_items":
         mid = params.get("module_id", "")
         if not mid:
             return {"error": "module_id required"}
-        data = api_get(f"/courses/{c}/modules/{mid}/items", {"per_page": 50})
+        mid = path_segment("module_id", mid)
+        if student_view():
+            at = now_ms()
+            if why_module_hidden(get_or_none(f"/courses/{c}/modules/{mid}"), at) is not None:          # the module is judged first: an unpublished or locked one lists nothing
+                return {"error": NOT_FOR_STUDENTS['module']}
+            data = api_get(f"/courses/{c}/modules/{mid}/items", {"per_page": 50})
+            files = OpenableFiles(c, at)
+            data = [i for i in data if why_item_hidden(i, files) is None]
+        else:
+            data = api_get(f"/courses/{c}/modules/{mid}/items", {"per_page": 50})
         return [{"id": i.get("id"), "title": i.get("title"), "type": i.get("type"), "content_id": i.get("content_id"), "external_url": i.get("external_url"), "html_url": i.get("html_url"), "page_url": i.get("page_url")} for i in data]
 
     elif action == "users":
@@ -952,37 +1381,64 @@ def handle(req):
 
     elif action == "pages":
         data = api_get(f"/courses/{c}/pages", {"per_page": 50, "sort": "title"})
+        data = visible_to_students(data, why_page_hidden, now_ms())       # an unpublished page is left out, with no title and no count
         return [{"url": p.get("url"), "title": p.get("title"), "updated_at": p.get("updated_at"), "published": p.get("published")} for p in data]
 
     elif action == "page_detail":
         page_url = params.get("page_url", "")
         if not page_url:
             return {"error": "page_url required (the url slug, not full URL)"}
-        data = api_get(f"/courses/{c}/pages/{page_url}")
+        page_url = path_segment("page_url", page_url)
+        if student_view():
+            data = get_or_none(f"/courses/{c}/pages/{page_url}")
+            if why_page_hidden(data, now_ms()) is not None:               # hidden, or not in this course: one sentence, and nothing of the page
+                return {"error": NOT_FOR_STUDENTS['page']}
+        else:
+            data = api_get(f"/courses/{c}/pages/{page_url}")
         body_text = strip_html(data.get("body") or "")
         return {"url": data.get("url"), "title": data.get("title"), "body": body_text[:4000], "updated_at": data.get("updated_at")}
 
     elif action == "syllabus":
+        # the same body for everyone who can open the course: nothing in it is kept from a student, so there is no student's rule here (its links are tags, which strip_html drops)
         data = api_get(f"/courses/{c}", {"include[]": "syllabus_body"})
         body_text = strip_html(data.get("syllabus_body") or "")
         return {"course_name": data.get("name"), "syllabus": body_text[:6000]}
 
     elif action == "files":
         data = api_get(f"/courses/{c}/files", {"per_page": 50, "sort": "updated_at", "order": "desc"})
+        if student_view():
+            at = now_ms()
+            data = [f for f in data if students_may_open(f, at)]          # a file Canvas hides from students is left out whole: not its name, and no count of them
         return [{"id": f.get("id"), "display_name": f.get("display_name"), "filename": f.get("filename"), "size": f.get("size"), "content_type": f.get("content-type"), "updated_at": f.get("updated_at"), "url": f.get("url")} for f in data]
 
     elif action == "discussion_entries":
         tid = params.get("topic_id", "")
         if not tid:
             return {"error": "topic_id required"}
+        tid = path_segment("topic_id", tid)
+        anonymous = False
+        if student_view():
+            topic = get_or_none(f"/courses/{c}/discussion_topics/{tid}")                  # the topic is judged first: its replies are no more visible than it is
+            if why_topic_hidden(topic, now_ms()) is not None:
+                return {"error": NOT_FOR_STUDENTS['discussion']}
+            if topic.get('require_initial_post') is True:                                 # Canvas shows the replies to a student who has posted: the token does not say who that is
+                return {"error": REPLIES_AFTER_POSTING}
+            anonymous = bool(topic.get('anonymous_state'))                                # the authors of an anonymous discussion are hidden from students
         data = api_get(f"/courses/{c}/discussion_topics/{tid}/entries", {"per_page": 50})
-        return [{"id": e.get("id"), "user_id": e.get("user_id"), "user_name": (e.get("user") or {}).get("display_name"), "message": strip_html(e.get("message") or "")[:500], "created_at": e.get("created_at")} for e in data]
+        return [{"id": e.get("id"), "user_id": None if anonymous else e.get("user_id"), "user_name": None if anonymous else (e.get("user") or {}).get("display_name"), "message": strip_html(e.get("message") or "")[:500], "created_at": e.get("created_at")} for e in data]
 
     elif action == "file_content":
         file_id = params.get("file_id", "")
         if not file_id:
             return {"error": "file_id required (get from 'files' action)"}
-        file_meta = api_get(f"/files/{file_id}")
+        file_id = path_segment("file_id", file_id)                    # for every container, the admin chat's too: a model's text never changes which endpoint is asked
+        if student_view():
+            # judged on the metadata alone, before the name, the address or a byte of the file is read; one sentence for every reason, and for a file that is not in this course
+            file_meta = student_file_meta(c, file_id)
+            if file_meta is None:
+                return {"error": STUDENTS_CANNOT_OPEN_FILE}
+        else:
+            file_meta = api_get(f"/files/{file_id}")
         display_name = file_meta.get("display_name", "")
         content_type = file_meta.get("content-type", "")
         size = file_meta.get("size", 0)

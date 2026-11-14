@@ -36,10 +36,24 @@ export interface VisionLaunch {
 
 /**
  * The picture tool for one run, or null for none. Only a student's own run gets it: not the admin's chat (it has no student's uploads folder), not a
- * scheduled task (the patrol and the grade bootstrap never look at pictures, and the host's own tasks are not held to the tools' limits), and never the voice tool
- * host, which is started by another function that does not call this (src/container-runner.ts spawnToolHost).
+ * scheduled task (the patrol and the grade bootstrap never look at pictures, and the host's own tasks are not held to the tools' limits), and not the voice tool
+ * host, which spawnToolHost (src/container-runner.ts) starts with `visionForCall` below.
  */
 export function visionFor(input: { isMain: boolean; isScheduledTask?: boolean }, env: Record<string, string | undefined> = process.env): VisionLaunch | null {
   if (!visionOn(env) || input.isMain || input.isScheduledTask === true) return null;
   return { model: visionModel(env) };
+}
+
+/**
+ * Whether a voice call may look at a picture the student attached: TAI_VISION on and TAI_CALL_VISION not "0". On since the owner's decision of 2026-11-07 (docs/RUN_CARDS.md): the picture then goes to z.ai
+ * as it does from the page's chat, and `TAI_CALL_VISION=0` takes it away from calls alone. ONE switch decides everything a call does about pictures (the function lists, the prompt's words, the words that
+ * name a picture in the call's message, the tool host's start), so none of them can promise what another does not have.
+ */
+export function callVisionOn(env: Record<string, string | undefined> = process.env): boolean {
+  return visionOn(env) && (env.TAI_CALL_VISION ?? '') !== '0';
+}
+
+/** The picture tool for a voice call's tool host, or null for none: the launch of a student's own chat container, for the same alias, when a call may look at pictures. */
+export function visionForCall(env: Record<string, string | undefined> = process.env): VisionLaunch | null {
+  return callVisionOn(env) ? { model: visionModel(env) } : null;
 }

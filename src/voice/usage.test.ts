@@ -77,7 +77,7 @@ describe('the configuration', () => {
       think: 'relay',
       listenModel: 'flux-general-en',
       voiceChat: 'flux-hannah-en',
-      voiceInterview: 'flux-miles-en',
+      voiceInterview: 'aura-2-mars-en',
       fallbackVoiceChat: 'aura-2-thalia-en',
       fallbackVoiceInterview: 'aura-2-mars-en',
       sessionMin: 30,

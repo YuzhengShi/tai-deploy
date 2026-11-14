@@ -12,7 +12,7 @@
  *   TAI_VOICE_DG_THINK_MODEL       the managed model for TAI_VOICE_THINK=deepgram (default gpt-4o-mini)
  *   TAI_VOICE_LISTEN_MODEL         speech-to-text model (default flux-general-en; a Settings error about it falls back to nova-3 once)
  *   TAI_VOICE_VOICE_CHAT           the conversational voice (default flux-hannah-en: a Flux TTS voice; aura-2-thalia-en is the fallback)
- *   TAI_VOICE_VOICE_INTERVIEW      the interviewer's voice (default flux-miles-en; aura-2-mars-en is the fallback)
+ *   TAI_VOICE_VOICE_INTERVIEW      the interviewer's voice (default aura-2-mars-en: flux-miles-en, the default until 2026-11-06, wandered in pace from run to run, see settings.ts PACE_OF)
  *   TAI_VOICE_SESSION_MIN          longest call (default 30)
  *   TAI_VOICE_INTERVIEW_MIN        longest mock interview inside a call (default 15)
  *   TAI_VOICE_DAILY_MIN            minutes per student per day (default 45)
@@ -221,7 +221,7 @@ export function loadVoiceConfig(
     deepgramThinkModel: name('TAI_VOICE_DG_THINK_MODEL', 'gpt-4o-mini'),
     listenModel: name('TAI_VOICE_LISTEN_MODEL', 'flux-general-en'),
     voiceChat: name('TAI_VOICE_VOICE_CHAT', 'flux-hannah-en'),
-    voiceInterview: name('TAI_VOICE_VOICE_INTERVIEW', 'flux-miles-en'),
+    voiceInterview: name('TAI_VOICE_VOICE_INTERVIEW', 'aura-2-mars-en'),
     fallbackVoiceChat: 'aura-2-thalia-en',
     fallbackVoiceInterview: 'aura-2-mars-en',
     sessionMin: num('TAI_VOICE_SESSION_MIN', 30, 2, 120),

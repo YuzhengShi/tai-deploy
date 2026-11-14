@@ -1,0 +1,37 @@
+/* askhere.css: the styles of askhere.js (docs/CHAT_OBJECTS.md, docs/RUN_CARDS.md): the small chip above the message box that offers to ask TAi about the words or lines the student selected. It is drawn
+   OVER the conversation (absolute, like the "N new messages" pill beside it), never into the flow: it comes and goes without moving a line of the conversation. The page's tokens only. */
+
+.askchip {
+  position: absolute; z-index: 6; left: 0; bottom: calc(100% + 8px);
+  display: flex; align-items: center; gap: 4px; max-width: min(100%, 580px); min-width: 0; padding: 5px 5px 5px 14px;
+  background: var(--menu); color: var(--text); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--shadow-lg);
+}
+/* the pill that says new messages came sits at the same height, in the middle: the chip rides above it while both are there */
+.dock-inner:has(.jump:not([hidden])) .askchip { bottom: calc(100% + 60px); }
+
+.askchip-words { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 8px; overflow: hidden; font-size: 14px; line-height: 1.4; }
+.askchip-label { flex: none; color: var(--muted); font-size: 12.5px; font-weight: 650; letter-spacing: 0.02em; }
+.askchip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.askchip-go {
+  flex: none; min-height: 34px; padding: 0 14px; background: var(--blue); color: #fff; border: 0; border-radius: 999px;
+  font-size: 14px; font-weight: 650; white-space: nowrap; -webkit-tap-highlight-color: transparent; transition: background 0.15s;
+}
+.askchip-go:hover { background: var(--blue-hover); }
+.askchip-x {
+  flex: none; width: 34px; height: 34px; display: grid; place-items: center; background: transparent; color: var(--muted); border: 0; border-radius: 50%;
+  -webkit-tap-highlight-color: transparent;
+}
+.askchip-x:hover { background: var(--pill); color: var(--text); }
+.askchip-x svg { width: 17px; height: 17px; }
+
+/* a phone: the whole width above the box, and fingers' room */
+@media (max-width: 720px) {
+  .askchip { right: 0; max-width: none; padding-left: 12px; }
+  .askchip-go { min-height: 40px; padding: 0 16px; }
+  .askchip-x { width: 40px; height: 40px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .askchip-go { transition: none; }
+}

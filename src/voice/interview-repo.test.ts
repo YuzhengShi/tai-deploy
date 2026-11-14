@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { MAX_LISTED_FILES, codeFiles, compactFile, compactRepos, compactTree, homeworkOf, lookUpRepo, pickRepo, readFileAnswer } from './interview-repo.js';
+import { MAX_LISTED_FILES, RememberedRepo, assignmentLabelOf, codeFiles, compactFile, compactRepos, compactTree, homeworkOf, lookUpRemembered, lookUpRepo, pickRepo, readFileAnswer, repoMismatch, repoNameOk } from './interview-repo.js';
 import { FakeToolHost } from './tool-host.js';
 
 describe('which homework a name is about', () => {
@@ -190,5 +190,107 @@ describe('the look-up of the student\'s repository for an interview', () => {
   it('still names the repository when its tree cannot be had: the interviewer can browse it itself', async () => {
     const host = await hostWith({ github_query: (args) => ((args as { action: string }).action === 'list_repos' ? { ok: true, text: REPOS } : { ok: false, text: 'timeout' }) });
     expect(await lookUpRepo(host, 'ana-gh', 'HW3 Concurrency')).toEqual({ found: true, repo: 'hw3-concurrency', files: [], more: 0 });
+  });
+});
+
+describe('the repository an earlier interview remembered (docs/STUDENT_STATE.md)', () => {
+  const TREE = JSON.stringify([
+    { name: 'main.go', path: 'main.go', type: 'file', size: 2000 },
+    { name: 'orders.go', path: 'handlers/orders.go', type: 'file', size: 3000 },
+    { name: 'x.go', path: 'vendor/x.go', type: 'file', size: 10 },
+  ]);
+  /** What the container answers for a repository that does not exist: the tool's error wrapped by the server (ipc-mcp-stdio.ts) around github_api.py's own. */
+  const NOT_FOUND = `GitHub query failed: ${JSON.stringify({ error: `GitHub API error: 404 ${JSON.stringify({ message: 'Not Found' })}` })}`;
+  const mem = (repo: string, key = 'repo:hw3'): RememberedRepo => ({ key, repo, text: `Their code for HW3 is in their repository ${repo}.` });
+  const hostWith = async (handlers: FakeToolHost['handlers']): Promise<FakeToolHost> => {
+    const host = new FakeToolHost(handlers);
+    await host.start();
+    return host;
+  };
+
+  it('lists the remembered repository directly, as the account the host bound, with the call lookUpRepo makes for one it chose and no other', async () => {
+    const host = await hostWith({ github_query: () => ({ ok: true, text: TREE }) });
+    const found = await lookUpRemembered(host, 'ana-gh', 'HW3 Concurrency', [mem('hw3-concurrency')]);
+    expect(found).toEqual({ lookup: { found: true, repo: 'hw3-concurrency', files: ['main.go', 'handlers/orders.go'], more: 0 }, used: mem('hw3-concurrency'), gone: [] });
+    expect(host.calls.map((c) => [c.server, c.tool, c.args, c.timeoutMs])).toEqual([['nanoclaw', 'github_query', { action: 'repo_tree', params: { owner: 'ana-gh', repo: 'hw3-concurrency', recursive: 'true' } }, 25_000]]);
+  });
+
+  it('asks nothing when nothing was remembered', async () => {
+    const host = await hostWith({ github_query: () => ({ ok: true, text: TREE }) });
+    expect(await lookUpRemembered(host, 'ana-gh', 'HW3', [])).toEqual({ lookup: null, used: null, gone: [] });
+    expect(host.calls).toHaveLength(0);
+  });
+
+  it('says a repository GitHub says does not exist is gone, and tries the next one the assignment was remembered under', async () => {
+    const answers = [{ ok: false, text: NOT_FOUND }, { ok: true, text: TREE }];
+    const host = await hostWith({ github_query: () => answers.shift()! });
+    const found = await lookUpRemembered(host, 'ana-gh', 'HW3', [mem('old-name', 'repo:hw3'), mem('hw3-concurrency', 'repo:3527597')]);
+    expect(found.gone).toEqual([mem('old-name', 'repo:hw3')]);
+    expect(found.used).toEqual(mem('hw3-concurrency', 'repo:3527597'));
+    expect(found.lookup?.repo).toBe('hw3-concurrency');
+    expect(host.calls.map((c) => (c.args as { params: { repo: string } }).params.repo)).toEqual(['old-name', 'hw3-concurrency']);
+    // every one of them gone: nothing is found, and each is to be forgotten
+    const none = await lookUpRemembered(await hostWith({ github_query: () => ({ ok: false, text: NOT_FOUND }) }), 'ana-gh', 'HW3', [mem('a'), mem('b', 'repo:3527597')]);
+    expect(none).toEqual({ lookup: null, used: null, gone: [mem('a'), mem('b', 'repo:3527597')] });
+  });
+
+  it('takes only GitHub\'s "does not exist" for gone: a timeout, a refusal, a tool that is down or an answer that is no tree still names the repository, with no files, and forgets nothing', async () => {
+    const texts = ['timeout', 'the tool host is not running', `GitHub query failed: ${JSON.stringify({ error: 'GitHub API error: 403 rate limit' })}`, `GitHub query failed: ${JSON.stringify({ error: 'GitHub API error: 500 oops' })}`, 'not json', '{"error": "owner and repo required"}', 'it took 404 ms'];
+    for (const text of texts) {
+      for (const ok of [false, true]) {
+        const host = await hostWith({ github_query: () => ({ ok, text }) });
+        expect(await lookUpRemembered(host, 'ana-gh', 'HW3', [mem('hw3-concurrency')]), `${ok}: ${text}`).toEqual({ lookup: { found: true, repo: 'hw3-concurrency', files: [], more: 0 }, used: mem('hw3-concurrency'), gone: [] });
+      }
+    }
+  });
+
+  it('asks nothing for an account the host has not bound, or one that is not a name', async () => {
+    const host = await hostWith({ github_query: () => ({ ok: true, text: TREE }) });
+    for (const username of [undefined, '', 'a/b', '../x']) expect(await lookUpRemembered(host, username, 'HW3', [mem('hw3-concurrency')]), String(username)).toEqual({ lookup: null, used: null, gone: [] });
+    expect(host.calls).toHaveLength(0);
+  });
+
+  it('never asks GitHub about a stored value that is no repository name (a forged row), or that names another homework than the assignment\'s', async () => {
+    const host = await hostWith({ github_query: () => ({ ok: true, text: TREE }) });
+    const forged = ['..', '.', '.git', '-x', 'a/b', 'owner/name', 'a b', 'x'.repeat(101), '', 'name?x=1', 'name%2e', 'name\n'];
+    expect(await lookUpRemembered(host, 'ana-gh', 'HW3', forged.map((repo) => mem(repo)))).toEqual({ lookup: null, used: null, gone: [] });
+    expect(await lookUpRemembered(host, 'ana-gh', 'HW3 Concurrency', [mem('cs6650-hw2')])).toEqual({ lookup: null, used: null, gone: [] });
+    expect(host.calls).toHaveLength(0);
+    // a name with no homework in it may well be the assignment's
+    expect((await lookUpRemembered(host, 'ana-gh', 'HW3 Concurrency', [mem('cs6650-final')])).used?.repo).toBe('cs6650-final');
+  });
+
+  it('never throws: a tool that throws leaves what was found gone so far, and no repository', async () => {
+    const answers: Array<() => { ok: boolean; text: string }> = [() => ({ ok: false, text: NOT_FOUND }), () => { throw new Error('boom'); }];
+    const host = await hostWith({ github_query: () => answers.shift()!() });
+    const warned: string[] = [];
+    const log = { debug: () => undefined, info: () => undefined, warn: (_o: object, m?: string) => void warned.push(m ?? ''), error: () => undefined };
+    expect(await lookUpRemembered(host, 'ana-gh', 'HW3', [mem('a'), mem('b', 'repo:3527597')], log)).toEqual({ lookup: null, used: null, gone: [mem('a')] });
+    expect(warned).toEqual(['voice: a remembered repository could not be looked up']);
+  });
+});
+
+describe('what may be asked about, and which homework a repository is', () => {
+  it('takes a repository name GitHub could have that starts with a letter or a digit, and nothing else', () => {
+    for (const ok of ['hw3', 'cs6650-hw3', 'a', 'A.b_c-d', '3d', 'x'.repeat(100)]) expect(repoNameOk(ok), ok).toBe(true);
+    for (const bad of ['', '.', '..', '.git', '-x', '_x', 'a/b', 'a b', 'x'.repeat(101), 'a?b', 'a%b', 'a\nb', 'é', undefined, null, 5, {}]) expect(repoNameOk(bad), String(bad)).toBe(false);
+  });
+
+  it('says two names are two homeworks only when both name one and the number (or the letter, when both have one) differs', () => {
+    expect(repoMismatch('Homework 3: Concurrency', 'cs6650-hw2')).toBe(true);
+    expect(repoMismatch('HW3 Concurrency', 'hw3-concurrency')).toBe(false);
+    expect(repoMismatch('Homework 1a: Getting going', 'hw1b')).toBe(true);
+    expect(repoMismatch('Homework 1a: Getting going', 'hw1')).toBe(false);
+    expect(repoMismatch('Homework 1: Getting going', 'hw1b')).toBe(false);
+    // an assignment that is no homework, or a repository that names none, is no clear mismatch
+    expect(repoMismatch('Midterm Mastery Part 2', 'hw2')).toBe(false);
+    expect(repoMismatch('Homework 3', 'cs6650-notes')).toBe(false);
+    expect(repoMismatch('', 'hw2')).toBe(false);
+  });
+
+  it('calls an interview\'s assignment by its name, else by the topic the student gave', () => {
+    expect(assignmentLabelOf({ assignmentName: 'HW3 Concurrency', topic: 'homework three' })).toBe('HW3 Concurrency');
+    expect(assignmentLabelOf({ assignmentName: '', topic: 'homework three' })).toBe('homework three');
+    expect(assignmentLabelOf({ assignmentName: '', topic: '' })).toBe('');
   });
 });

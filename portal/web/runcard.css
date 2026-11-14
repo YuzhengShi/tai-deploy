@@ -1,0 +1,87 @@
+/* runcard.css: the styles of runcard.js (docs/CHAT_OBJECTS.md, docs/RUN_CARDS.md): a run of the student's code as a small terminal in the conversation. It uses the page's own tokens (style.css:
+   --bubble, --code-bg, --line, --pill, --text, --muted, --ok, --danger, --mono, and the warm tone of --name-interviewer for "timed out"); there is no palette of its own, and the three themes
+   (light, auto, dark) come with them. The words of the badge, never the colour, say how the run ended. */
+
+/* the row of a card is a flex row like the others: the card takes the width it can, up to a comfortable one, and never more than the page has */
+.row.object[data-type="run"] { align-items: flex-start; }
+
+.runcard {
+  --rc-pass: var(--ok);
+  --rc-fail: var(--danger);
+  --rc-warn: var(--name-interviewer);
+  --rc-tint-ok: var(--ok-soft);
+  --rc-tint-fail: var(--danger-soft);
+  --rc-tint-warn: var(--pill);
+  flex: 1 1 auto; min-width: 0; max-width: min(100%, 760px);
+  background: var(--bubble); border: 1px solid var(--line); border-radius: 18px; overflow: hidden;
+  font-size: 14px; line-height: 1.5;
+}
+/* where the browser can mix colours, the text colours are pulled toward the page's text colour so that they read on the output's background in both themes (4.5:1 and more), and the tints follow the tones */
+@supports (color: color-mix(in srgb, red, blue)) {
+  .runcard {
+    --rc-pass: color-mix(in srgb, var(--ok) 82%, var(--text));
+    --rc-fail: color-mix(in srgb, var(--danger) 78%, var(--text));
+    --rc-warn: color-mix(in srgb, var(--name-interviewer) 78%, var(--text));
+    --rc-tint-ok: color-mix(in srgb, var(--ok) 15%, transparent);
+    --rc-tint-fail: color-mix(in srgb, var(--danger) 15%, transparent);
+    --rc-tint-warn: color-mix(in srgb, var(--name-interviewer) 16%, transparent);
+  }
+}
+
+/* the header: the command, how it ended, how long it took */
+.rc-head { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 9px 14px; border-bottom: 1px solid var(--line); }
+.rc-cmd {
+  flex: 1 1 auto; min-width: 0; padding: 0; background: none; color: var(--text);
+  font-family: var(--mono); font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* the prompt is not text of the command: it is not selected or copied with it */
+.rc-cmd::before { content: "$ "; content: "$ " / ""; color: var(--muted); font-weight: 400; }
+.rc-badge {
+  flex: none; padding: 2px 10px; border-radius: 999px; background: var(--pill); color: var(--muted);
+  font-size: 12.5px; font-weight: 650; white-space: nowrap;
+}
+.rc-badge[data-tone="ok"] { background: var(--rc-tint-ok); color: var(--rc-pass); }
+.rc-badge[data-tone="fail"] { background: var(--rc-tint-fail); color: var(--rc-fail); }
+.rc-badge[data-tone="warn"] { background: var(--rc-tint-warn); color: var(--rc-warn); }
+.rc-time { flex: none; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* the output: a numbered column and the lines, scrolling sideways inside the card (never the page), and upward only once it has been unfolded */
+.rc-body {
+  background: var(--code-bg); overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain;
+  font-family: var(--mono); font-size: 13.5px; line-height: 1.55;
+}
+/* (never shorter than the folded output it came from: 24 lines are 520 px or less) */
+.runcard[data-folded="false"] .rc-body { max-height: min(max(78vh, 540px), 1100px); overflow-y: auto; }
+.rc-body:focus-visible { outline-offset: -3px; }
+.rc-grid { display: flex; min-width: max-content; }
+/* the numbers are a column of their own: nothing of the output's text, so a selection and a copy never carry them; they stay in view while the lines scroll sideways */
+.rc-nums {
+  position: sticky; left: 0; z-index: 1; flex: none; margin: 0; padding: 10px 10px 10px 14px;
+  text-align: right; white-space: pre; color: var(--muted); background: var(--code-bg); border-right: 1px solid var(--line);
+  font-variant-numeric: tabular-nums; -webkit-user-select: none; user-select: none;
+}
+.rc-code { flex: 1 0 auto; margin: 0; padding: 10px 16px 10px 12px; font: inherit; color: var(--text); white-space: pre; tab-size: 4; }
+.rc-pass { color: var(--rc-pass); }
+.rc-fail { color: var(--rc-fail); font-weight: 600; }
+
+/* nothing printed, nothing run, and the host's sentence about the run */
+.rc-empty, .rc-note { margin: 0; padding: 10px 14px; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+.rc-note { border-top: 1px solid var(--line); }
+.rc-head + .rc-note { border-top: 0; }
+
+/* the foot: the rest of the output, and Copy */
+.rc-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 8px; border-top: 1px solid var(--line); }
+.rc-btn {
+  min-height: 32px; padding: 4px 12px; background: transparent; border: 0; border-radius: 10px; color: var(--muted);
+  font-size: 13px; font-weight: 600; -webkit-tap-highlight-color: transparent;
+}
+.rc-btn:hover { background: var(--pill); color: var(--text); }
+.rc-foot .rc-copy { margin-left: auto; }
+
+@media (max-width: 720px) {
+  .runcard { border-radius: 16px; font-size: 13.5px; }
+  .rc-head { gap: 8px; padding: 8px 12px; }
+  .rc-body { font-size: 12.5px; }
+  .rc-nums { padding-left: 10px; }
+  .rc-btn { min-height: 36px; }
+}

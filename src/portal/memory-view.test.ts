@@ -68,9 +68,22 @@ describe('a saved note, as the page shows it', () => {
   });
 
   it('names every category the memory store knows, and anything else is a plain note', () => {
-    const known = ['student_preference', 'identity', 'decision', 'misconception', 'breakthrough', 'concept', 'homework', 'session', 'checkpoint', 'other'];
-    expect(known.map(memoryLabel)).toEqual(['Preference', 'About you', 'Decision', 'Mix-up', 'Breakthrough', 'Topic', 'Homework', 'Recent', 'Working note', 'Note']);
-    for (const odd of ['', 'constructor', '__proto__', 'toString', 'Preference']) expect(memoryLabel(odd), odd).toBe('Note');
+    const known = ['student_preference', 'identity', 'decision', 'misconception', 'breakthrough', 'concept', 'homework', 'session', 'checkpoint', 'other', 'repo', 'thread', 'issue'];
+    expect(known.map(memoryLabel)).toEqual(['Preference', 'About you', 'Decision', 'Mix-up', 'Breakthrough', 'Topic', 'Homework', 'Recent', 'Working note', 'Note', 'Your code', 'Where we stopped', 'A problem you ran into']);
+    for (const odd of ['', 'constructor', '__proto__', 'toString', 'Preference', 'Repo', 'repository', 'issues']) expect(memoryLabel(odd), odd).toBe('Note');
+  });
+
+  it('shows what the host keeps of their work (a repository, where a session stopped, a problem) with its words, like any other note', () => {
+    const rows: MemoryRow[] = [
+      { id: 'mem-1762000000003-aaaaaa', text: 'Their code for Homework 2 is in their repository cs6650-hw2.', category: 'repo', created_at: NOW },
+      { id: 'mem-1762000000002-bbbbbb', text: 'Left open on Nov 5: check the timeouts.', category: 'thread', created_at: NOW - 1000 },
+      { id: 'mem-1762000000001-cccccc', text: 'The cache deadlocks. (Nov 4)', category: 'issue', created_at: NOW - 2000 },
+    ];
+    expect(memoryItems(rows).map((i) => [i.label, i.text])).toEqual([
+      ['Your code', 'Their code for Homework 2 is in their repository cs6650-hw2.'],
+      ['Where we stopped', 'Left open on Nov 5: check the timeouts.'],
+      ['A problem you ran into', 'The cache deadlocks. (Nov 4)'],
+    ]);
   });
 
   it('leaves out a note with no words, trims a very long one, and tolerates a time it cannot read', () => {
@@ -220,6 +233,21 @@ describe('the notes of a student, and what may be done to them', () => {
     expect(after).toEqual([FOLDER]);
     expect(memory.forget(FOLDER, 'mem-100-aaaaaa')).toBe(false);          // already gone
     expect(after).toEqual([FOLDER]);                                      // (nothing changed: nothing to rebuild)
+  });
+
+  it('forgets a note of their work like any other: by its id, only this student\'s, and the copies made from the notes are rebuilt', () => {
+    const store = fakeStore();
+    const id = 'mem-1762000000003-aaaaaa';
+    store.rows.get(FOLDER)!.unshift({ id, text: 'Their code for Homework 2 is in their repository cs6650-hw2.', category: 'repo', created_at: NOW });
+    store.rows.get(OTHER)!.push({ id: 'mem-1762000000004-dddddd', text: 'Their code for Homework 2 is in their repository other-hw2.', category: 'repo', created_at: NOW });
+    const after: string[] = [];
+    const memory = new StudentMemory(store, groups(), () => NOW, (folder) => after.push(folder));
+    expect(memory.view(FOLDER).memories.map((m) => [m.label, m.id])).toEqual([['Your code', id], ['Preference', 'mem-100-aaaaaa']]);
+    expect(memory.forget(FOLDER, 'mem-1762000000004-dddddd')).toBe(false); // somebody else's row of the same kind
+    expect(memory.forget(FOLDER, id)).toBe(true);
+    expect(after).toEqual([FOLDER]);
+    expect(memory.view(FOLDER).memories.map((m) => m.label)).toEqual(['Preference']);
+    expect(store.rows.get(OTHER)).toHaveLength(2);
   });
 
   it('cannot forget a note of another student, and does not even ask the store when the id is not one', () => {

@@ -1,0 +1,4 @@
+test_*.py
+fixtures
+__pycache__
+*.md

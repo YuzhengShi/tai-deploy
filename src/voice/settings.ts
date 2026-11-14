@@ -121,6 +121,17 @@ export function clampSpeed(speed: number | undefined, voice: string): number | u
 }
 
 /**
+ * Voices do not speak at the same pace at the same `speed`, and one of them does not keep its own. Measured on the live Deepgram Voice Agent on 2026-11-06 with the
+ * agent's greeting (no model), 39 words, three to four runs each: flux-hannah-en at 1.2 took 11.2 to 11.8 s (3.3 to 3.5 words a second, steady); aura-2-mars-en at 1.0
+ * took 10.8 to 12.2 s (3.2 to 3.6) and at 1.2 8.7 to 9.8 s (4.0 to 4.5); flux-miles-en, the interviewer's voice until then, at 1.2 took 11.5, 14.6, 14.6 and 21.4 s
+ * (1.8 to 3.4: it wandered by a factor of two from one run to the next, and at 1.5 by 1.4). That is the owner's "in the interview the voice comes much slower than the
+ * text" (the page shows a whole sentence at once, and the interviewer's sentences run to thirty words). The interviewer now has the steady voice, and a voice listed here
+ * gets the student's pace times its factor, so that the one number the Settings dialog and TAI_VOICE_SPEED hold means about the same pace in every voice: mars at 1.1 is
+ * where hannah is at 1.2 (3.4 to 3.7 against 3.3 to 3.5 words a second). Add a voice here only with a measurement of this kind.
+ */
+export const PACE_OF: Readonly<Record<string, number>> = { 'aura-2-mars-en': 0.9 };
+
+/**
  * The speak block: the voice, and how fast and how animated it speaks. `speed` is Deepgram's own (Flux 0.5-1.5 in steps of 0.05, Aura 0.7-1.5;
  * the owner found the default pace too slow; clampSpeed makes it fit THIS voice), `expressivity` is Flux's alone (-2..2, beta). Both are left
  * out at their defaults, so the block is what it always was when nothing is set.
@@ -128,7 +139,7 @@ export function clampSpeed(speed: number | undefined, voice: string): number | u
 export function speakConfig(voice: string, how: { speed?: number; expressivity?: number } = {}): Record<string, unknown> {
   const flux = isFluxVoice(voice);
   const provider: Record<string, unknown> = flux ? { type: 'deepgram', version: 'v2', model: voice } : { type: 'deepgram', model: voice };
-  const speed = clampSpeed(how.speed, voice);
+  const speed = clampSpeed(how.speed === undefined ? undefined : how.speed * (PACE_OF[voice] ?? 1), voice);
   if (speed !== undefined && speed !== 1) provider.speed = speed;
   if (flux && how.expressivity) provider.expressivity = how.expressivity;
   return { provider };

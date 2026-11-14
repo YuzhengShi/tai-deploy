@@ -73,7 +73,7 @@ const until = async (check: () => boolean, ms = 3000) => {
 };
 
 describe('a voice call', () => {
-  it('sends Settings with the student context, the relay endpoint, mip_opt_out and the 16 functions, then says ready', async () => {
+  it('sends Settings with the student context, the relay endpoint, mip_opt_out and the 20 functions, then says ready', async () => {
     h = await createHarness();
     const u = h.user(1);
     fs.writeFileSync(path.join(h.groupsDir, u.folder, 'COMPETENCY.md'), COMPETENCY);
@@ -104,7 +104,7 @@ describe('a voice call', () => {
     const names = s.agent.think.functions.map((f: any) => f.name);
     expect(names).toEqual([
       'query_knowledge', 'recall_memory', 'save_memory', 'read_competency', 'update_competency', 'query_canvas', 'query_github',
-      'query_piazza', 'browse_url', 'read_file', 'render_diagram', 'send_to_chat', 'schedule_task', 'start_interview', 'start_talk_through', 'end_session',
+      'query_piazza', 'browse_url', 'read_file', 'run_code', 'render_diagram', 'show_document', 'point_at', 'look_at_screen', 'find_course_document', 'show_chart', 'show_trace', 'ask_to_predict', 'send_to_chat', 'schedule_task', 'start_interview', 'start_talk_through', 'end_session',
     ]);
     for (const f of s.agent.think.functions) {
       expect(f.client_side).toBeUndefined();
@@ -231,7 +231,7 @@ describe('a voice call', () => {
     expect(conn.ofType('FunctionCallResponse').some((m) => m.id === 'fc-cancel')).toBe(false);
   });
 
-  it('switches to the interviewer and back: UpdateThink with endpoint, prompt and 6 functions, mars, queued opener, results written', async () => {
+  it('switches to the interviewer and back: UpdateThink with endpoint, prompt and 9 functions, mars, queued opener, results written', async () => {
     h = await createHarness({
       toolHandlers: {
         // the topic the student named is looked up in Canvas's own list, and the tool is asked for that assignment
@@ -268,15 +268,16 @@ describe('a voice call', () => {
     expect(think.think.prompt).toContain('mock interview');
     expect(think.think.prompt).toContain('HW3 concurrency');
     expect(think.think.prompt).toContain('Lamport clocks and event ordering (0.2)');
-    expect(think.think.functions.map((f: any) => f.name)).toEqual(['evaluate_answer', 'query_knowledge', 'read_competency', 'query_github', 'send_to_chat', 'end_interview']);
-    expect(await conn.waitFor('UpdateSpeak')).toEqual({ type: 'UpdateSpeak', speak: { provider: { type: 'deepgram', version: 'v2', model: 'flux-miles-en', speed: 1.2 } } });
+    expect(think.think.functions.map((f: any) => f.name)).toEqual(['evaluate_answer', 'query_knowledge', 'read_competency', 'query_github', 'run_code', 'look_at_week', 'look_at_screen', 'send_to_chat', 'end_interview']);
+    // the interviewer's voice is an Aura one, steady in pace; its pace is the student's times PACE_OF (1.2 x 0.9 = 1.1: settings.ts)
+    expect(await conn.waitFor('UpdateSpeak')).toEqual({ type: 'UpdateSpeak', speak: { provider: { type: 'deepgram', model: 'aura-2-mars-en', speed: 1.1 } } });
     // an interview is judged patiently: the student thinks aloud
     const patient: any = await conn.waitFor('UpdateListen');
     expect(patient.listen.provider).toEqual({ type: 'deepgram', version: 'v2', model: 'flux-general-en', eot_threshold: 0.88, eot_timeout_ms: 8000 });
     const opener = await conn.waitFor('InjectAgentMessage', (m) => String(m.message).startsWith('alright, interview time'));
     expect(opener).toMatchObject({ behavior: 'queue' });
     expect(String(opener.message)).toMatch(/ready\?$/); // it asks nothing about the topic, which no one has confirmed against Canvas yet
-    expect(await browser.next('mode')).toEqual({ type: 'mode', mode: 'interviewer', voice: 'flux-miles-en' });
+    expect(await browser.next('mode')).toEqual({ type: 'mode', mode: 'interviewer', voice: 'aura-2-mars-en' });
     // the assignment the tool host found is appended to the prompt when it arrives
     const material = await conn.waitFor('UpdatePrompt');
     expect(material.prompt).toContain('HW3 Concurrency');
@@ -295,7 +296,7 @@ describe('a voice call', () => {
 
     conn.callFunction('fc-end', 'end_interview', { topics_covered: 'Concurrency vs parallelism distinction', overall_impression: 'solid' });
     await conn.waitFor('FunctionCallResponse', (m) => m.id === 'fc-end');
-    const back: any = await conn.waitFor('UpdateThink', (m: any) => m.think.functions.length === 16);
+    const back: any = await conn.waitFor('UpdateThink', (m: any) => m.think.functions.some((f: any) => f.name === 'start_interview'));
     expect(back.think.endpoint.url).toBe(`${h.publicBase}/voice-llm/v1/chat/completions`);
     await conn.waitFor('UpdateSpeak', (m: any) => m.speak.provider.model === 'flux-hannah-en');
     const quick: any = await conn.waitFor('UpdateListen', (m: any) => m.listen.provider.eot_threshold === 0.75);
@@ -816,10 +817,10 @@ describe('a voice call', () => {
     const good = signInterviewToken(INTERVIEW_SECRET, u.folder, '4242', now);
     expect(h.hub.checkInterviewToken(good)).toEqual({ folder: u.folder, assignmentId: '4242' });
     const { conn, ready } = await startCall(h, { type: 'start', mode: 'chat', token: good }, u);
-    expect(ready).toMatchObject({ mode: 'interviewer', voice: 'flux-miles-en' });
+    expect(ready).toMatchObject({ mode: 'interviewer', voice: 'aura-2-mars-en' });
     const s = settingsOf(conn);
-    expect(s.agent.think.functions.map((f: any) => f.name)).toEqual(['evaluate_answer', 'query_knowledge', 'read_competency', 'query_github', 'send_to_chat', 'end_interview']);
-    expect(s.agent.speak.provider.model).toBe('flux-miles-en');
+    expect(s.agent.think.functions.map((f: any) => f.name)).toEqual(['evaluate_answer', 'query_knowledge', 'read_competency', 'query_github', 'run_code', 'look_at_week', 'look_at_screen', 'send_to_chat', 'end_interview']);
+    expect(s.agent.speak.provider.model).toBe('aura-2-mars-en');
     expect(s.agent.listen.provider).toMatchObject({ eot_threshold: 0.88, eot_timeout_ms: 8000 });         // an interview that starts the call is judged patiently from the first word
     expect(s.agent.greeting).toBe('hey! ready for some mock interview practice?');
     // no recall_memory History item in a call that starts as an interview (the interviewer has no such function)
@@ -976,7 +977,7 @@ describe('a voice call', () => {
     expect((await conn.waitFor('UpdatePrompt', (m) => String(m.prompt).includes('WRAP UP THE INTERVIEW'))).prompt).toBeTruthy();
     clock.now += 60_000;
     await conn.waitFor('InjectAgentMessage', (m) => String(m.message).includes("that's time for the interview"));
-    await conn.waitFor('UpdateThink', (m: any) => m.think.functions.length === 16);
+    await conn.waitFor('UpdateThink', (m: any) => m.think.functions.some((f: any) => f.name === 'start_interview'));
     await browser.next('mode', (e) => e.mode === 'conversational');
     await until(() => fs.existsSync(path.join(h!.groupsDir, u.folder, 'competency', 'interviews.md')));
   });

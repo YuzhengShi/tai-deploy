@@ -18,6 +18,8 @@ import { distance } from './canvas-text.js';
 import { interviewProfile, readText, summarizeCompetency } from './competency.js';
 import { sharesWord } from './interview-topic.js';
 import { parseWeekBrief, type WeekBriefView } from './week-brief.js';
+import { isWorkCategory, workFactOf, workFactsFromExport } from '../work-facts.js';
+import type { StoredWorkFact } from '../work-facts.js';
 
 export type HistoryItem =
   | { type: 'History'; role: 'user' | 'assistant'; content: string }
@@ -32,6 +34,8 @@ export interface StudentContext {
   competencyText: string | null;
   competencySummary: string;
   memories: string[];
+  /** What TAi remembers of their work (a repository, where a session stopped, a problem: docs/STUDENT_STATE.md), newest first: the three kinds the memories above leave out. */
+  work: StoredWorkFact[];
   recentChat: ChatLine[];
   courseStatus: string;
 }
@@ -44,12 +48,16 @@ export interface StudentContextSource {
   recentChat?: (folder: string, n: number) => ChatLine[];
   /** The student's memories as lines; without it they are read from groups/<folder>/memory_store.json. */
   memories?: (folder: string, jid: string) => string[];
+  /** What TAi remembers of the student's work, newest first; without it the same file's repository, thread and issue rows are read (workFactsFromExport). */
+  workFacts?: (folder: string) => StoredWorkFact[];
   warn?: (message: string) => void;
   /** The clock (default Date.now): the deadlines of the course status are told as they stand at this moment. */
   now?: () => number;
 }
 
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
+/** The most facts of their work a call holds (the caps per kind add up to 35). */
+const WORK_KEPT = 40;
 
 /** Text that goes into a prompt: no control characters, collapsed, capped. */
 export function clip(text: string, max: number): string {
@@ -57,7 +65,10 @@ export function clip(text: string, max: number): string {
   return clean.length <= max ? clean : clean.slice(0, max - 3).trimEnd() + '...';
 }
 
-/** Memories from the file the text agent's pre-flight writes (and the IPC watcher refreshes after each memory_store). */
+/**
+ * Memories from the file the text agent's pre-flight writes (and the IPC watcher refreshes after each memory_store). The three kinds of fact about their work (a repository, where a
+ * session stopped, a problem) are not here: they come in `work`, so that nothing is said twice.
+ */
 export function memoriesFromStore(groupDir: string, limit = 6): string[] {
   const text = readText(path.join(groupDir, 'memory_store.json'), groupDir);
   if (!text) return [];
@@ -65,7 +76,7 @@ export function memoriesFromStore(groupDir: string, limit = 6): string[] {
     const store = JSON.parse(text) as { memories?: Array<{ text?: unknown; category?: unknown; key?: unknown; value?: unknown; created_at?: unknown }> };
     const memories = Array.isArray(store.memories) ? store.memories : [];
     return memories
-      .filter((m) => m && typeof m.text === 'string' && m.text.trim())
+      .filter((m) => m && typeof m.text === 'string' && m.text.trim() && !isWorkCategory(m.category))
       .sort((a, b) => (Number(b.created_at) || 0) - (Number(a.created_at) || 0))
       .slice(0, limit)
       .map((m) => {
@@ -136,6 +147,18 @@ export function loadStudentContext(src: StudentContextSource): StudentContext {
   } catch (err) {
     src.warn?.(`voice: memories unavailable (${(err as Error).message})`);
   }
+  let work: StoredWorkFact[] = [];
+  try {
+    const given = src.workFacts ? src.workFacts(src.folder) : workFactsFromExport(readText(path.join(groupDir, 'memory_store.json'), groupDir));
+    // whoever gave them, a prompt gets well-formed facts with bounded text, newest first (a failing read is no facts)
+    work = (Array.isArray(given) ? given : [])
+      .map((f) => (f && typeof f === 'object' ? workFactOf(f) : null))
+      .filter((f): f is StoredWorkFact => f !== null)
+      .sort((a, b) => b.at - a.at)
+      .slice(0, WORK_KEPT);
+  } catch (err) {
+    src.warn?.(`voice: what is remembered of their work is unavailable (${(err as Error).message})`);
+  }
   let recentChat: ChatLine[] = [];
   try {
     recentChat = (src.recentChat?.(src.folder, 12) ?? [])
@@ -150,6 +173,7 @@ export function loadStudentContext(src: StudentContextSource): StudentContext {
     competencyText,
     competencySummary: summarizeCompetency(competencyText),
     memories,
+    work,
     recentChat,
     courseStatus: status ? courseStatusExcerpt(status, 1500, src.now ? src.now() : Date.now()) : '',
   };

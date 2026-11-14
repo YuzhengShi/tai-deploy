@@ -40,15 +40,20 @@ import {
 } from './context-builder.js';
 import { EvaluationResult, GatewayOptions, evaluateDetailed, summarizeCall } from './evaluator.js';
 import { waitForIpcAnswer } from './ipc-answer.js';
-import { RepoLookup, lookUpRepo } from './interview-repo.js';
+import { RememberedRepo, RepoLookup, assignmentLabelOf, lookUpRemembered, lookUpRepo, repoNameOk } from './interview-repo.js';
 import { pickAssignment, topicEvidenced } from './interview-topic.js';
 import { isLeadIn } from './lead-in.js';
-import { CALL_FUNCTIONS, CodeSeen, PROMOTABLE_FUNCTIONS, SLOW_FUNCTIONS, TOOL_HOST_FUNCTIONS, capResult, clearSendFlag, errorResult, functionsFor, newCodeSeen, parseArgs, runFunction } from './functions.js';
+import { CALL_FUNCTIONS, CodeSeen, LONG_WAIT_FUNCTIONS, PROMOTABLE_FUNCTIONS, SLOW_FUNCTIONS, TOOL_HOST_FUNCTIONS, capResult, clearSendFlag, errorResult, functionsFor, newCodeSeen, parseArgs, runFunction } from './functions.js';
 import { HANDOFF_MARK, PROMPT_MAX, SYSTEM_NOTE, TYPED_NOTE, appendices, conversationalPrompt, fillerLine, firstNameOf, interviewerPrompt, lines, listenerPrompt, pickLine, promotion } from './prompts.js';
 import type { FillerKind } from './prompts.js';
 import { RelayTokens } from './relay.js';
 import { REVIEW_KEEP, REVIEW_MAX, ReviewItem, Weighed, pickItems, reviewItem } from './review.js';
 import { practicingOf, weekNext } from './week-brief.js';
+import { LOOK_FAILED, LOOK_MAX, LOOK_NOT_LINKED, LOOK_TIMEOUT_MS, countLook, exhaustLooks, limitLook, looksSoFar, mergeWeek, readLook } from './week-look.js';
+import { RUN_CODE_ANSWER_MS } from './run-code.js';
+import { SCREEN, newScreenState } from './screen.js';
+import type { ScreenState } from './screen.js';
+import { CARD_FUNCTIONS } from './objects-fn.js';
 import { LISTENER_FEEDBACK, LISTENER_NUDGE } from './speech-governor.js';
 import type { GovernorOptions } from './speech-governor.js';
 import { TEACH_LIMITS, teachingNow } from './teach.js';
@@ -56,6 +61,12 @@ import { buildSettings, isFluxVoice, listenUpdate, speakConfig, thinkConfig } fr
 import type { TurnProfile } from './settings.js';
 import type { ToolHost } from './tool-host.js';
 import type { AgentMode, Caller, ChatExtra, CloseReason, VoiceLog } from './types.js';
+import type { ChatObject } from '../chat-objects/types.js';
+import type { ViewStore } from '../chat-objects/view.js';
+import type { DocsApi } from '../docs/types.js';
+import type { SandboxApi } from '../sandbox/types.js';
+import type { StoredWorkFact, WorkFact } from '../work-facts.js';
+import { repoFact, repoKeys } from '../work-facts.js';
 
 export interface VoiceTiming {
   settingsTimeoutMs: number;
@@ -72,6 +83,8 @@ export interface VoiceTiming {
   injectAckMs: number;
   injectRetryMs: number;
   summaryTimeoutMs: number;
+  /** How long the end of a call waits, once its other post-call writes are done, for the state writer's pass over the call (the pass itself goes on in the background either way). */
+  workWaitMs: number;
   silenceNudgeBeforeMs: number;
   toolHostWaitMs: number;
   /** How long after TAi says it put something in the chat before checking that it did. */
@@ -81,6 +94,10 @@ export interface VoiceTiming {
   stillLookingMs: number;
   /** How long after TAi finishes a turn that only announced its answer ("here's a quick rundown") before it is asked to give the answer. */
   leadInWaitMs: number;
+  /** How long run_code takes to answer for a run that goes on (the sandbox stops its container at its own time limit, up to a minute: run-code.ts). */
+  codeAnswerMs: number;
+  /** How long show_document waits for a document to be prepared before it answers "preparing" and finishes in the background (screen.ts). */
+  prepareDocMs: number;
 }
 
 export const DEFAULT_TIMING: VoiceTiming = {
@@ -98,12 +115,15 @@ export const DEFAULT_TIMING: VoiceTiming = {
   injectAckMs: 1_500,
   injectRetryMs: 3_000,
   summaryTimeoutMs: 12_000,
+  workWaitMs: 2_000,
   silenceNudgeBeforeMs: 30_000,
   toolHostWaitMs: 30_000,
   claimCheckMs: 2_500,
   fillerAfterMs: 1_500,
   stillLookingMs: 5_000,
   leadInWaitMs: 2_500,
+  codeAnswerMs: RUN_CODE_ANSWER_MS,
+  prepareDocMs: SCREEN.prepareMs,
 };
 
 export interface SessionDeps {
@@ -120,6 +140,22 @@ export interface SessionDeps {
   appendChat: (folder: string, role: 'user' | 'assistant', text: string, extra?: ChatExtra) => void;
   recentChat?: (folder: string, n: number) => ChatLine[];
   memories?: (folder: string, jid: string) => string[];
+  /** What TAi remembers of the student's work (a repository, where a session stopped, a problem: docs/STUDENT_STATE.md), newest first; without it the conversation and the interviewer go without. */
+  workFacts?: (folder: string) => StoredWorkFact[];
+  /** Keeps one fact of the student's work, or takes one back by its key: host-side and best-effort, they never throw. */
+  rememberWork?: (folder: string, fact: WorkFact) => void;
+  forgetWork?: (folder: string, key: string) => void;
+  /** Runs a student's Go code for the run_code function (src/sandbox, docs/GO_SANDBOX.md); without it the function says it is not set up. */
+  runSandbox?: SandboxApi['run'];
+  /** Where the student's page says it is looking, the document viewer's service and the student's chat objects (docs/CHAT_OBJECTS.md): show_document, point_at and look_at_screen (screen.ts). Without them those functions say there is nothing to look at. */
+  views?: ViewStore;
+  docs?: DocsApi;
+  objectOf?: (folder: string, n: number) => ChatObject | null;
+  /**
+   * The post-call pass of the host's state writer (src/student-state-writer.ts): the call's merged turns and facts, for an issue, where the call stopped and a repository the student named.
+   * It is started when the post-call writes begin (beside the summary's model call) and waited for at most `workWaitMs` at their end; it settles when the writer is done and never rejects.
+   */
+  workFromCall?: (input: { folder: string; turns: Array<{ role: 'student' | 'tai'; text: string }>; facts: string[] }) => Promise<void>;
   recordVoiceSummary: (jid: string, text: string) => void;
   gateway: GatewayOptions;
   /** Counts connected seconds to the student's day (the hub's usage store). */
@@ -376,6 +412,8 @@ export class VoiceSession {
   private readonly seenUrls = new Set<string>();
   /** The files an interview has read from the student's repository, and which have an excerpt in the chat (the guard on the interviewer's send_to_chat, functions.ts). */
   private readonly codeSeen: CodeSeen = newCodeSeen();
+  /** What this call has done with the viewer (screen.ts): the documents it has put a card in the chat for, the one shown last, what is being prepared. The function env is made again for every call of a function: this is what lasts. */
+  private readonly screenState: ScreenState = newScreenState();
   /** The questions of the call's mock interview(s) that were really scored, as review items (review.ts): they go on the activity line when the call ends. Kept on the call because an interview's state is dropped as it finishes. */
   private readonly reviewPool: Weighed[] = [];
   private readonly lookupCache = new Map<string, { at: number; r: { ok: boolean; text: string } }>();
@@ -477,6 +515,7 @@ export class VoiceSession {
         jid: this.user.jid,
         recentChat: this.deps.recentChat,
         memories: this.deps.memories,
+        workFacts: this.deps.workFacts,
         warn: (message) => this.log.warn({ folder: this.user.folder }, message),
         now: this.deps.now,
       });
@@ -611,11 +650,13 @@ export class VoiceSession {
 
   private promptFor(mode: AgentMode): string {
     const person = { studentName: clip(this.user.name, 80) || 'the student', firstName: this.firstName, today: longDate(this.deps.now()) };
-    const ctx = this.context ?? loadStudentContext({ groupsDir: this.deps.groupsDir, folder: this.user.folder, jid: this.user.jid });
+    const ctx = this.context ?? loadStudentContext({ groupsDir: this.deps.groupsDir, folder: this.user.folder, jid: this.user.jid, workFacts: this.deps.workFacts });
     if (mode === 'interviewer') {
       const ic = this.interview?.context ?? this.fallbackInterviewContext(this.interviewRequest?.topic);
-      // (the repository too: a call that reconnects to Deepgram gets its Settings again, and what was only appended is not in them otherwise)
-      return interviewerPrompt(person, ic, this.deps.config.interviewMin, this.interview?.repo);
+      // (the repository too: a call that reconnects to Deepgram gets its Settings again, and what was only appended is not in them otherwise.) And what TAi remembers of their work, as the call holds
+      // it, once the interview has its material: until then it is the late update that carries it (fetchInterviewMaterialInner), after the material it fits with, so that the room that update is
+      // fitted to (materialRoom) is the same with and without it and nothing of the assignment, the code or the week is cut for its sake.
+      return interviewerPrompt(person, ic, this.deps.config.interviewMin, this.interview?.repo, { work: ic.source === 'file' ? ctx.work : undefined });
     }
     if (mode === 'listener') return listenerPrompt(person, ctx, this.talk?.topic ?? str(this.talkRequest?.topic, 200), this.deps.config.talkMin);
     return conversationalPrompt(person, ctx);
@@ -1105,9 +1146,23 @@ export class VoiceSession {
     if (this.ended || typeof text !== 'string' || !text.trim()) return false;
     this.heardStudent();
     this.noteUrls(text);
-    if (/\(a picture, /.test(text)) this.browserSend({ type: 'notice', text: 'TAi cannot see pictures: describe it, or paste the text.' });
+    // (with the picture switch on, a call's model has look_at_image and a picture it can look at is named without these words: src/portal/uploads.ts messageFor)
+    if (/\(a picture, [^\n]*you cannot see pictures/.test(text)) this.browserSend({ type: 'notice', text: 'TAi cannot see pictures: describe it, or paste the text.' });
     const body = text.length > 8000 ? text.slice(0, 8000) + '\n[... the rest is in the chat]' : text;
     this.enqueue({ kind: 'user', text: `${TYPED_NOTE}\n${body}`, retry: true, attempts: 0 });
+    return true;
+  }
+
+  /**
+   * What the host knows and the model should answer, from outside the call: a prediction card the student has just run (src/portal/predict-routes.ts). It goes in as a user turn that opens with SYSTEM_NOTE,
+   * like the host's other notes to the model, so the echo of it is neither shown in the call's transcript nor kept as something the student said; it waits for a pause like a typed line does. False when the
+   * call is over or there is nothing to say.
+   */
+  tell(text: string): boolean {
+    if (this.ended || typeof text !== 'string' || !text.trim()) return false;
+    this.heardStudent();
+    const body = text.length > 8000 ? text.slice(0, 8000) + ' [... the rest is in the chat]' : text;
+    this.enqueue({ kind: 'user', text: `${SYSTEM_NOTE}, not from the student: ${body}]`, retry: true, attempts: 0 });
     return true;
   }
 
@@ -1265,7 +1320,7 @@ export class VoiceSession {
       // search of the course 6.5, and not a word): once it has run fillerAfterMs, one pre-written line (once to a student turn, whatever the
       // function), and one more if the wait goes on. A look-up that is quicker than that gets none.
       let slowTimer: NodeJS.Timeout | undefined;
-      if (this.t.fillerAfterMs > 0 && TOOL_HOST_FUNCTIONS.has(name)) {
+      if (this.t.fillerAfterMs > 0 && LONG_WAIT_FUNCTIONS.has(name)) {
         slowTimer = setTimeout(() => this.fillLongWait(), this.t.fillerAfterMs);
         slowTimer.unref?.();
       }
@@ -1377,6 +1432,20 @@ export class VoiceSession {
       urls: this.seenUrls,
       mode: this.mode,
       code: this.codeSeen,
+      // what the interviewer reads of a repository is remembered for the assignment of the interview (docs/STUDENT_STATE.md): the label is the one the look-up of the repository uses
+      rememberWork: this.deps.rememberWork,
+      runSandbox: this.deps.runSandbox,
+      codeAnswerMs: this.t.codeAnswerMs,
+      // a card in the student's chat (a document put on their screen, a run of their code): what the history's gate accepts, and nothing else becomes a line
+      postObject: (obj: unknown) => this.deps.appendChat(this.user.folder, 'assistant', '', { kind: 'object', obj }),
+      // the viewer (screen.ts): the documents service, where the page says the student is looking, and the call's own socket to the page for `show`, `point` and `doc_state`
+      docs: this.deps.docs,
+      views: this.deps.views,
+      objectOf: this.deps.objectOf,
+      browserSend: (message: Record<string, unknown>) => this.browserSend(message),
+      screenState: this.screenState,
+      screenPrepareMs: this.t.prepareDocMs,
+      interviewAssignment: this.mode === 'interviewer' && this.interview ? { id: this.interview.context.assignmentId, name: assignmentLabelOf(this.interview.context) } : undefined,
       cache: this.lookupCache,
       guard: this.guard,
       log: this.log,
@@ -1402,7 +1471,8 @@ export class VoiceSession {
     }
     if (!CALL_FUNCTIONS.has(name)) {
       const content = await runFunction(name, args, this.functionEnv());
-      if ((name === 'send_to_chat' || name === 'render_diagram') && /in the chat now/.test(content)) {
+      // (a document put on their screen, or a chart, a sequence or a prediction card, leaves its card in the chat: the same "it is in the chat now" that the model may truthfully say, and that the claim guard looks for)
+      if ((name === 'send_to_chat' || name === 'render_diagram' || name === 'show_document' || CARD_FUNCTIONS.has(name)) && /in the chat now/.test(content)) {
         this.chatSent++;
         this.lastChatSendAt = this.deps.now();
       }
@@ -1413,6 +1483,8 @@ export class VoiceSession {
         return { content: await this.evaluate(args) };
       case 'start_interview':
         return this.startInterview(args);
+      case 'look_at_week':
+        return { content: await this.lookAtWeek() };
       case 'end_interview':
         return this.endInterview(args);
       case 'start_talk_through':
@@ -1479,20 +1551,70 @@ export class VoiceSession {
   /**
    * The student's repository for the interview's assignment and the NAMES of its code files, appended to the interviewer's prompt when found (and
    * kept, for a prompt that is sent again after a reconnect). It goes through the student's own tool host, as the account the host bound to them.
-   * Never throws.
+   * The repository an earlier interview or look-up remembered for this assignment is asked first (docs/STUDENT_STATE.md): its files are listed directly and its row is renewed; one GitHub says
+   * does not exist any more is forgotten (and the appended text says the earlier note is out of date), and the matcher runs as it always did, its find remembered in turn. A remembered
+   * repository never widens what is read: the account is the host's binding, and the value is checked again where it is used. Never throws.
    */
   private async listRepository(th: ToolHost, iv: InterviewState): Promise<void> {
     try {
-      const label = iv.context.assignmentName || iv.context.topic;
-      if (!label) return; // nobody has said which assignment: there is nothing to look for
-      const found = await lookUpRepo(th, this.user.githubUsername, label, this.log);
+      const label = assignmentLabelOf(iv.context);
+      const remembered = await lookUpRemembered(th, this.user.githubUsername, label, this.rememberedRepos(iv.context), this.log);
+      for (const gone of remembered.gone) this.forgetRepo(gone);
+      let found: RepoLookup;
+      if (remembered.lookup && remembered.used) {
+        found = remembered.lookup;
+        this.keepWork({ category: 'repo', key: remembered.used.key, value: remembered.used.repo, text: remembered.used.text });
+      } else {
+        if (!label) return; // nobody has said which assignment: there is nothing to look for
+        found = await lookUpRepo(th, this.user.githubUsername, label, this.log);
+        if (found.found) this.keepWork(repoFact(iv.context.assignmentId, label, found.repo));
+      }
       if (this.interview !== iv || this.ended || this.mode !== 'interviewer') return;
       iv.repo = found;
-      this.log.info({ folder: this.user.folder, sid: this.sid.slice(0, 6), found: found.found, ...(found.found ? { files: found.files.length, more: found.more } : { why: found.why }) }, "voice: the interview's repository looked up");
-      this.sendDeepgram({ type: 'UpdatePrompt', prompt: appendices.interviewRepository(found) });
+      this.log.info({ folder: this.user.folder, sid: this.sid.slice(0, 6), found: found.found, remembered: !!remembered.lookup, ...(found.found ? { files: found.files.length, more: found.more } : { why: found.why }) }, "voice: the interview's repository looked up");
+      // (the note that an earlier note is out of date is for a prompt that had it: only an interview that began with its material did, see promptFor)
+      const stale = remembered.gone.length && iv.context.source === 'file' ? `\n\n${appendices.interviewRepositoryGone(remembered.gone.map((g) => g.repo))}` : '';
+      this.sendDeepgram({ type: 'UpdatePrompt', prompt: `${appendices.interviewRepository(found)}${stale}` });
     } catch (err) {
       this.log.warn({ folder: this.user.folder, err: (err as Error).message }, 'voice: the repository for the interview could not be looked up');
     }
+  }
+
+  /** The repositories remembered for this interview's assignment, the homework number's key first, read now (what an interview earlier in the call kept counts). A value is checked again where it is used. */
+  private rememberedRepos(context: InterviewContext): RememberedRepo[] {
+    let facts: StoredWorkFact[] = [];
+    try {
+      facts = this.deps.workFacts?.(this.user.folder) ?? [];
+    } catch (err) {
+      this.log.warn({ folder: this.user.folder, err: (err as Error).message }, 'voice: what is remembered of their work could not be read');
+    }
+    if (!Array.isArray(facts)) return [];
+    const found: RememberedRepo[] = [];
+    for (const key of repoKeys(context.assignmentId, assignmentLabelOf(context))) {
+      const fact = facts.find((f) => f && f.category === 'repo' && f.key === key);
+      if (fact && repoNameOk(fact.value) && typeof fact.text === 'string') found.push({ key, repo: fact.value, text: fact.text });
+    }
+    return found;
+  }
+
+  /** Keeps (or renews) one fact of their work, if there is one. Best effort: the host's deps do not throw, and a fake that does changes nothing here. */
+  private keepWork(fact: WorkFact | null): void {
+    if (!fact) return;
+    try {
+      this.deps.rememberWork?.(this.user.folder, fact);
+    } catch (err) {
+      this.log.warn({ folder: this.user.folder, err: (err as Error).message }, 'voice: a fact of their work could not be kept');
+    }
+  }
+
+  /** A repository GitHub says does not exist any more: the host's row is taken back, and so is the call's own copy of the facts, so that no prompt of this call names it. Best effort. */
+  private forgetRepo(gone: RememberedRepo): void {
+    try {
+      this.deps.forgetWork?.(this.user.folder, gone.key);
+    } catch (err) {
+      this.log.warn({ folder: this.user.folder, err: (err as Error).message }, 'voice: a fact of their work could not be taken back');
+    }
+    if (this.context) this.context.work = this.context.work.filter((f) => f.key !== gone.key);
   }
 
   /** In the background: ask the tool host for the assignment, and append it to the interviewer's prompt when it arrives. Never throws. */
@@ -1550,8 +1672,13 @@ export class VoiceSession {
     if (fresh) {
       // (the room is measured first: it is what the call holds without this update, and a week brief's sections are fitted to it)
       const room = this.materialRoom();
-      iv.context = context;
-      this.sendDeepgram({ type: 'UpdatePrompt', prompt: appendices.interviewMaterial(context, { room }) });
+      // A look the interviewer made before this file arrived (look_at_week) is NEWER than the file's brief, which start_mock_interview built before the student asked: for every
+      // source the look had, the look's part stays, and the file fills in only the sources it did not have (week-look.ts mergeWeek). With no look, or none that found anything,
+      // the file is the week, exactly as it was. The update is built from the week the interview now holds.
+      const looked = looksSoFar(this) > 0 ? iv.context.week : null;
+      iv.context = looked ? { ...context, week: mergeWeek(context.week, looked, { canvas: looked.assignments.length > 0, github: !!looked.commits, piazza: !!looked.piazza }) } : context;
+      // (what TAi remembers of their work rides on this update, after the material, if it fits: the first prompt of this interview had none of the material, and none of that)
+      this.sendDeepgram({ type: 'UpdatePrompt', prompt: appendices.interviewMaterial(iv.context, { room, work: this.context?.work }) });
       return;
     }
     // the tool's own words name the assignment even when its file did not arrive ("Mock interview ready for X — HW3 ...")
@@ -1627,6 +1754,38 @@ export class VoiceSession {
       note = next.text;
     }
     return JSON.stringify(note ? { ...forTheInterviewer, week: note } : forTheInterviewer);
+  }
+
+  /**
+   * look_at_week (week-look.ts, docs/VOICE.md "Looking at the week again"): the interviewer asks for the week's brief again, as the student's own tool host
+   * builds it (Canvas, GitHub and Piazza, now: the same assignment, the same binding), and the interview keeps what the sources that answered said. At most
+   * LOOK_MAX looks to a call; past that, or when the container says so, the view from before and a note. Every failure is a sentence the model can say.
+   */
+  private async lookAtWeek(): Promise<string> {
+    const iv = this.interview;
+    if (!iv) return errorResult('there is no interview going on');
+    const interviewNow = () => ({ now: this.deps.now(), assignmentId: iv.context.assignmentId, specText: iv.context.assignmentSpec });
+    if (looksSoFar(this) >= LOOK_MAX) return limitLook(iv.context.week, interviewNow());
+    if (!this.user.canvasUserId && !this.user.githubUsername) return errorResult(LOOK_NOT_LINKED);
+    const th = await this.tools();
+    if (!th || this.interview !== iv || this.ended) return errorResult(LOOK_FAILED);
+    countLook(this);
+    // exactly these two: who it is about is the container's binding, never an argument (the model has no say, and neither has this call's user record)
+    const id = iv.context.assignmentId;
+    const r = await th.call('weekly_brief', { ...(/^\d{1,20}$/.test(id) ? { assignment_id: id } : {}), format: 'json' }, { timeoutMs: LOOK_TIMEOUT_MS });
+    if (!r.ok) {
+      this.log.info({ folder: this.user.folder, sid: this.sid.slice(0, 6), looks: looksSoFar(this) }, 'voice: the week could not be looked at again');
+      if (!/^Rate limit exceeded/i.test(r.text)) return errorResult(LOOK_FAILED);
+      exhaustLooks(this); // the tool host says the call has had its looks: nothing more is sent for it
+      return limitLook(iv.context.week, interviewNow());
+    }
+    const looked = readLook(r.text, { ...interviewNow(), previous: iv.context.week });
+    if (!looked.ok) return looked.error;
+    // (the interview may have ended, or begun again, while the container read three sources)
+    if (looked.week && this.interview === iv && !this.ended) iv.context = { ...iv.context, week: looked.week };
+    // counts only: nothing a student wrote
+    this.log.info({ folder: this.user.folder, sid: this.sid.slice(0, 6), looks: looksSoFar(this), ...looked.sources }, 'voice: the week was looked at again');
+    return looked.content;
   }
 
   /** Did the student choose what to practice (their words, or their yes to TAi's offer), or has the model already asked them? */
@@ -2248,6 +2407,8 @@ export class VoiceSession {
     const minutes = this.minutes();
     const facts = this.facts();
     const turns = mergeTurns(this.transcript);
+    // what TAi keeps of the student's work (docs/STUDENT_STATE.md): started now, so that its model call runs beside the summary's, and waited for only a moment at the end
+    const work = this.startWorkFromCall(turns, facts);
     const said = await summarizeCall(
       turns.map((t) => ({ role: t.role, text: t.text })),
       facts,
@@ -2289,6 +2450,21 @@ export class VoiceSession {
       } catch (err) {
         this.log.warn({ folder: this.user.folder, what, err: (err as Error).message }, 'voice: a post-call write failed');
       }
+    }
+    // the state writer's pass is the one write that is a model call of its own: the end of the call waits for it a moment, no longer (it goes on in the writer's own queue, which the host flushes at shutdown)
+    await within(work, this.t.workWaitMs);
+  }
+
+  /** The call's merged turns and facts to the state writer, if there is one: a promise that never rejects and settles when the writer is done (at once when there is no writer or it refuses). */
+  private startWorkFromCall(turns: ReadonlyArray<{ role: 'student' | 'tai'; text: string }>, facts: string[]): Promise<void> {
+    const work = this.deps.workFromCall;
+    if (!work) return Promise.resolve();
+    const failed = (err: unknown): void => this.log.warn({ folder: this.user.folder, err: (err as Error)?.message }, 'voice: the state writer failed on the call');
+    try {
+      return Promise.resolve(work({ folder: this.user.folder, turns: turns.map((t) => ({ role: t.role, text: t.text })), facts: [...facts] })).catch(failed);
+    } catch (err) {
+      failed(err);
+      return Promise.resolve();
     }
   }
 }

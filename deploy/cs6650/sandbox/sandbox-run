@@ -1,0 +1,71 @@
+#!/bin/bash
+# The ONE command the run container executes: sandbox-run ACTION PKG RACE TESTRUN SECONDS FOLDER -- [PROGRAM ARGS...]
+#   ACTION run|test|vet|build   PKG a ./... style pattern   RACE 0|1   TESTRUN a -run pattern or -   SECONDS the wall clock   FOLDER a folder of the project or -
+# The host has validated every one of these (src/sandbox/types.ts); they are checked again here, and the go command line is built as a list of words from
+# fixed text and these values, then exec'd: no eval, no shell string. The code is in /in (read-only); it is put in /work, and the host's clock is the last word.
+exec 2>&1
+set -u
+. "$(dirname -- "${BASH_SOURCE[0]}")/sandbox-common"
+
+[ "$#" -ge 7 ] || refuse 'the call is not complete.'
+action=$1 pkg=$2 race=$3 testrun=$4 secs=$5 folder=$6 sep=$7
+shift 7
+[ "$sep" = -- ] || refuse 'the call is not well formed.'
+
+re_pkg='^(\.|\./\.\.\.|\./[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*(/\.\.\.)?)$'
+re_testrun='^[]A-Za-z0-9_|^$.*+?()[-]{1,80}$'
+re_arg='^[A-Za-z0-9._:=,/@%+-]{0,60}$'
+case "$action" in run | test | vet | build) ;; *) refuse 'unknown kind of run.' ;; esac
+[[ $pkg =~ $re_pkg ]] || refuse 'the package is not allowed.'
+[ "$race" = 0 ] || [ "$race" = 1 ] || refuse 'bad race flag.'
+[[ $secs =~ ^[0-9]{1,3}$ ]] || refuse 'bad time limit.'
+if [ "$testrun" != - ]; then
+  if ! { [[ $testrun =~ $re_testrun ]] && [[ $testrun != -* ]]; }; then refuse 'the test pattern is not allowed.'; fi
+fi
+[ "$#" -le 4 ] || refuse 'too many program arguments.'
+for a in "$@"; do [[ $a =~ $re_arg ]] || refuse 'a program argument is not allowed.'; done
+
+stage_code "$folder"
+if ! find_gomod; then
+  # no go.mod anywhere up the tree: the host's own, at the top, so that a few loose files and their folders build as one module
+  ver=$(go env GOVERSION 2> /dev/null)
+  ver=${ver#go}
+  if [[ $ver =~ ^([0-9]+\.[0-9]+) ]]; then ver=${BASH_REMATCH[1]}; else ver=1.21; fi
+  printf 'module sandbox\n\ngo %s\n' "$ver" > "$ROOT/go.mod" || refuse 'a go.mod could not be written.'
+  GOMOD_DIR=$ROOT
+fi
+
+# The build cache: the image holds one with the standard library already compiled (read-only); it is linked into the memory-backed cache of this run. The last trim
+# time is written as now, so that Go does not trim (it would, for entries whose files are older than five days, and those are the image's).
+GOCACHE=${GOCACHE:-/tmp/gocache}
+if mkdir -p "$GOCACHE" 2> /dev/null; then
+  warm=${SANDBOX_WARM_CACHE:-/opt/gocache-warm}
+  if [ -d "$warm" ]; then
+    cp -rs "$warm/." "$GOCACHE/" 2> /dev/null || true
+    # (cp gives the directories the image's read-only mode, and Go writes new entries into them: its index of module directories, the student's own packages)
+    find "$GOCACHE" -type d -exec chmod u+w {} + 2> /dev/null || true
+  fi
+  rm -f "$GOCACHE/trim.txt"
+  printf '%s' "$(date +%s)" > "$GOCACHE/trim.txt" 2> /dev/null || true
+fi
+
+cd -- "$WD" || refuse 'the folder cannot be entered.'
+cmd=(go "$action")
+if [ -f "$GOMOD_DIR/vendor/modules.txt" ]; then cmd+=(-mod=vendor); fi
+case "$action" in
+  run) cmd+=("$pkg" "$@") ;;
+  test)
+    if [ "$race" = 1 ]; then cmd+=(-race); fi
+    if [ "$testrun" != - ]; then cmd+=("-run=$testrun"); fi
+    # Go's own limit sits under the wall clock: a test that hangs is stopped with every goroutine's stack printed, not just killed
+    tsecs=5
+    if [ "$secs" -gt 15 ]; then tsecs=$((secs - 10)); fi
+    cmd+=(-count=1 "-timeout=${tsecs}s" "$pkg")
+    ;;
+  vet) cmd+=("$pkg") ;;
+  build) cmd+=(-o /dev/null "$pkg") ;;
+esac
+if [ -f "$IN/stdin" ]; then
+  exec timeout -s KILL "$secs" "${cmd[@]}" < "$IN/stdin"
+fi
+exec timeout -s KILL "$secs" "${cmd[@]}" < /dev/null

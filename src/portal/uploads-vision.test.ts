@@ -55,6 +55,8 @@ describe('a picture kept in the workspace, with the tool off', () => {
 
 describe('a picture kept in the workspace, with the tool on', () => {
   const on = (): UploadStore => new UploadStore(tmp(), undefined, () => true);
+  /** The host has said that a call's model has look_at_image (the fourth argument). */
+  const withCall = (): UploadStore => new UploadStore(tmp(), undefined, () => true, () => true);
 
   it('is named with its path, and TAi is told it can look at it and read its exact text, and to say so honestly when it is not clear', () => {
     const store = on();
@@ -89,13 +91,39 @@ describe('a picture kept in the workspace, with the tool on', () => {
     expect(store.messageFor('x', [pic]).split('\n')).toContain(OLD_LINE);
   });
 
-  it('leaves a voice call in the old words: the call has no such tool, and the page keys a notice on "(a picture, "', () => {
-    const store = on();
+  it("names the picture to a voice call with the call's own function, look_at_image, ONLY where the host says a call has it; the line then still says \"(a picture, \" and no longer says that TAi cannot see", () => {
+    const store = withCall();
     const forCall = store.messageFor('look', [picture(store, 'shot.png')], 'call');
-    expect(forCall).toContain('- shot.png (a picture, 25 B): you cannot see pictures; ask the student to paste the text or describe it');
-    expect(forCall).not.toContain('look_at_image');
-    expect(forCall).not.toContain('read_image_text');
-    expect(/\(a picture, /.test(forCall)).toBe(true);
+    const line = forCall.split('\n').find((l) => l.includes('shot.png'))!;
+    expect(line.startsWith("- shot.png (a picture, 25 B): you can look at it with look_at_image, giving it the name shot.png and the student's question")).toBe(true);
+    expect(line).toContain('once for each picture');
+    expect(line).toContain('it goes to an outside vision service');
+    expect(line).toContain('never guess what it shows');
+    expect(line).not.toContain('you cannot see pictures');
+    expect(forCall).not.toContain('read_image_text');                       // the call has no such function
+    expect(forCall).not.toContain('/workspace/group/uploads/');             // a call is given the name, as the function wants it
+    expect(/\(a picture, /.test(forCall)).toBe(true);                       // (the page's notice looks for it, and for "you cannot see pictures" after it)
+    // the agent's words are what they were
+    expect(store.messageFor('look', [picture(store, 'shot2.png')]).split('\n').find((l) => l.includes('shot2.png'))).toContain('you can look at it with look_at_image (charts, diagrams, interfaces, screenshots: give it this path');
+  });
+
+  it("leaves a voice call in the old words with the picture switch on, which is what production has: the call's tool host has no such function until the owner decides it should, so the host does not say it has", () => {
+    for (const store of [on(), new UploadStore(tmp(), undefined, () => true, () => false)]) {      // (callVision not given, and given off)
+      const forCall = store.messageFor('look', [picture(store, 'shot.png')], 'call');
+      expect(forCall).toContain('- shot.png (a picture, 25 B): you cannot see pictures; ask the student to paste the text or describe it');
+      expect(forCall).not.toContain('look_at_image');
+      expect(forCall).not.toContain('read_image_text');
+      expect(/\(a picture, /.test(forCall)).toBe(true);                     // (the page's notice for a picture the call cannot see)
+    }
+  });
+
+  it('leaves a voice call in the old words while the picture switch is off, whatever the call seam says', () => {
+    for (const callVision of [() => false, () => true]) {
+      const store = new UploadStore(tmp(), undefined, () => false, callVision);
+      const forCall = store.messageFor('look', [picture(store, 'shot.png')], 'call');
+      expect(forCall).toContain('- shot.png (a picture, 25 B): you cannot see pictures; ask the student to paste the text or describe it');
+      expect(forCall).not.toContain('look_at_image');
+    }
   });
 
   it('leaves a picture that was not kept in the workspace in the old words too: there is no file to look at', () => {

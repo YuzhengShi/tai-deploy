@@ -1,0 +1,45 @@
+{
+  "set": "dev",
+  "version": 1,
+  "written": "2026-11-11",
+  "author": "the LeanRAG build session (a model), from the nine Fall 2026 decks. The development set: used to debug the pipeline and to look at failures. Its topics are chosen to be different from the test set's (eval/leanrag/questions_test.json), which is not looked at while the engine is built.",
+  "mix": { "lookup": 4, "paraphrase": 3, "compare": 2, "cross-deck": 1 },
+  "how_a_question_is_scored": "See questions_test.json.",
+  "questions": [
+    { "id": "D01", "type": "lookup", "q": "Which HTTP status code means bad gateway, and when do load balancers return it?",
+      "groups": [[{ "deck": "Day3 More Fundamentals and Concurrency.pdf", "pages": [13] }]],
+      "must_contain": ["502", "bad gateway"] },
+    { "id": "D02", "type": "lookup", "q": "What is the FLP impossibility theorem?",
+      "groups": [[{ "deck": "Day 4 ACID 2PC and Consensus.pdf", "pages": [50, 58] }]],
+      "must_contain": ["flp"] },
+    { "id": "D03", "type": "lookup", "q": "What are the three pillars of observability?",
+      "groups": [[{ "deck": "Day 2 Fundamentals.pdf", "pages": [6] }]],
+      "must_contain": ["pillars", "structured logs", "tracing"] },
+    { "id": "D04", "type": "lookup", "q": "What goes into a Dockerfile?",
+      "groups": [[{ "deck": "Day1 lecture ONLINE 2026.pdf", "pages": [29] }]],
+      "must_contain": ["dockerfile", "libraries"] },
+
+    { "id": "D05", "type": "paraphrase", "q": "Why do users give up on a site when a page takes more than a second or so to load?",
+      "groups": [[{ "deck": "Day3 More Fundamentals and Concurrency.pdf", "pages": [7] }, { "deck": "Day 2 Fundamentals.pdf", "pages": [23] }]],
+      "must_contain": ["milliseconds", "users"] },
+    { "id": "D06", "type": "paraphrase", "q": "What does it cost to rework a system that was never designed to scale?",
+      "groups": [[{ "deck": "Day1 lecture ONLINE 2026.pdf", "pages": [19, 20] }]],
+      "must_contain": ["development-hours", "cost"] },
+    { "id": "D07", "type": "paraphrase", "q": "Why is it better to keep my infrastructure definition in git than to click through the AWS console?",
+      "groups": [[{ "deck": "Day3 More Fundamentals and Concurrency.pdf", "pages": [15, 17] }]],
+      "must_contain": ["configuration files", "git", "manual", "repeatable"] },
+
+    { "id": "D08", "type": "compare", "q": "How is a forward proxy different from a reverse proxy?",
+      "groups": [[{ "deck": "Day 2 Fundamentals.pdf", "pages": [21] }], [{ "deck": "Day 2 Fundamentals.pdf", "pages": [21] }]],
+      "must_contain": ["forward proxy", "reverse proxy"] },
+    { "id": "D09", "type": "compare", "q": "Compare virtual machines and containers.",
+      "groups": [[{ "deck": "Day1 lecture ONLINE 2026.pdf", "pages": [23, 26] }],
+                 [{ "deck": "Day1 lecture ONLINE 2026.pdf", "pages": [27, 33] }]],
+      "must_contain": ["virtual machine", "container", "vm"] },
+
+    { "id": "D10", "type": "cross-deck", "q": "What does the course say about using queues for writes?",
+      "groups": [[{ "deck": "Day 4 ACID 2PC and Consensus.pdf", "pages": [29, 30] }],
+                 [{ "deck": "Day3 More Fundamentals and Concurrency.pdf", "pages": [22] }]],
+      "must_contain": ["queue", "queuing"] }
+  ]
+}

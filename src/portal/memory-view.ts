@@ -93,6 +93,10 @@ const LABELS = new Map<string, string>([
   ['session', 'Recent'],
   ['checkpoint', 'Working note'],
   ['other', 'Note'],
+  // what the host keeps of their work (src/work-facts.ts, docs/STUDENT_STATE.md)
+  ['repo', 'Your code'],
+  ['thread', 'Where we stopped'],
+  ['issue', 'A problem you ran into'],
 ]);
 
 /** A note's category in words (the categories are the agent's, so anything it made up is a plain "Note"). */

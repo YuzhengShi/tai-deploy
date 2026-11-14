@@ -4,8 +4,10 @@ import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { TOOL_LIMITS } from '../src/tool-limits.js';
 import {
   BRIEF_LIMITS,
+  BRIEF_TOTAL_MS,
   acceptGithubHost,
   briefSummary,
   buildWeekBrief,
@@ -18,10 +20,14 @@ import {
   githubEnvFor,
   githubHostOfLink,
   pickPrimaryAssignment,
+  weeklyBriefAnswer,
   type BriefDeps,
   type RunPy,
   type WeekBrief,
 } from '../src/weekly-brief.js';
+// the voice host's reader of what this producer writes (a test only: the container never imports host code): the shape of `weekBrief` is a contract between the two
+import { parseWeekBrief } from '../../../src/voice/week-brief.js';
+import { LOOK_MAX, LOOK_TIMEOUT_MS, readLook } from '../../../src/voice/week-look.js';
 
 // Every person here is synthetic (Ada, Bob ... @example.com). The helpers' answers are what canvas_api.py week_status and user_contact, github_api.py
 // activity and piazza_query.py student_activity print (docs/WEEKLY_BRIEF.md); runPy is a fake that answers them and records what it was asked.
@@ -964,6 +970,92 @@ describe('formatWeekBrief', () => {
     const [first, second] = text.split('\n').filter((l) => l.startsWith('   Requirements:'));
     expect(first.length).toBeLessThan(330);
     expect(second.length).toBeGreaterThan(2000);
+  });
+});
+
+// ---- weeklyBriefAnswer: what the weekly_brief tool answers, as text (the text agent) or as the brief itself (the voice call's look_at_week) ----
+
+describe('weeklyBriefAnswer', () => {
+  it('is the text of formatWeekBrief by default and for "text", byte for byte: the text agent behaves as it always did', async () => {
+    const brief = await build(fakePy(all()).runPy);
+    expect(weeklyBriefAnswer(brief)).toBe(formatWeekBrief(brief));
+    expect(weeklyBriefAnswer(brief, undefined)).toBe(formatWeekBrief(brief));
+    expect(weeklyBriefAnswer(brief, 'text')).toBe(formatWeekBrief(brief));
+    expect(weeklyBriefAnswer(brief).startsWith('WEEK BRIEF, built 2026-11-04T20:00:00.000Z; window 2026-10-28T20:00:00Z to 2026-11-04T20:00:00Z.\n')).toBe(true);
+    // (the text is not JSON: a reader that asked for "json" and got it by mistake would find out)
+    expect(() => JSON.parse(weeklyBriefAnswer(brief))).toThrow();
+  });
+
+  it('is the brief itself as one JSON object for "json": the very object start_mock_interview stores as `weekBrief`, every field of it', async () => {
+    const brief = await build(fakePy(all()).runPy);
+    const answer = weeklyBriefAnswer(brief, 'json');
+    expect(answer).toBe(JSON.stringify(brief));
+    expect(JSON.parse(answer)).toEqual(JSON.parse(JSON.stringify(brief)));
+    expect(Object.keys(JSON.parse(answer))).toEqual(['version', 'generatedAt', 'window', 'week', 'assignments', 'commits', 'piazza', 'sources']);
+    // a worst-case brief is about 45 KB: far inside the tool host's 100,000 characters for an answer
+    expect(answer.length).toBeLessThan(20_000);
+  });
+
+  it('is read by the parser of the voice host as it reads the file, and by the reader of look_at_week: the shape is one contract', async () => {
+    const brief = await build(fakePy(all()).runPy);
+    const json = weeklyBriefAnswer(brief, 'json');
+    const view = parseWeekBrief(JSON.parse(json), NOW.getTime());
+    expect(view?.assignments.map((a) => a.name)).toEqual(['Homework 6: Scalability']);
+    expect(brief.commits?.total).toBeGreaterThan(0);
+    expect(view?.commits?.total).toBe(brief.commits?.total);
+    expect(view?.commits?.repos.map((r) => [r.name, r.commits.length])).toEqual([['hw6-scalability', 2]]);
+    expect(view?.piazza).toMatchObject({ matched: true, counts: { posted: 1, followups: 0, answers: 1 } });
+    const looked = readLook(json, { now: NOW.getTime(), assignmentId: '202', specText: '', previous: null, nonce: '3f9a1c2b7d41' });
+    expect(looked.ok).toBe(true);
+    if (!looked.ok) return;
+    const told = JSON.parse(looked.content) as Record<string, string>;
+    expect(told.sources).toBe('Canvas: read just now. GitHub: read just now. Piazza: read just now.');
+    expect(told.details).toContain('Why a worker pool?');
+    expect(told.details).toContain('Add worker pool | Uses a WaitGroup');
+    // what the helpers know and the model must never say does not reach it: no grade, no hash, no link
+    for (const gone of ['3d1f0a99', 'a1b2c3d4', 'github.com/ada-l']) expect(looked.content).not.toContain(gone);
+  });
+
+  it('says what did not arrive in a way the voice host reads: a failed source, a skipped one, an account Piazza could not identify', async () => {
+    const down = await build(fakePy(all({ 'github_api.py:activity': new Error('timed out') })).runPy);
+    const a = readLook(weeklyBriefAnswer(down, 'json'), { now: NOW.getTime(), assignmentId: '202', specText: '', previous: null, nonce: '3f9a1c2b7d41' });
+    expect(a.ok && (JSON.parse(a.content) as Record<string, string>).sources).toBe('Canvas: read just now. GitHub: could not be read just now. Piazza: read just now.');
+    const lost = await build(fakePy(all({ 'piazza_query.py:student_activity': { matched: false, reason: 'several Piazza accounts have this name', counts: {}, posts: [] } })).runPy);
+    const b = readLook(weeklyBriefAnswer(lost, 'json'), { now: NOW.getTime(), assignmentId: '202', specText: '', previous: null, nonce: '3f9a1c2b7d41' });
+    expect(b.ok && (JSON.parse(b.content) as Record<string, string>).sources).toContain('Piazza: their account could not be identified (several Piazza accounts have this name), which is not the same as not posting.');
+    const skipped = await build(fakePy(all()).runPy, { identity: { canvasUserId: '7', githubUsername: '', studentName: '' } });
+    const c = readLook(weeklyBriefAnswer(skipped, 'json'), { now: NOW.getTime(), assignmentId: '202', specText: '', previous: null, nonce: '3f9a1c2b7d41' });
+    expect(c.ok && (JSON.parse(c.content) as Record<string, string>).sources).toContain('GitHub: not available for them (their GitHub account is not linked to TAi), so you cannot see it.');
+    // nothing arrived and nothing was set up: the host's sentence for that
+    const none = await build(fakePy({}).runPy, { env: {} });
+    const d = readLook(weeklyBriefAnswer(none, 'json'), { now: NOW.getTime(), assignmentId: '202', specText: '', previous: null });
+    expect(d.ok).toBe(false);
+    expect(!d.ok && JSON.parse(d.error).error).toMatch(/cannot be read for this student/);
+  });
+
+  it('is asked for by the tool with an optional "text" or "json" argument, after the same rate limit and the same identity as before: the argument touches neither', () => {
+    // ipc-mcp-stdio.ts starts a server when it is imported: these read its text, as access-source.test.ts does, for the lines that decide this
+    const server = fs.readFileSync(new URL('../src/ipc-mcp-stdio.ts', import.meta.url), 'utf-8');
+    const start = server.indexOf("server.tool(\n  'weekly_brief'");
+    expect(start).toBeGreaterThan(-1);
+    const tool = server.slice(start, server.indexOf('server.tool(', start + 20));
+    expect(tool).toMatch(/format: z\.enum\(\['text', 'json'\]\)\.optional\(\)\.describe\(/);
+    expect(tool).toMatch(/text: weeklyBriefAnswer\(brief, args\.format\)/);
+    expect(tool).not.toMatch(/formatWeekBrief\(/); // the text goes through the one function, so "text" cannot drift from what it was
+    expect(tool.indexOf("checkRateLimit('weekly_brief')")).toBeGreaterThan(-1);
+    expect(tool.indexOf("checkRateLimit('weekly_brief')")).toBeLessThan(tool.indexOf('buildWeekBrief('));
+    // who it is about is the binding's: `format` is never an input to the identity
+    const identity = tool.slice(tool.indexOf('resolveBriefIdentity({'), tool.indexOf('if (!who.ok)'));
+    expect(identity).not.toMatch(/format/);
+    expect(identity).toMatch(/bound: \{ canvasUserId: boundCanvasUserId, githubUsername: boundGithubUsername \}/);
+    // and the old import of formatWeekBrief is not left in the server (it would be dead code that a later edit could call again)
+    expect(server).not.toMatch(/import \{[^}]*\bformatWeekBrief\b[^}]*\} from '\.\/weekly-brief\.js'/);
+  });
+
+  it('fits the limits the voice host counts by: the same looks per call as the tool host allows, and a wait the brief\'s own 40 seconds fit in', () => {
+    expect(LOOK_MAX).toBe(TOOL_LIMITS.weekly_brief); // the host counts a call's looks; the tool host counts the same number and refuses the next
+    expect(LOOK_TIMEOUT_MS).toBeGreaterThan(BRIEF_TOTAL_MS);
+    expect(LOOK_TIMEOUT_MS).toBeLessThanOrEqual(120_000); // what a tool host lets a request ask for (tool-host.ts maxCallTimeoutMs)
   });
 });
 

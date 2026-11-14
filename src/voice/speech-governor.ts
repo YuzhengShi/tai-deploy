@@ -33,8 +33,7 @@ export const GOVERNOR_DEFAULTS: GovernorOptions = { maxSentences: 2, maxWords: 4
  * to firm up.
  */
 export const LISTENER_NUDGE: Partial<GovernorOptions> = { maxSentences: 2, maxWords: 18, firstSentenceWords: 14 };
-export const LISTENER_FEEDBACK: Partial<GovernorOptions> = { maxSentences: 3, maxWords: 60, firstSentenceWords: 30 };
-/** A question that closes an answer may take the answer past maxWords if it is this short. */
+export const LISTENER_FEEDBACK: Partial<GovernorOptions> = { maxSentences: 3, maxWords: 60, firstSentenceWords: 30 };/** A question that closes an answer may take the answer past maxWords if it is this short. */
 const QUESTION_WORDS = 14;
 
 /** Where the period belongs to an abbreviation, a sentence does not end. */
@@ -54,8 +53,44 @@ const BOUNDARY = new RegExp(
   'g',
 );
 
-const FUNCTION_NAMES =
-  /\b(?:query_(?:knowledge|canvas|github|piazza)|recall_memory|save_memory|read_competency|update_competency|browse_url|read_file|render_diagram|send_to_chat|schedule_task|start_interview|end_session|evaluate_answer|end_interview|start_talk_through|end_talk_through|canvas_query|github_query|piazza_query)\b/i;
+/**
+ * The names of the call's functions and of the tools behind them: a sentence that names one is the model thinking out loud, not talking to the student. A new function is one more entry here
+ * (look_at_image, the picture reader, joins it).
+ */
+const FUNCTION_WORDS = [
+  'query_(?:knowledge|canvas|github|piazza)',
+  'recall_memory',
+  'save_memory',
+  'read_competency',
+  'update_competency',
+  'browse_url',
+  'read_file',
+  'render_diagram',
+  'send_to_chat',
+  'schedule_task',
+  'start_interview',
+  'end_session',
+  'evaluate_answer',
+  'end_interview',
+  'look_at_week',
+  'look_at_image',
+  'run_code',
+  'start_talk_through',
+  'end_talk_through',
+  // the viewer's three (screen.ts)
+  'show_document',
+  'point_at',
+  'look_at_screen',
+  // the search of the course decks (library-fn.ts)
+  'find_course_document',
+  // the cards it makes from its data (objects-fn.ts)
+  'show_(?:chart|trace)',
+  'ask_to_predict',
+  'canvas_query',
+  'github_query',
+  'piazza_query',
+];
+const FUNCTION_NAMES = new RegExp(String.raw`\b(?:${FUNCTION_WORDS.join('|')})\b`, 'i');
 const TOOLISH = /\b(?:query|canvas|piazza|github|action|actions|pages?|modules?|files?|api|tool|tools|function|search|filter|list|pdf|link|chat|slides?|url|posts?|repos?|repository)\b/i;
 
 /** The model's inner voice about what to call next. Written for what was seen; a TA talking to a student does not say any of these. */

@@ -1,0 +1,779 @@
+{
+  "about": "Samples of the chart and trace cards for looking at them (docs/CARDS.md): each is an object that cleanObject accepts. The QA dev server can append them to a history (history.appendObject).",
+  "objects": [
+    {
+      "t": "chart",
+      "title": "p99 latency by number of threads",
+      "kind": "line",
+      "xLabel": "threads",
+      "yLabel": "p99 latency",
+      "yUnit": "ms",
+      "series": [
+        {
+          "name": "gin",
+          "points": [
+            [
+              1,
+              12
+            ],
+            [
+              2,
+              15.5
+            ],
+            [
+              4,
+              31
+            ],
+            [
+              8,
+              70
+            ],
+            [
+              16,
+              160
+            ]
+          ]
+        },
+        {
+          "name": "echo",
+          "points": [
+            [
+              1,
+              10
+            ],
+            [
+              2,
+              11
+            ],
+            [
+              4,
+              20
+            ],
+            [
+              8,
+              41
+            ],
+            [
+              16,
+              95
+            ]
+          ]
+        }
+      ],
+      "note": "From the student's load test (run_go, 200 requests each)."
+    },
+    {
+      "t": "chart",
+      "title": "Requests per second by framework",
+      "kind": "bar",
+      "xLabel": "",
+      "yLabel": "throughput",
+      "yUnit": "rps",
+      "categories": [
+        "go-gin",
+        "go-echo",
+        "node-express",
+        "python-flask"
+      ],
+      "series": [
+        {
+          "name": "1 client",
+          "points": [
+            9200,
+            9800,
+            4100,
+            900
+          ]
+        },
+        {
+          "name": "10 clients",
+          "points": [
+            41000,
+            43000,
+            12000,
+            2100
+          ]
+        },
+        {
+          "name": "100 clients",
+          "points": [
+            52000,
+            55000,
+            13500,
+            2300
+          ]
+        }
+      ],
+      "note": "Numbers the student pasted from their Locust runs."
+    },
+    {
+      "t": "chart",
+      "title": "Response size against latency",
+      "kind": "scatter",
+      "xLabel": "response size",
+      "xUnit": "KB",
+      "yLabel": "latency",
+      "yUnit": "ms",
+      "series": [
+        {
+          "name": "cached",
+          "points": [
+            [
+              1,
+              14.1
+            ],
+            [
+              31.9,
+              12.3
+            ],
+            [
+              86.2,
+              30.4
+            ],
+            [
+              52.2,
+              24.8
+            ],
+            [
+              47.8,
+              20.2
+            ],
+            [
+              22.6,
+              23.8
+            ],
+            [
+              14.9,
+              15.6
+            ],
+            [
+              59.2,
+              33.4
+            ],
+            [
+              38.9,
+              14.5
+            ],
+            [
+              22.5,
+              24.2
+            ],
+            [
+              59.6,
+              28
+            ],
+            [
+              48.4,
+              19.4
+            ],
+            [
+              31.5,
+              27.2
+            ],
+            [
+              2.1,
+              9.3
+            ],
+            [
+              58,
+              30.9
+            ],
+            [
+              2.3,
+              13.1
+            ],
+            [
+              88.8,
+              33.2
+            ],
+            [
+              10.6,
+              19.3
+            ],
+            [
+              95.9,
+              30.6
+            ],
+            [
+              90.2,
+              23.4
+            ]
+          ]
+        },
+        {
+          "name": "uncached",
+          "points": [
+            [
+              1,
+              6.4
+            ],
+            [
+              38.5,
+              50.6
+            ],
+            [
+              26.1,
+              29.2
+            ],
+            [
+              9.1,
+              25.5
+            ],
+            [
+              62.8,
+              71.5
+            ],
+            [
+              82.2,
+              97.9
+            ],
+            [
+              12.1,
+              31.8
+            ],
+            [
+              23.7,
+              30
+            ],
+            [
+              44.2,
+              48.3
+            ],
+            [
+              82,
+              89.5
+            ],
+            [
+              60.6,
+              75.5
+            ],
+            [
+              55.1,
+              62.6
+            ],
+            [
+              46.7,
+              49.4
+            ],
+            [
+              12.4,
+              17
+            ],
+            [
+              57.2,
+              59
+            ],
+            [
+              93.8,
+              100
+            ],
+            [
+              4.6,
+              11
+            ],
+            [
+              93.1,
+              99.8
+            ],
+            [
+              55.5,
+              62.9
+            ],
+            [
+              79.6,
+              84.7
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "t": "chart",
+      "title": "Goroutines during the test",
+      "kind": "line",
+      "xLabel": "second",
+      "yLabel": "goroutines",
+      "series": [
+        {
+          "name": "goroutines",
+          "points": [
+            40,
+            51,
+            61,
+            70,
+            76,
+            80,
+            81,
+            79,
+            75,
+            71,
+            65,
+            60,
+            57,
+            56,
+            57,
+            61,
+            68,
+            77,
+            87,
+            98,
+            109,
+            119,
+            128,
+            134,
+            137,
+            137,
+            135,
+            131,
+            126,
+            121
+          ]
+        }
+      ]
+    },
+    {
+      "t": "chart",
+      "title": "Latency by percentile (24 services)",
+      "kind": "bar",
+      "xLabel": "service",
+      "yLabel": "latency",
+      "yUnit": "ms",
+      "categories": [
+        "service-1",
+        "service-2",
+        "service-3",
+        "service-4",
+        "service-5",
+        "service-6",
+        "service-7",
+        "service-8",
+        "service-9",
+        "service-10",
+        "service-11",
+        "service-12",
+        "service-13",
+        "service-14",
+        "service-15",
+        "service-16",
+        "service-17",
+        "service-18",
+        "service-19",
+        "service-20",
+        "service-21",
+        "service-22",
+        "service-23",
+        "service-24"
+      ],
+      "series": [
+        {
+          "name": "p50",
+          "points": [
+            10,
+            17,
+            11,
+            18,
+            12,
+            19,
+            13,
+            20,
+            14,
+            21,
+            15,
+            22,
+            16,
+            10,
+            17,
+            11,
+            18,
+            12,
+            19,
+            13,
+            20,
+            14,
+            21,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "t": "trace",
+      "title": "Raft leader election",
+      "actors": [
+        "Candidate A",
+        "Follower B",
+        "Follower C"
+      ],
+      "events": [
+        {
+          "from": "Candidate A",
+          "label": "election timeout",
+          "note": "No heartbeat from a leader for 150 to 300 ms, so A starts an election.",
+          "state": [
+            {
+              "actor": "Candidate A",
+              "text": "candidate, term 2"
+            },
+            {
+              "actor": "Follower B",
+              "text": "follower, term 1"
+            },
+            {
+              "actor": "Follower C",
+              "text": "follower, term 1"
+            }
+          ]
+        },
+        {
+          "from": "Candidate A",
+          "to": "Follower B",
+          "label": "RequestVote (term 2)"
+        },
+        {
+          "from": "Candidate A",
+          "to": "Follower C",
+          "label": "RequestVote (term 2)"
+        },
+        {
+          "from": "Follower B",
+          "to": "Candidate A",
+          "label": "vote granted",
+          "note": "B has not voted in term 2 yet and A's log is up to date.",
+          "state": [
+            {
+              "actor": "Follower B",
+              "text": "voted for A, term 2"
+            }
+          ]
+        },
+        {
+          "from": "Follower C",
+          "to": "Candidate A",
+          "label": "vote granted",
+          "state": [
+            {
+              "actor": "Follower C",
+              "text": "voted for A, term 2"
+            }
+          ]
+        },
+        {
+          "from": "Candidate A",
+          "label": "majority reached: becomes leader",
+          "state": [
+            {
+              "actor": "Candidate A",
+              "text": "leader, term 2"
+            }
+          ]
+        },
+        {
+          "from": "Candidate A",
+          "to": "Follower B",
+          "label": "AppendEntries (heartbeat)"
+        },
+        {
+          "from": "Candidate A",
+          "to": "Follower C",
+          "label": "AppendEntries (heartbeat)",
+          "note": "The heartbeats stop the followers from starting an election of their own."
+        }
+      ],
+      "note": "Randomized election timeouts make a split vote rare."
+    },
+    {
+      "t": "trace",
+      "title": "Two-phase commit across five shards",
+      "actors": [
+        "Coordinator",
+        "Shard 1",
+        "Shard 2",
+        "Shard 3",
+        "Shard 4",
+        "Shard 5",
+        "Client",
+        "Log"
+      ],
+      "events": [
+        {
+          "from": "Client",
+          "to": "Coordinator",
+          "label": "BEGIN transfer #1"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 1",
+          "label": "PREPARE tx 1"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 2",
+          "label": "PREPARE tx 1"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 3",
+          "label": "PREPARE tx 1"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 4",
+          "label": "PREPARE tx 1"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 5",
+          "label": "PREPARE tx 1"
+        },
+        {
+          "from": "Shard 1",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT"
+        },
+        {
+          "from": "Shard 2",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT"
+        },
+        {
+          "from": "Shard 3",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT"
+        },
+        {
+          "from": "Shard 4",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT"
+        },
+        {
+          "from": "Shard 5",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT",
+          "state": [
+            {
+              "actor": "Shard 5",
+              "text": "prepared tx 1"
+            }
+          ]
+        },
+        {
+          "from": "Coordinator",
+          "to": "Log",
+          "label": "decision: COMMIT",
+          "state": [
+            {
+              "actor": "Coordinator",
+              "text": "tx 1 decided"
+            }
+          ]
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 1",
+          "label": "PREPARE tx 2"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 2",
+          "label": "PREPARE tx 2"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 3",
+          "label": "PREPARE tx 2"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 4",
+          "label": "PREPARE tx 2"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 5",
+          "label": "PREPARE tx 2"
+        },
+        {
+          "from": "Shard 1",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT"
+        },
+        {
+          "from": "Shard 2",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT"
+        },
+        {
+          "from": "Shard 3",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT"
+        },
+        {
+          "from": "Shard 4",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT"
+        },
+        {
+          "from": "Shard 5",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT",
+          "state": [
+            {
+              "actor": "Shard 5",
+              "text": "prepared tx 2"
+            }
+          ]
+        },
+        {
+          "from": "Coordinator",
+          "to": "Log",
+          "label": "decision: COMMIT",
+          "state": [
+            {
+              "actor": "Coordinator",
+              "text": "tx 2 decided"
+            }
+          ]
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 1",
+          "label": "PREPARE tx 3"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 2",
+          "label": "PREPARE tx 3"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 3",
+          "label": "PREPARE tx 3"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 4",
+          "label": "PREPARE tx 3"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 5",
+          "label": "PREPARE tx 3"
+        },
+        {
+          "from": "Shard 1",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT"
+        },
+        {
+          "from": "Shard 2",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT"
+        },
+        {
+          "from": "Shard 3",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT"
+        },
+        {
+          "from": "Shard 4",
+          "to": "Coordinator",
+          "label": "VOTE-ABORT (lock timeout)"
+        },
+        {
+          "from": "Shard 5",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT",
+          "state": [
+            {
+              "actor": "Shard 5",
+              "text": "prepared tx 3"
+            }
+          ]
+        },
+        {
+          "from": "Coordinator",
+          "to": "Log",
+          "label": "decision: ABORT",
+          "state": [
+            {
+              "actor": "Coordinator",
+              "text": "tx 3 decided"
+            }
+          ]
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 1",
+          "label": "PREPARE tx 4"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 2",
+          "label": "PREPARE tx 4"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 3",
+          "label": "PREPARE tx 4"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 4",
+          "label": "PREPARE tx 4"
+        },
+        {
+          "from": "Coordinator",
+          "to": "Shard 5",
+          "label": "PREPARE tx 4"
+        },
+        {
+          "from": "Shard 1",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT"
+        },
+        {
+          "from": "Shard 2",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT"
+        },
+        {
+          "from": "Shard 3",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT"
+        },
+        {
+          "from": "Shard 4",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT"
+        },
+        {
+          "from": "Shard 5",
+          "to": "Coordinator",
+          "label": "VOTE-COMMIT",
+          "state": [
+            {
+              "actor": "Shard 5",
+              "text": "prepared tx 4"
+            }
+          ]
+        },
+        {
+          "from": "Coordinator",
+          "to": "Log",
+          "label": "decision: COMMIT",
+          "state": [
+            {
+              "actor": "Coordinator",
+              "text": "tx 4 decided"
+            }
+          ]
+        },
+        {
+          "from": "Coordinator",
+          "to": "Client",
+          "label": "done"
+        }
+      ]
+    }
+  ]
+}

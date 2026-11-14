@@ -22,6 +22,16 @@ export const TOOL_LIMITS: Readonly<Record<string, number>> = {
   read_image_text: 10,
   // each look sends the student's picture to z.ai and costs roughly a thousand tokens and a few seconds (vision.ts, docs/VISION.md). Counted when a request is about to be sent, not for a refusal
   look_at_image: 5,
+  // each run starts a disposable container on the host (docs/GO_SANDBOX.md) and spends one of the student's 10 runs an hour: a conversation about one program needs a few, and a model that tries again and again does not need more. Counted when a request is about to be sent
+  run_go: 8,
+  // each call may start a disposable container on the host that turns a PDF into page images (docs/DOCUMENTS.md; the host's own limit is 6 new documents in ten minutes and 20 a day), and a card in the chat is enough for one document. Counted when a request is about to be sent
+  show_document: 6,
+  // a card of numbers, of a sequence or of a program to guess the output of is a few kilobytes of the student's history and one more thing to read: a handful in a conversation is plenty (docs/CARDS.md; the host's own limit is 24 cards an hour for a student). Counted when a request is about to be sent
+  show_chart: 6,
+  show_trace: 6,
+  ask_to_predict: 4,
+  // a search of the course decks is an index in the host's memory (docs/COURSE_DOCS.md): cheap, but a model that searches again and again for the same thing does not need more than a few. Counted when a request is about to be sent
+  find_course_document: 8,
 };
 
 export class ToolLimiter {

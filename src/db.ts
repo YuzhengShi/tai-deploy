@@ -142,6 +142,13 @@ function createSchema(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_task_creations ON task_creations(group_folder, created_at);
   `);
 
+  // The runs of student code in the Go sandbox (src/sandbox/rates.ts): a row for each run that began to stage, so that a student's runs an hour and a day can be counted and
+  // survive a restart. Rows older than two days are removed when a run is recorded.
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS sandbox_runs (student_folder TEXT NOT NULL, started_at INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_sandbox_runs ON sandbox_runs(student_folder, started_at);
+  `);
+
   // Add identity binding columns (Canvas/GitHub access control)
   try {
     database.exec(

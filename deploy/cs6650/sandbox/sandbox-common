@@ -1,0 +1,82 @@
+# shellcheck shell=bash
+# The part of sandbox-run and sandbox-modules that puts the code of ONE run into /work and finds where to work. Sourced, never run on its own.
+#
+# This runs INSIDE the disposable container, on code nobody trusts: the root file system is read-only, /in is the read-only copy the host made, and /work
+# and /tmp (memory-backed, size-limited) are the only places that can be written. What these scripts print of their own is one line when something in
+# the code is refused (and they exit 2); nothing else. No argument or file name is ever put into a command string: only into argument lists.
+
+# the character ranges in the checks below are by code point, whatever locale the host of this image runs it under
+export LC_ALL=C
+
+IN=${SANDBOX_IN:-/in}
+WORK=${SANDBOX_WORK:-/work}
+MAX_ENTRIES=2000
+
+refuse() {
+  printf 'sandbox: %s\n' "$1"
+  exit 2
+}
+
+# A folder of the project: the same rule as the host's cleanSandboxPath (segments of letters, digits and ._- that do not start with a dot, at most 6 deep, no "..").
+valid_folder() {
+  local re='^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*){0,5}$'
+  [[ $1 =~ $re ]] && [[ $1 != *..* ]] && [ "${#1}" -le 120 ]
+}
+
+# stage_code FOLDER (or -): puts the code from /in into $WORK and sets ROOT (the project's top directory) and WD (where to work: ROOT, or FOLDER inside it).
+stage_code() {
+  local folder=$1 count real
+  local -a entries
+  if [ -e "$IN/source.tgz" ]; then
+    # GNU tar refuses a member whose name has "..", drops a leading "/", and with these options nothing takes another owner or other permission bits. The time here
+    # and the size of $WORK bound a bomb.
+    if ! timeout -s KILL 20 tar -xzf "$IN/source.tgz" -C "$WORK" --no-same-owner --no-same-permissions < /dev/null; then
+      refuse 'the archive could not be unpacked: it is not a gzip-compressed tar archive, or it holds a path that leaves the project, or it is too big to unpack.'
+    fi
+  fi
+  if [ -d "$IN/files" ]; then
+    cp -R "$IN/files/." "$WORK/" || refuse 'the files could not be copied.'
+  fi
+  count=$(find "$WORK" -mindepth 1 2> /dev/null | head -n $((MAX_ENTRIES + 1)) | wc -l)
+  [ "$count" -ge 1 ] || refuse 'there is no code to run.'
+  [ "$count" -le "$MAX_ENTRIES" ] || refuse "the archive has more than $MAX_ENTRIES files."
+  if [ -n "$(find "$WORK" \( -type p -o -type s -o -type b -o -type c \) -print -quit 2> /dev/null)" ]; then
+    refuse 'the archive holds a special file (a pipe, a socket or a device), which is not allowed.'
+  fi
+
+  ROOT=$WORK
+  if [ -e "$IN/source.tgz" ] && [ ! -d "$IN/files" ]; then
+    # an archive with exactly one thing at the top, and that a directory, is the project inside a wrapper (GitHub's archives are made so)
+    shopt -s nullglob dotglob
+    entries=("$WORK"/*)
+    shopt -u nullglob dotglob
+    if [ "${#entries[@]}" -eq 1 ] && [ -d "${entries[0]}" ] && [ ! -L "${entries[0]}" ]; then ROOT=${entries[0]}; fi
+  fi
+  ROOT=$(cd -P -- "$ROOT" 2> /dev/null && pwd -P) || refuse 'the project folder cannot be entered.'
+  WD=$ROOT
+  if [ "$folder" != - ]; then
+    valid_folder "$folder" || refuse 'the folder name is not allowed.'
+    [ -d "$ROOT/$folder" ] || refuse "the project has no folder $folder."
+    real=$(cd -P -- "$ROOT/$folder" 2> /dev/null && pwd -P) || refuse "the folder $folder cannot be entered."
+    case "$real" in
+      "$ROOT" | "$ROOT"/*) WD=$real ;;
+      *) refuse "the folder $folder leads out of the project." ;;
+    esac
+  fi
+}
+
+# (GOMOD_DIR, ROOT and WD are read by the scripts that source this file)
+# shellcheck disable=SC2034
+# find_gomod: sets GOMOD_DIR to the directory of the nearest go.mod from WD up to ROOT; returns 1 (and leaves it empty) when there is none.
+find_gomod() {
+  local d=$WD
+  GOMOD_DIR=
+  while :; do
+    if [ -f "$d/go.mod" ]; then
+      GOMOD_DIR=$d
+      return 0
+    fi
+    [ "$d" = "$ROOT" ] && return 1
+    d=$(dirname -- "$d")
+  done
+}

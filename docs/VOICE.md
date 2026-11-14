@@ -14,7 +14,7 @@ real Deepgram service is listed under "Not verified yet" at the end.
 | Socket.IO server on port 3001, HMAC link per interview | A WebSocket (`ws`) upgrade on the portal at `/api/voice`, authenticated by the portal's session cookie. The old HMAC interview link survives only as the deep link `/interview/<token>` that `start_mock_interview` returns; the page opens it and starts the call with the token |
 | 17 functions incl. `get_youtube_content`, `access_sharepoint`, `generate_image` | Those three are **dropped** (the owner dropped YouTube, Microsoft and AWS). `query_piazza` and `send_to_chat` are added, `send_to_whatsapp` is renamed |
 | Shadow evaluator on Bedrock Sonnet | The same prompt on the gateway (`TAI_VOICE_EVAL_MODEL`, default `gpt-oss`), JSON out, parsed defensively |
-| Image vision (Bedrock Haiku) for images the student sends | **Not available** (no vision model on the gateway). An attached image is stored and the call is told "an image was attached, I cannot see images" (the page shows a `notice`) |
+| Image vision (Bedrock Haiku) for images the student sends | **Not available** (no vision model on the gateway). An attached image is stored and the call is told "an image was attached, I cannot see images" (the page shows a `notice`). **Since 2026-11-07:** `look_at_image` through the tool host (a vision model behind the gateway: z.ai) where `TAI_VISION=1` and not `TAI_CALL_VISION=0`; otherwise as described here |
 | `listen`: nova-3 with `eot_threshold`/`eot_timeout_ms` | Those two are **Flux-only** in the current API. Default listen model `flux-general-en` (version `v2`) with `eot_threshold` 0.85 and `eot_timeout_ms` 4000, `keyterms` from the design; on a Settings error about the listen model, reconnect once with `nova-3` (`v1`, no EOT fields). Override with `TAI_VOICE_LISTEN_MODEL` |
 | Students' voices | Every `Settings` carries **`"mip_opt_out": true`**: Deepgram's model-improvement programme must not keep students' voices (as `src/portal/transcribe.ts` does for voice notes). Not configurable |
 | `start_interview` waits for the interview context | The switch happens at once with what is at hand (`interview_context.json` if it is fresh, else COMPETENCY.md and the topic); the tool host's `start_mock_interview` runs in the background and its material is **appended with `UpdatePrompt`** when it arrives (a 20-60 s silence in a voice call is not acceptable) |
@@ -164,7 +164,7 @@ through" below, and `topic` is what the student typed they want to explain: plai
 `{"type":"text","text":string}` (typed in the chat during the call: the hub puts it
 in the chat history ONCE and injects it; a page that sends typed text through `/api/send` must not also send it here),
 `{"type":"mute","muted":boolean}` (while muted the frames are replaced by silence), `{"type":"end"}` (hang up), `{"type":"ping"}` (answered
-`{"type":"pong"}`).
+`{"type":"pong"}`), and `{"type":"view","view":{...}}` (batch B: where the student is looking: the document and page open in the viewer, the words picked, a card's line or point, a line of the chat; the whole view each time; `parseViewState` checks every field and a view that does not parse is dropped; the hub keeps the latest in the `ViewStore` and the relay turns it into a note for the next turn: "Relay and the session token", below, and docs/CHAT_OBJECTS.md section 3).
 
 Server -> browser: **binary**: PCM16 LE mono 24 kHz agent speech. **Text** JSON:
 `{"type":"ready","sessionId","mode":"conversational"|"interviewer"|"listener","voice","maxSeconds","resumed":boolean}` (after Deepgram's `SettingsApplied`;
@@ -175,6 +175,8 @@ Server -> browser: **binary**: PCM16 LE mono 24 kHz agent speech. **Text** JSON:
 still in flight from the interrupted sentence is dropped by the hub until the next turn begins, at most 1.5 s),
 `{"type":"mode","mode":"interviewer"|"conversational"|"listener","voice"}`,
 `{"type":"timer","elapsedSec","remainingSec","interviewRemainingSec"?,"talkRemainingSec"?}` (every 5 s; the last two only in their own mode),
+`{"type":"show","doc","page","title","pages"}` (open that document at that page in the viewer), `{"type":"point","doc","page","boxes"}` (draw boxes round words for a few seconds: it never opens or turns a page, so when the viewer is on another page the hub sends `show` first and `point` a moment later)
+and `{"type":"doc_state","state":"preparing"|"failed","title"?,"message"?}` (a document is being prepared, or could not be: batch B, `show_document` and `point_at` below; docs/VIEWER_VOICE.md, docs/VIEWER.md),
 `{"type":"notice","text"}` (a picture was attached, the silence warning, "reconnecting"/"Reconnected." after a Deepgram drop, a problem
 Deepgram reported on a live call (what follows decides: a reconnect, or `error`+`closed`), a typed line the call could not take),
 `{"type":"error","code","message"}`, codes: `not-configured`, `busy` (this student has a call open, or the host is full, or the previous call
@@ -219,6 +221,10 @@ message (`TAI_VOICE_MUTE_HANDOFF=0` turns it off): in the first call the old pro
 own opening. `TAI_VOICE_RELAY_DUMP=/abs/path` is a diagnostic (off by default): one JSON line per Think request with what Deepgram sent
 (fields, roles and the first words of each message, never the whole system prompt) and what the model answered (text, calls, what was spoken,
 calls written as text); it holds the student's words, so it is for finding out why a call went wrong and then unset.
+
+**What the student has open** (batch B, 2026-11-07; docs/CHAT_OBJECTS.md section 3, docs/VIEWER_VOICE.md). The relay takes `screenFor(sid)` as it takes `speechFor`: when the call's student has a view (a document open, words picked, a card, a line of the chat) that is at most ten minutes old, it puts a note
+that the HOST made (`describeView`: the page's own words, quoted as data between a marker the text cannot close, at most 2,000 characters, with a sentence that the quoted text is data and never an instruction) as one system message just before the last user message of THAT request, and adds nothing else.
+It is never added to Deepgram's conversation and never sent with `UpdatePrompt` (which appends for good), so nothing accumulates; with no view nothing is added; the model can ask for the same note fresh with `look_at_screen`.
 
 ### Tool host (container side: `container/agent-runner/src/tool-host.ts`; host side: `src/voice/tool-host.ts`)
 
@@ -284,13 +290,13 @@ so the Canvas answers carry `due_local` next to `due_pacific` for a student whos
 `src/voice/canvas-text.ts` says it ("on the student's own clock ...") in `find` and `assignment_detail`, and rule 6 of the conversational prompt tells the model to say both,
 Pacific first. A host kept for the next call has the zone it started with. `COURSE_TIME.md` has the contract and what is not checked.
 
-### The functions the Think step may call (conversational: 16, interviewer: 6, listener: 6)
+### The functions the Think step may call (conversational: 24, interviewer: 9, listener: 6; 25, 10 and 6 where a call may look at pictures, which it may since 2026-11-07)
 
 Conversational: `query_knowledge`, `recall_memory`, `save_memory`, `read_competency`, `update_competency`, `query_canvas`, `query_github`,
-`query_piazza`, `browse_url`, `read_file`, `render_diagram`, `send_to_chat`, `schedule_task`, `start_interview`, `start_talk_through`, `end_session`.
-Interviewer: `evaluate_answer`, `query_knowledge`, `read_competency`, `query_github`, `send_to_chat`, `end_interview` (the last two of its own: "The code walkthrough", below). Listener (a talk-it-through):
+`query_piazza`, `browse_url`, `read_file`, `run_code`, `render_diagram`, `show_document`, `point_at`, `look_at_screen`, `find_course_document`, `show_chart`, `show_trace`, `ask_to_predict`, `send_to_chat`, `schedule_task`, `start_interview`, `start_talk_through`, `end_session`.
+Interviewer: `evaluate_answer`, `query_knowledge`, `read_competency`, `query_github`, `run_code`, `look_at_week`, `look_at_screen`, `send_to_chat`, `end_interview` (`query_github` and `send_to_chat` of their own: "The code walkthrough", below; `run_code`: "Running their code"; `look_at_week`: "Looking at the week again"; `look_at_screen`: "What the student has open", above, with a description of its own: the interviewer is told never to say what is wrong with the lines they picked). Listener (a talk-it-through):
 `query_knowledge`, `read_competency`, `update_competency`, `save_memory`, `end_talk_through`, `end_session`: it cannot put anything in the
-chat. Every description carries WHEN TO CALL, CORRECT PATTERN and WRONG PATTERN, as in the design. A function of the other mode is refused
+chat. Where a call may look at pictures (`callVisionOn`: `TAI_VISION=1` and not `TAI_CALL_VISION=0`) the conversation and the interviewer also have `look_at_image`, right after `run_code`. Every description carries WHEN TO CALL, CORRECT PATTERN and WRONG PATTERN, as in the design. A function of the other mode is refused
 with an error result.
 
 | Function | Goes to | Notes (schema changes from the design in bold) |
@@ -306,7 +312,16 @@ with an error result.
 | `query_canvas(... assignment_id ...)` | | `assignment_id` may be the exact title of the assignment as the list gives it: "Homework 7: Cost savings?!" (with its "?" and "!") was refused 40 times in a day by a check that knew no punctuation but `. , : ' # & ( ) _ / + -` |
 | `browse_url(url)` | built-in `web_fetch` | http(s) only |
 | `read_file(path)` | built-in `read_file` | normalized to `/workspace/group/uploads/<name>` |
+| `run_code(action, repo?, upload?, files?, pkg?, race?, testRun?, args?, stdin?)` | host: the sandbox (`src/sandbox`, wired in `src/index.ts`), no tool host | runs THEIR Go code (`go run`, `test`, `vet`, `build`) for the student of the call: the folder and GitHub account are the call's user record's, the arguments pass `parseSandboxRequest` (the one gate); the answer is the host's frame plus a `voice_note`; within 50 s whatever the runner does. Both modes, a description of its own in each. "Running their code", below |
 | `render_diagram(mermaid_code, caption?)` | nanoclaw `render_diagram` (`mermaid_syntax`, `caption`) | caption defaults to "A diagram from our call"; the image reaches the chat through the usual IPC -> web channel -> history path |
+| `look_at_image(name, question?)` | the tool host's `look_at_image` (a vision model behind the gateway: z.ai) | only where a call may look at pictures (`callVisionOn`), in the conversation and the interview: a picture the student attached in the chat (the message that names it names this function), looked at once in a call (the first description is kept) and five looks a call; the picture goes to z.ai, as from the chat, and what comes back is a description framed as data. `src/voice/look-image.ts`; docs/RUN_CARDS.md, docs/VISION.md |
+| `show_document(document, page?)` | host: `src/voice/screen.ts` with the documents service (`src/docs`), no tool host | puts a PDF, a presentation or a document on the student's screen, in the viewer: one of theirs, a file they attached, or a deck of the course library, or (when nothing of those matches the name) a file of the course's Canvas that the student could open there: the host downloads it. A card for it goes in the chat once for the call, then the socket's `show`. A new file is prepared by the renderer container and answered early with "preparing" when that takes over about 8 s (a new Office file takes 10 to 25 s here; a kept document, a library deck and the same file again are instant). Not found: the answer lists up to 8 titles. docs/VIEWER_VOICE.md, docs/DOCUMENTS.md |
+| `point_at(phrase)` | host: `src/voice/screen.ts` | draws a box for a few seconds round the words on the page that is open (or on the page of the document shown last when the viewer reports nothing; the model's schema has had no `page` since 2026-11-07), found in that page's own words (`findPhrase`); the socket's `point`; it never opens or turns a page; not found: it says so and gives the start of the page's text |
+| `look_at_screen()` | host: `src/voice/screen.ts` with the `ViewStore` | the note `describeView` makes now (the document and page they have open, the words they picked, a card's line or point, a line of the chat they picked), or that nothing is open. Conversation and interviewer both have it |
+| `find_course_document(query)` | host: `src/voice/library-fn.ts`, an index in memory, no tool host | finds a slide of the course library by what it says: at most 5 slides, each with its title, week, page and a stretch of that page's own words, quoted as data; the conversation only; 12 searches a call. docs/COURSE_DOCS.md |
+| `show_chart(title, kind, x_label, y_label, series, ...)` | host: `src/voice/objects-fn.ts`, no tool host | a chart card (line, bar or scatter) in the chat, from numbers the student gave or that a run measured: the data goes through the history's one gate (`cleanObject`) and a refusal says what is wrong, so that the model can fix it; at most 5 a call; the conversation only. docs/CARDS.md |
+| `show_trace(title, actors, events, note?)` | host: `src/voice/objects-fn.ts` | a sequence card to step through (2 to 8 actors, at most 120 steps, each a message or something at one actor); at most 6 a call; the conversation only. docs/CARDS.md |
+| `ask_to_predict(question, action, files, pkg?, choices?)` | host: `src/voice/objects-fn.ts` | a prediction card: a small Go program the student guesses the output of BEFORE it runs. Their own press of Run runs it once through the sandbox; TAi then gets a `[System note, not from the student: ...]` turn with their guess and the output. At most 4 a call; the conversation only. docs/PREDICT.md |
 | `send_to_chat(message)` | host: the IPC `message` file the container's `send_message` writes | no container to wait for: in the chat 0.9 s after the student stopped, 0.6 s before the answer's first sound (one call). **A link in it must be one this call has seen** (a lookup's answer, what the student said or typed, the course status): the model, asked for 'the Raft PDF' without an address, wrote `files/xxxx/download` into the chat of the owner's long call; now that is refused (`not sent: ... is not a link any lookup in this call returned`). **The interviewer's `send_to_chat` is guarded the same way for code** ("The code walkthrough": an excerpt of at most 25 lines of a file this call read, once for each file, or the question written down) |
 | `schedule_task(description, when)` | host: the IPC task file the container's tool writes (`once`, `context_mode: group`) | **one-time only**; `when` is read on the host (local ISO time, a zone, "in 2 hours", "tomorrow 9am", "tonight", "9pm") into the scheduler's local time; at most 60 days ahead. **The call waits (6 s) for the host's answer** (`results/<id>.json`, `src/voice/ipc-answer.ts`): a refusal (a limit of `src/task-limits.ts`) is told as an error, and "scheduled" is said only when the host said so |
 | `start_interview(topic, assignment_id?)` | session | filler, `FunctionCallResponse`, then `UpdateThink` + `UpdateSpeak` + queued `InjectAgentMessage`; `start_mock_interview` in the background |
@@ -314,9 +329,15 @@ with an error result.
 | `end_talk_through(summary)` | session | the notes kept, switch back, a queued "thanks for talking that through" line |
 | `end_session(summary_note)` | session | waits for the goodbye (3 s, then until `AgentAudioDone`, at most 9 s), then ends (reason `agent`) |
 | `evaluate_answer(question_asked, student_answer_summary, topic)` | shadow evaluator | the result goes back to the model, which must not speak it. The evaluator also writes `said` and `better` for the student's review card; they are **taken out of what the model gets** (it would say them aloud) and kept on the session ("The review card") |
+| `look_at_week()` | session -> the tool host's `weekly_brief` (`format: "json"`) | the interviewer's second look at Canvas, GitHub and Piazza (2026-11-06): no parameters, always this student and the interview's own assignment; at most 3 a call; the answer says which sources arrived; the interview keeps what it found. "Looking at the week again", below |
 | `end_interview(topics_covered, overall_impression)` | session | results written, switch back, a queued "nice work" line |
 
-`defer_until_eot: true` is set on `save_memory`, `update_competency`, `render_diagram`, `send_to_chat`, `schedule_task`, `start_interview`,
+**The page they have open comes first (2026-11-07, docs/VIEWER_VOICE.md section 9).** A student reading slides turns the pages themselves; a real call had TAi open another page, another deck or the first page
+on its own six times because its words did not say "open". Now: the prompt's section "THE VIEWER" and rule 5c put the page in front of them first (answer from its quoted text, `point_at` the words, never search or move them
+unasked); `show_document` is for what they ask for or say yes to, starts a deck they ask to open at its first page, keeps the open document on the page they are on when no page is given, says in its answer where it moved
+them (`moved`), and counts page turns of the open document apart from openings (120 a call, `SCREEN.maxTurns`); `find_course_document` carries `open_page` while a page is open.
+
+`defer_until_eot: true` is set on `save_memory`, `update_competency`, `render_diagram`, `show_document`, `point_at`, `show_chart`, `show_trace`, `ask_to_predict` (a card or a box the student sees must not come from a turn that is not confirmed), `look_at_image` (the picture leaves TAi's systems: a turn that is not confirmed must not send it), `send_to_chat`, `schedule_task`, `run_code`, `start_interview`,
 `start_talk_through`, `end_talk_through`, `end_session`, `end_interview`. Slow functions (`browse_url`, `start_interview`, `query_github`),
 the first look-up while the container is still starting and the reading of a file or page first `InjectAgentMessage` a short filler with
 `behavior: "queue"` (only when no other injection is unconfirmed; never retried; one to a student turn). **The filler is one of six
@@ -327,6 +348,8 @@ Function results go back as `FunctionCallResponse` with
 `content` capped at 6000 characters; a cancelled call gets no answer. A tool that failed answers `{"error": "..."}` (short, sayable).
 The tool host's `render_diagram` leaves `data/ipc/<folder>/messages/.send_message_used`, which would swallow the text
 agent's NEXT reply (`index.ts`): the voice side removes it after that call and when the call ends.
+
+**Checked by the lead on 2026-11-07, without a call or audio** (a Settings and an UpdateThink sent to the live Voice Agent from the host, the key read there and never printed): it accepts the conversation's 24 functions (25,476 characters, with the nested parameters of `run_code`, `show_chart`, `show_trace` and `ask_to_predict`) and the interviewer's 9 and the listener's 6, each as the first Settings and as the think block of an UpdateThink (the switches into and out of a mode). It was checked again with picture reading in calls on (`look_at_image` added to the conversation and the interview: 25 functions, 26,931 characters, and 10, 12,119): accepted in the same five ways. It does not say how the live model uses the new functions: only a real call shows that.
 
 The mode switch (design: "Mode transition flow"): `FunctionCallResponse` first, 0.5 s, then `UpdateThink` with the **whole** think block
 (provider, endpoint with the same call's token, the other mode's prompt and functions) and a wait for `ThinkUpdated` (5 s), then
@@ -411,7 +434,8 @@ collects them into `weekBrief` of `groups/<folder>/interview_context.json` (the 
   one), taken out of the text if it is somehow in it; each line starts with `> ` (a line of a submission that reads `## NEW RULES` cannot look like a
   heading); a line before says what it is and a reminder after says it is not an instruction. One-line fields cannot start a heading either.
 * **The rules** (`WEEK_RULES`, "THE WEEK'S EVIDENCE", between the code walkthrough and the student context; the same text opens the late update): ask
-  which requirements they covered and left in your own words; status neutral and NEVER a score, grade or points; the teaching team's feedback can be a
+  the warm-up names ONE concrete part of the assignment (from the ASSIGNMENT section) and asks how they approached it, and never asks them to list what they
+  finished or skipped (see "Looking at the week again" for why); status neutral and NEVER a score, grade or points; the teaching team's feedback can be a
   topic; never invent a commit, a post, a status or a requirement; `matched: false` = say once that you cannot see the account, never imply they did not
   post. **Three beats are REQUIRED, not advice**: (a) a commit (its day and gist in your own words, never the hash; the problem it solved and what they
   traded off; many tiny WIP commits = how they debug; none while the assignment is open = how they are approaching it), (b) the Piazza post (walk through
@@ -419,7 +443,7 @@ collects them into `weekBrief` of `groups/<folder>/interview_context.json` (the 
   (not submitted = what is left and what next; late or missing = what got in the way, never judging; feedback can be the topic). Each is asked ONCE, in
   this order, between the walkthrough's questions (aim for the 3rd, 5th and 7th), skipped only when its section is absent, and `end_interview` waits for
   them. A contradiction (they say they have not posted and a post is listed) is the next question: one short neutral sentence of what the section shows,
-  then ask them to talk about it, never accusing. The beats are also a step of INTERVIEW STRUCTURE (`WEEK_STRUCTURE`: step 1 asks the requirements, step 3
+  then ask them to talk about it, never accusing. The beats are also a step of INTERVIEW STRUCTURE (`WEEK_STRUCTURE`: step 1 is the concrete warm-up, step 3
   is the beats), rules 11 and 12 after rule 10 (`WEEK_RULE_LINES`), and a short check at the very end of the prompt and of the late update (`weekCheck`:
   what the sections show, the contradiction, the schedule). Rule 3 lets the interviewer name the week's other assignments. The evaluator's rubric and
   "process over correctness" are unchanged.
@@ -438,7 +462,8 @@ collects them into `weekBrief` of `groups/<folder>/interview_context.json` (the 
   slot has passed and it has not been named, one beat to an answer, in order. That matters for the usual start, where the brief is fetched in the
   background and lands after a few answers: counting from the start alone would never have named the commit (its slot, the 2nd answer, had gone by), so
   a brief that arrives at the 5th answer gets the commit at once, Piazza at the 6th and the status at the 7th. The wrap-up of an interview with a brief (`interviewWrapUpWeek`) no longer says "one final question at most" while a beat is left.
-* **No brief, no change.** With `week` null the interviewer's prompt and the late update are byte for byte what they were (12 outputs, 133,583
+* **No brief, no change** (as of 2026-11-05; on 2026-11-06 rules 1, 5 and 8b of the interviewer's prompt changed for every interview, with a brief or without: "Voice pace" and
+  "Looking at the week again"). With `week` null the interviewer's prompt and the late update were byte for byte what they had been (12 outputs, 133,583
   characters, compared before and after the edit), including the existing blocks being unframed and unfitted.
 * **The budget** (`MATERIAL_LEVELS`, `PROMPT_MAX` 24,000). Measured 2026-11-05: today's prompt is 6,256 characters with no material, 16,769 for a typical
   interview (spec 1,800, course material 3,500, submission 800, code 3,000, twelve files) and 27,990 with every existing field at its limit (29,619 with
@@ -488,6 +513,103 @@ collects them into `weekBrief` of `groups/<folder>/interview_context.json` (the 
   three runs, the contradiction in none). **Not settled**: once the interviewer deferred the post ("we can talk about that in a bit") and asked about it
   in turn 6; four runs are not a rate, and a student who is not asked what she answers is a test artifact the fixed lines cannot avoid (the interviewer then
   asks the same beat again).
+
+### Looking at the week again (`look_at_week`, 2026-11-06)
+
+The owner's call of 2026-11-06 (18:12 to 18:25 UTC, a mock interview): "in interview mode TAi can only see GitHub, not Canvas and Piazza". The prompt held the brief as it was when the interview began, and the owner's
+account is a Canvas TA account (no submission, no Piazza match, no commits that week), so the brief was nearly empty; the interviewer's only look-up was `query_github`, so asked "can you go take a look?" and "can you
+look at Canvas?" it said "I can't open Canvas directly, only what's been passed to me". With nothing to ask about, its opening ("which requirements did you cover and which did you leave out?") was asked four times in
+different words; the owner: "I don't know what you mean by that."
+
+* **The function** takes no parameters: it is always this student, the interview's own assignment, all three sources. Interviewer only (it made the interviewer's functions 7; `run_code` made them 8 and the conversation's 16 into 17; the listener's 6 are unchanged).
+  `week-look.ts` has the logic, session.ts `lookAtWeek` runs it; it is in `CALL_FUNCTIONS` (it replaces what the interview holds of the week) and `TOOL_HOST_FUNCTIONS` (the pre-written "okay, taking a look." after
+  1.5 s, "one sec" while the container starts) and not in `PROMOTABLE_FUNCTIONS` (a test keeps that set apart from the call's own functions, and its answer is what the next sentence is about).
+* **The data**: the call's tool host is asked for `weekly_brief` with exactly `{assignment_id, format: "json"}` (the id when the interview has a numeric one; never a folder, an account or another assignment: the container
+  takes the student from the host's binding) and 50 s (`LOOK_TIMEOUT_MS`; the brief stops at 40). The tool's new optional `format` is `text` (the default, byte for byte what it was) or `json`, the object
+  `start_mock_interview` stores as `weekBrief` (`weeklyBriefAnswer`); the host reads it with `parseWeekBrief` and, from the raw object, the `sources` the parser leaves out. **The image must be rebuilt**: an older one
+  ignores `format`, answers text, and every look ends in the "could not read" sentence. `TAI_DISABLED_TOOLS` must not name `weekly_brief`.
+* **What the model is told** (JSON, like `evaluate_answer`'s): `sources` (a sentence each: "Canvas: read just now." / "GitHub: could not be read just now. What you already had of it is from before." / "... not available for
+  them (their GitHub account is not linked to TAi), so you cannot see it." / "Piazza: their account could not be identified (<the helper's reason, cleaned>), which is not the same as not posting."), `shows` (the prompt
+  check's facts line), `details` (the prompt's own sections, so what a student wrote stays between quote markers with a value picked for this answer), `left_out` when a section was dropped for length, and an
+  `instruction` (what they asked about in one or two short sentences; nothing found: say so in ONE sentence and ask about the assignment itself; "could not be read" is not "nothing there"; never a score, grade or points),
+  because the last text read wins over the prompt. Never a score, grade, points, hash or link. At most 1,800 characters of `details` (`LOOK_DETAILS_MAX`: levels 3 and 4 of the prompt's caps and a tighter one, the
+  teaching team's notes first, then whole sections from the end); about 2,400 characters for a typical week, under 3,000 at the contract's maxima.
+* **What the interview keeps** (`mergeWeek`): the new part of each source that answered, the old part of each that did not (a Canvas timeout must not take the assignment being practiced, and the status beat, out of the
+  interview). It replaces `InterviewContext.week`, so `weekNext` and a reconnect's prompt use it; the beats already named are kept. An interview with no brief gets one this way (results carry the facts, a reconnect brings
+  the rules and sections; the live prompt does not get the rules). A `start_mock_interview` that finishes after a look no longer overwrites it (`fetchInterviewMaterialInner`, 2026-11-06): the file's brief is older, so it fills in only the sources the look did not have (`mergeWeek`), and the late update is built from that week.
+* **The limit**: 3 looks a call (`LOOK_MAX` = `tool-limits.ts` `weekly_brief`, which the tool host counts per call), every request sent counted, a failed one too. The next is not sent: `status: "not looked again"`, a note and the
+  view from before (an error sentence when there is none); a container that says "Rate limit exceeded" gets the same answer, and the call counts as used up from then on. Every other failure (tool host down, tool error or timeout, an answer that is not a version 1
+  brief, every source failed or none set up, neither account linked, which is known before asking) is a sentence the model can say ("I could not read Canvas, GitHub or Piazza just now: ..."); a call that ends meanwhile is let go of.
+* **The prompt** (every interview): rule 1 at most two short sentences of about 15 words, never why it asks; rule 5 reword ONCE with a concrete example, then ask something else; new rule 8b: asked to look, or told they
+  just submitted, pushed or posted, call `look_at_week`, never say it cannot, and when it shows nothing say so in one sentence and ask about the assignment. The warm-up of an interview with a brief (`WEEK_RULES`,
+  `WEEK_STRUCTURE`) is ONE concrete part of the assignment from the ASSIGNMENT section and how they approached it; "which part did you start with?" once, only when the assignment names none. `PLAIN_STRUCTURE`
+  never had the inventory wording and is unchanged. Cost, measured 2026-11-06 with a fixed quote value: 528 characters of every interviewer prompt, 865 with a brief (the worst case, forty hundred-character paths, 22,595 ->
+  23,460 of 24,000; with forty-character paths the fit now lands a level lower, 23,918 -> 21,960).
+* **Verified**: `week-look.test.ts` (20: the answer, every state of the sources, the merge, the limit), `hub-look.test.ts` (19: the whole hub with a fake Deepgram and tool host: the call made, the identity,
+  the failures, the limit, the fillers, a call that ends meanwhile, a look made before a late file), 1 more in `functions.test.ts`, 4 in `week-brief-prompt.test.ts`, 6 in the container's `weekly-brief.test.ts` (text byte for byte, json, the
+  host's reader on the producer's output, the tool's wiring by its text); mutations, one at a time and the file restored byte for byte: 22, all killed.
+* **Checked by the lead on 2026-11-06, without a real call**: the live Deepgram Voice Agent accepts the interviewer's seven functions (`look_at_week` has `properties: {}`), in a Settings and in an `UpdateThink`; the
+  image's own `tsc` passes with the new container sources; and the real model (the voice model through the gateway, three runs each) with the prompt built from the owner's real call: the first question is about ONE
+  concrete part (Terraform) 3 of 3 (it used to be the inventory question); asked "can you go take a look? I think I submitted on Canvas" it calls `look_at_week` 3 of 3 and then says in one sentence that Canvas shows no
+  status and goes on with a question about the assignment; told "I don't know what you mean by that" it rewords once with an example 3 of 3. **Not verified**: a real call; a real `weekly_brief format=json` through
+  a real tool host (the live host runs the old build until the deploy). The text agent's persona (`groups/global/CLAUDE.md`, `TEACHING_STRATEGIES.md`) has the same new opening.
+
+### Running their code (`run_code`, 2026-11-06)
+
+The owner's call: TAi said "I can't run Go here, I have no runtime" and the student asked it to run their code. The host now has a sandbox (`docs/GO_SANDBOX.md`: a disposable container with no secrets and no network); the voice call asks it through `run_code`, the text agent through `run_go`
+(the same names and the same gate).
+
+* **Who may ask**: the conversation and the interviewer, not the listener. The student is the call's user record (`env.folder`, `env.githubUsername`), never anything in the arguments (`run-code.test.ts` passes a `folder` and a `githubUsername` in them). A host function: no tool host, nothing of the student's container.
+* **The gate**: the arguments go through `parseSandboxRequest` (`src/sandbox/types.ts`), the one place that decides what may run: a kind (run, test, vet, build), a package pattern, up to 4 short arguments, stdin, and the code in exactly one way (inline files, a repository of theirs by name, an attached file). A refusal is its sentence
+  (`{"error": "Not run: ..."}`); with no sandbox (`TAI_SANDBOX=0`, or no `runSandbox` in `VoiceDeps`) it is "Running code is not set up on this server yet."
+* **What the model is told** is `frameSandboxResult` (how it ended, the command, the output QUOTED between markers with a value picked for this answer) plus a `voice_note` inside the same JSON object: they are LISTENING, so one or two short sentences, never the output read aloud, a number or a name from it at most; the conversation may put
+  anything longer in the chat (`send_to_chat`), the interviewer may not (its chat takes excerpts of files it read, and the note says so). The output is cut to 1,800 characters first (`RUN_CODE_OUTPUT_CHARS`): `capResult` cuts a function's answer at 6,000 characters at the END, which is where the markers close and the note is. The worst output
+  (64 KB of quotes, of newlines, of escapes) answers in under 6,000 with both markers and the note (`run-code.test.ts`).
+* **Time**: a run takes up to a minute (the module download, the queue and the run: `SANDBOX_TOTAL_MS`). The function answers within 50 s (`RUN_CODE_ANSWER_MS`, `VoiceTiming.codeAnswerMs`) whatever the runner does: `{"status": "still running", ...}` with a note (say it took too long, ask what they think is slow, never guess the output,
+  do not ask again at once); the sandbox stops its container at its own clock and the late result is not delivered. While it goes on, the student's next `run_code` in the call is told so ("A run for this call is still going"), so that a model that asks again does not spend another of their 10 runs an hour; the hold ends 10 s after the
+  sandbox's own time even if a runner never settles. It never throws: a runner that throws, rejects or answers nonsense is "that did not work; say so briefly and carry on".
+* **While it runs** it gets the pre-written "okay, taking a look." after 1.5 s and "still on it" 5 s later: `LONG_WAIT_FUNCTIONS` (= `TOOL_HOST_FUNCTIONS` and `run_code`) is what the slow-timer looks at. It is NOT in `TOOL_HOST_FUNCTIONS` (that set also says "one sec" for a container that is starting, and `run_code` never touches the tool host) and not in
+  `PROMOTABLE_FUNCTIONS` (it spends a run, and a run that went on has no result to hand over later). `defer_until_eot` is on: a turn that is not confirmed does not spend a run. The speech governor never speaks its name (`run_code` is in its function-name pattern).
+* **The teaching rules** (the two descriptions, conversational rule 4b, interviewer rule 8c; the text agent's persona has the same under "Running their code"): ask what they expect to see BEFORE running; THEIR code (their repository, a file they attached) or a few lines that demo ONE concept, never a solution to a graded assignment or code they have
+  not seen; the output is evidence, not an answer: one or two sentences, then "what do you make of it, and why?", and no fix. The interviewer runs it only when they ask, or to check a claim they made, never as the first thing and never to hunt for what is wrong. The words avoid "let's run it" and "now run": the governor drops a sentence that begins
+  that way as the model's thinking. Rule 8c costs 303 characters of every interviewer prompt (the worst case, forty hundred-character paths, 23,460 -> 23,763 of 24,000; with forty-character paths 21,960 -> 22,263).
+* **Verified**: `run-code.test.ts` (16: the lists and the descriptions, the binding, the gate, the frame and the note by mode, the cap, the log, the 50 s answer with fake timers, the hold and its end, a runner that throws), `hub-code.test.ts` (5: the whole hub with a fake Deepgram and sandbox: the student, no tool host, the filler, the answer after the call's own time,
+  the interview), the lists and counts in `functions.test.ts`, `hub.test.ts`, `hub-look.test.ts`, `hub-talk.test.ts`, `hub-interview.test.ts`, the governor's test; mutations of these files, one at a time with the file restored byte for byte, all killed (the round's report lists them).
+* **Not verified**: a real call; a real run (the sandbox image and the runner are built and deployed separately: `GO_SANDBOX.md`); that the live Deepgram Voice Agent accepts `run_code`'s parameters in a Settings (they are the first NESTED ones: an object `repo` and arrays `files` and `args`; every other function's are flat strings, numbers and
+  enums), which is to be checked the way the other functions' were before a deploy, because a Settings it refuses would break every call; how the live model words "what do you think it prints?".
+
+### What it remembers of their work (`docs/STUDENT_STATE.md`, 2026-11-06)
+
+The host keeps three kinds of fact about a student's work (`src/work-facts.ts`, rows of the `memories` table): `repo`, the repository that holds their code for an assignment; `thread`, where the last session stopped; `issue`, a
+problem they ran into. What a call does with them:
+
+* **Reading**: `loadStudentContext` gives the call `work`: the hub's `workFacts` dependency (the database, as `src/index.ts` wires it), else the three kinds in `memory_store.json` (`workFactsFromExport`). Each fact is checked and its
+  text bounded again, newest first, at most 40; a read that fails is no facts (a warning). `memoriesFromStore` leaves the three kinds out of the memories, so nothing is said twice (the file fallback of `recall_memory` no longer finds them either).
+* **The conversation** (`contextBlock(ctx, true)`): after "What you remember about them", under "What you remember of their work, from earlier sessions (for when they bring it up, or it is plainly what they need):", at most six lines
+  (`pickWork`: the two newest repositories, then threads, then problems), then `WORK_NOTE` (they may be out of date: use them to ask, never to assert, never to say a score or a grade). The background's own header and rule 2 still say not to
+  bring an earlier conversation up: a note is for when the student's words touch it. The listener's prompt has none (someone explaining out loud is not asked about a bug).
+* **The interviewer** (`interviewWork`, `interviewWorkBlock`): a block of its own, "## THEIR WORK, FROM EARLIER SESSIONS", the last of the material: the repository of THIS assignment (by `repoKeys`: the homework number's key, then the Canvas id's;
+  none when the assignment has no key, never another assignment's), the newest thread, up to three problems, quoted as data with the call's nonce like their submission, then `WORK_NOTE` and "Ask about at most ONE of these, once, and only where it
+  fits the question you are on: never as your first question, and never in place of a question this interview needs." It is the FIRST thing to give way: with a brief it is in only when the prompt fits `PROMPT_MAX` with it at the most generous
+  level of `MATERIAL_LEVELS`, else the prompt is exactly what it would be without it (level by level, as before); with no brief, only when the prompt fits with it. Measured: the block is 859 characters for a repository, a thread and a problem,
+  1,391 at the caps of its five lines (`WORK_NOTE` alone is 211); the fullest prompt there is (23,460 of 24,000) has no room for it and does not have it.
+  **When it comes**: an interview that began WITH its material (a link and a fresh context file: `source: 'file'`) has it in its first prompt, by the rule above. An interview that began without it (started from the chat: the usual way) has it in neither its
+  first prompt nor a reconnect's Settings until the material arrives: it rides on the late update (`appendices.interviewMaterial(ic, { room, work })`), after the material and before the week's check, under the same rule (in only when the update fits `room`
+  with the material at its most generous level, else the update is exactly what it would be without it), so the room that update is fitted to (`materialRoom`, measured on a prompt that has no block yet) is the same with and without facts and nothing of
+  the assignment, the code or the week is cut for its sake. Once the material is there (`source: 'file'`) a reconnect's Settings carry it like those of an interview that began with it. An interview whose material never arrives has no block, and its
+  first questions are asked without it. With no facts, or none for this assignment, every prompt and update is what it was: compared byte for byte with captures made before the change (the conversation's and the listener's prompts, 11 interviewer prompts:
+  no brief and a brief, with no repository, a long list of files, the fullest brief at 60- and 100-character paths, a submission; `memoriesFromStore` and the call's context; the late update with a brief at 11 rooms from 200 to 30,000, and with no brief).
+* **The interview's repository** (`listRepository`): the repository remembered for the assignment is asked first. `lookUpRemembered` (interview-repo.ts) lists its files directly (`repo_tree` recursive, as the account the host bound, 25 s) and its
+  row is renewed. GitHub's "GitHub API error: 404" is the only answer that means gone: the row is forgotten (`forgetWork`), the call's own copy of the facts forgets it too (the prompt a reconnect sends does not name it), the update that carries the
+  repository adds "The earlier note that named the repository X is out of date: it no longer exists on their GitHub. Do not use it." (only for an interview that began with its material: its first prompt, written before GitHub was asked, named X), and the matcher runs as before.
+  Anything else that goes wrong (a timeout, a refusal, a tool that is down) names the repository with no files ("Its files could not be listed just now") and forgets nothing; there is no second search. A stored value is checked where it is
+  used (`repoNameOk`: GitHub's spelling and a letter or a digit first, so `..`, `.git` and `-x` are never asked about), one named for another homework than the assignment's is skipped (`repoMismatch`), and the account is always the host's binding.
+  What is found is remembered the same way: the matcher's find, and any repository the interviewer reads with `query_github` `file_content` or `repo_tree` (`rememberRepo` in functions.ts: only when the answer was a real file or folder, never a
+  repository named for another homework (the interviewer may look at an earlier one to compare), the key from `repoKey(assignment id, label)` with the label the look-up itself uses, `assignmentLabelOf`). All of it best effort: a store that throws is a warning.
+* **Verified**: `work-prompts.test.ts` (31: the context, both prompts, the block, where it gives way in the prompt and in the late update, what a read remembers), `hub-work.test.ts` (15: the whole hub with a fake Deepgram, tool host and store), 10 more in `interview-repo.test.ts`,
+  2 new and one extended in `memory-view.test.ts` (the words "Your code", "Where we stopped", "A problem you ran into"; taking a note back by its id), and on the host (`bash host_vitest.sh src/memory-context.test.ts`) 9 for the text agent's section (`buildMemoryContext`) and the
+  page's list on the real table; mutations, one at a time and the file restored byte for byte: 13, all killed. **Not verified**: a real call, and what the real model does with the block (no probe was run: its wording and its limit of one question are
+  untested against it); a real 404 through a real container (the text was read from `github_api.py` and the tool server's code, not produced by them).
 
 ### After a call
 
@@ -567,6 +689,18 @@ see a tool host: a warm host cannot take a chat's slot, and the voice side's wor
 whatever warm does. Keeping the machine's last slot for a chat is for the orchestrator to say through `VoiceDeps.spareContainer` (a getter on the queue and one
 line in `src/index.ts`): **not wired**, so today only the voice side's own limits apply.
 
+**Voice pace (2026-11-06; why the interviewer's voice changed).** The owner, after a real mock interview: "in interview mode the voice comes much slower than the text". The call's journal and
+history said the server was not slow (an interviewer turn took 1.3 to 1.9 s from the end of the student's words to the first sound, the text of a turn reached the page within 0.05 s
+of its first audio). What differed was the voice: a synthetic call through the live portal gave 2.7 words a second for `flux-miles-en` (the interviewer) against 3.5 for
+`flux-hannah-en` (the conversation), and the interviewer's sentences were longer (19 to 30 words, nine seconds of sound for a sentence the page shows whole at once). A direct
+measurement on the Deepgram Voice Agent (the agent's own greeting, no model; 39 words; 3 to 4 runs per row): `flux-hannah-en` at 1.2 took 11.2 to 11.8 s
+(3.3 to 3.5 words a second); `flux-miles-en` at 1.2 took 11.5, 14.6, 14.6 and 21.4 s (1.8 to 3.4: **the same text takes up to twice as long from one run to the next**), at 1.5
+8.5 to 12.2 s, and at 1.0 13.3 s on a 27-word text; `aura-2-mars-en` at 1.0 took 10.8 to 12.2 s (3.2 to 3.6), at 1.1 10.1 to 11.0 s, at 1.2 8.7 to 9.8 s (4.0 to 4.5), at 0.9 13.4 s.
+So the interviewer speaks with `aura-2-mars-en`, whose pace is steady, and `PACE_OF` gives it 0.9 times the student's speed (1.2 becomes 1.1, where it speaks as fast as `flux-hannah-en`
+does at 1.2). The Flux voices answer little to `speed` (hannah at 1.0 and at 1.2 differ by less than the spread of one voice), Aura's does. Not changed: the page still draws a spoken
+sentence whole when it starts (a reveal in step with the sound would be a page change: speech.js/app.js); the governor's limits for the interviewer (a turn that loses its question
+to a tighter word limit is worse than a long sentence: `speech-governor.ts` drops what does not fit, and a question comes last); the prompt now asks the interviewer for short sentences.
+
 ### Speech speed per student
 
 The Settings dialog stores `voiceSpeed` (0.8 to 1.4) in `<store>/portal/<folder>.prefs.json`. The hub reads it when a call starts (`speed.ts speedFor`, which
@@ -606,7 +740,7 @@ not parse falls back to its default with a warning):
 | `TAI_VOICE_LISTEN_MODEL` | `flux-general-en` | |
 | `TAI_VOICE_EOT_THRESHOLD` / `TAI_VOICE_EOT_TIMEOUT_MS` | 0.75 / 5000 | Flux only: a turn is confirmed at this confidence, or after this silence (a conversation) |
 | `TAI_VOICE_EAGER_EOT_THRESHOLD` | 0 (off) | Flux only: the reply starts at this confidence and is dropped if the student goes on (never above the one above; about half again as many model calls). **Off since the owner's long call**: a 'Yeah. Sure.' started a Piazza search nobody had asked for (a function that is not deferred runs on the speculative turn), and no speed-up was ever measured |
-| `TAI_VOICE_SPEED` / `TAI_VOICE_EXPRESSIVITY` | 1.2 / 0 | Deepgram's `speak.provider.speed` (Flux: 0.5-1.5 in steps of 0.05; Aura 0.7-1.5; the owner found the default pace slow) and, for Flux voices, `expressivity` (-2 calmer .. 2 more animated, beta). Sent in the Settings and in each `UpdateSpeak`; a Settings refused for either is tried once more at the voice's own pace. **The speed is the default only**: a student's own `voiceSpeed` in the Settings dialog (0.8 to 1.4) wins for their calls ("Speech speed per student") |
+| `TAI_VOICE_SPEED` / `TAI_VOICE_EXPRESSIVITY` | 1.2 / 0 | Deepgram's `speak.provider.speed` (Flux: 0.5-1.5 in steps of 0.05; Aura 0.7-1.5; the owner found the default pace slow) and, for Flux voices, `expressivity` (-2 calmer .. 2 more animated, beta). Sent in the Settings and in each `UpdateSpeak` (a voice with a measured pace factor, `settings.ts PACE_OF`, gets the speed times its factor: `aura-2-mars-en` 0.9); a Settings refused for either is tried once more at the voice's own pace. **The speed is the default only**: a student's own `voiceSpeed` in the Settings dialog (0.8 to 1.4) wins for their calls ("Speech speed per student") |
 | `TAI_VOICE_GOVERN` / `TAI_VOICE_MAX_SENTENCES` / `TAI_VOICE_MAX_WORDS` | on / 3 / 55 | what one answer may say (see "What one answer may say"; 2 / 40 until 2026-11-03); while the student has asked to be taught it is 5 sentences and 85 words, fixed in `src/voice/teach.ts` (see "Teaching has its own room") |
 | `TAI_VOICE_INTERVIEW_EOT_THRESHOLD` / `TAI_VOICE_INTERVIEW_EOT_TIMEOUT_MS` | 0.88 / 8000 | the same in a mock interview: it waits for a thinker (`UpdateListen` at each mode switch) |
 | `TAI_VOICE_TALK_EOT_THRESHOLD` / `TAI_VOICE_TALK_EOT_TIMEOUT_MS` | 0.9 / 10000 | the same in a talk-it-through: the student explains at length and a pause is not an ending (Deepgram documents the timeout up to 10000; the config takes up to 20000, for a probe to confirm) |
@@ -615,7 +749,7 @@ not parse falls back to its default with a warning):
 | `TAI_VOICE_TOOLHOST_KEEP_SEC` / `TAI_VOICE_TOOLHOST_KEEP_MAX` | 600 / 3 | a student's tool host stays up this long after their call for their next one (0: closed with the call, as before), and at most this many idle ones at once |
 | `TAI_VOICE_WARM_COURSE` | on | `0`: the call does not ask Canvas for the course's files, modules, pages and assignments when its tool host is up (the first search of the slides then waits for them, 6.8 s in a real call). The pre-written "one sec" after 1.5 s of a look-up and "still looking" 5 s later are not settings (`VoiceTiming.fillerAfterMs`, `stillLookingMs`). |
 | `TAI_VOICE_ASYNC_AFTER_MS` | 0 (off) | a look-up that has run this long (ms) is answered for now and its result follows as a note while the conversation goes on ("A look-up that runs long"). **To try it: `tai_live.sh set TAI_VOICE_ASYNC_AFTER_MS=4000`, then `restart`; to turn it off again: `=0` and `restart`** (the default and the behaviour until set are unchanged: the function holds the call as before). What a trial listens for is in "A look-up that runs long" |
-| `TAI_VOICE_VOICE_CHAT` / `TAI_VOICE_VOICE_INTERVIEW` | `flux-hannah-en` / `flux-miles-en` | Flux TTS voices (v2 speak); refused ones fall back to `aura-2-thalia-en` / `aura-2-mars-en`. A talk-it-through uses the chat voice |
+| `TAI_VOICE_VOICE_CHAT` / `TAI_VOICE_VOICE_INTERVIEW` | `flux-hannah-en` / `aura-2-mars-en` | The conversation's voice is a Flux TTS voice (v2 speak; refused, it falls back to `aura-2-thalia-en`). The interviewer's is an Aura one since 2026-11-06: `flux-miles-en`, its voice before, wandered in pace by a factor of two from run to run ("Voice pace", below); `TAI_VOICE_VOICE_INTERVIEW=flux-miles-en` brings it back. A talk-it-through uses the chat voice |
 | `TAI_VOICE_TEMPERATURE` | 0.7 | |
 | `TAI_VOICE_SESSION_MIN` / `TAI_VOICE_INTERVIEW_MIN` / `TAI_VOICE_DAILY_MIN` | 30 / 15 / 45 | |
 | `TAI_VOICE_MAX_CONCURRENT` | 3 | |

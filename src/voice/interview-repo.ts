@@ -15,6 +15,7 @@
  * Everything goes through the tool host's `github_query`, so the container's identity check applies to every call: the account is the one the
  * host bound to the student, and only that one is ever named here.
  */
+import { REPO_NAME } from '../work-facts.js';
 import type { ToolHost } from './tool-host.js';
 import type { VoiceLog } from './types.js';
 import { silentLog } from './types.js';
@@ -229,4 +230,79 @@ export async function lookUpRepo(th: ToolHost, username: string | undefined, ass
     log.warn({ err: (err as Error).message }, 'voice: the interview\'s repository could not be looked up');
     return { found: false, why: 'unavailable' };
   }
+}
+
+// ---------------------------------------------------------------- the repository that was remembered (docs/STUDENT_STATE.md)
+
+/**
+ * A repository name that is safe to ask GitHub for and to put in a prompt: GitHub's own spelling (work-facts.ts) that also starts with a letter or a digit, as the container checks
+ * ("..", ".git" and "-x" are never one). A remembered value is checked with this where it is used, whatever wrote the row.
+ */
+export const repoNameOk = (value: unknown): value is string => typeof value === 'string' && REPO_NAME.test(value) && NAME.test(value);
+
+/** What an interview calls its assignment: its name, else the topic the student gave. The one spelling a repository's key is made from, where it is written, read and put in a prompt. */
+export const assignmentLabelOf = (context: { assignmentName: string; topic: string }): string => context.assignmentName || context.topic;
+
+/**
+ * Do the assignment and the repository's name two DIFFERENT homeworks ("Homework 3" and "cs6650-hw2", or "hw1a" and "hw1b")? Only a clear mismatch like that: a repository whose name
+ * has no homework in it may well be the assignment's. It is the rule pickRepo applies, and it keeps a repository the interviewer only looked at for comparison from becoming the assignment's.
+ */
+export function repoMismatch(assignment: string, repo: string): boolean {
+  const wanted = homeworkOf(assignment);
+  const has = homeworkOf(repo);
+  return !!wanted && !!has && (has.n !== wanted.n || (!!has.letter && !!wanted.letter && has.letter !== wanted.letter));
+}
+
+/** A repository that was remembered for an assignment: its key, its name and the sentence that was kept with it. */
+export interface RememberedRepo {
+  key: string;
+  repo: string;
+  text: string;
+}
+
+export interface RememberedLookup {
+  /** The first remembered repository that exists (or that could not be asked about for another reason than not existing), with its files; null when there is none. */
+  lookup: ({ found: true } & RepoListing) | null;
+  used: RememberedRepo | null;
+  /** The ones GitHub says do not exist: to be forgotten. */
+  gone: RememberedRepo[];
+}
+
+/** GitHub's answer for a repository that does not exist (github_api.py: "GitHub API error: 404 ..."): the only answer that means gone. A timeout, a refusal or a tool that is down does not. */
+const NOT_FOUND = /GitHub API error:\s*404\b/;
+
+/**
+ * The student's repository for an assignment when an earlier interview or look-up remembered it: its files are listed directly (the call lookUpRepo makes for a repository it chose), as the account
+ * the host bound to them, and nothing but that account is ever asked about, whatever a stored value says. `candidates` are in the order to try (the homework number's key first). A repository
+ * GitHub says does not exist goes in `gone` and the next is tried; one that could not be asked about for another reason (a timeout, a refusal) is still the one they have, named with no
+ * files, as lookUpRepo names a repository whose tree it could not get. A value that is not a repository name, or names another homework than the assignment's, is skipped. Never throws.
+ */
+export async function lookUpRemembered(
+  th: ToolHost,
+  username: string | undefined,
+  assignment: string,
+  candidates: readonly RememberedRepo[],
+  log: VoiceLog = silentLog,
+): Promise<RememberedLookup> {
+  const gone: RememberedRepo[] = [];
+  if (!username || !NAME.test(username)) return { lookup: null, used: null, gone };
+  try {
+    for (const candidate of candidates) {
+      if (!repoNameOk(candidate.repo) || repoMismatch(assignment, candidate.repo)) continue;
+      const tree = await th.call('github_query', { action: 'repo_tree', params: { owner: username, repo: candidate.repo, recursive: 'true' } }, { timeoutMs: 25_000 });
+      const list = parsed(tree.text);
+      if (Array.isArray(list)) {
+        const { files, more } = codeFiles(list);
+        return { lookup: { found: true, repo: candidate.repo, files, more }, used: candidate, gone };
+      }
+      if (NOT_FOUND.test(tree.text)) {
+        gone.push(candidate);
+        continue;
+      }
+      return { lookup: { found: true, repo: candidate.repo, files: [], more: 0 }, used: candidate, gone };
+    }
+  } catch (err) {
+    log.warn({ err: (err as Error).message }, 'voice: a remembered repository could not be looked up');
+  }
+  return { lookup: null, used: null, gone };
 }

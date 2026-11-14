@@ -8,6 +8,8 @@
  * are named and the agent reads them with its tools. A picture is kept for the page (a thumbnail) and, while the folder has room, in the
  * workspace too: the agent reads the TEXT in it with `read_image_text` (docs/OCR.md). It cannot see the picture, and says so, unless TAI_VISION is on
  * (src/vision-env.ts, docs/VISION.md): then it is told it can LOOK at it too, with `look_at_image`, and the picture goes to z.ai.
+ * An archive (`.tgz` or `.tar.gz`: a project the student packed, kept for the Go sandbox, docs/GO_SANDBOX.md) is kept like a document: in the student's workspace, named, never unpacked here; the agent runs it with
+ * `run_go` (`upload: <name>`) and a call with `run_code`. It is an archive only by its name AND its first bytes (gzip's), so a renamed file is refused, and a plain `.gz` is none.
  * A recording is not an attachment: voice notes have their own call (`POST /api/voicenote`, in server.ts), and a recording sent here is refused.
  */
 import fs from 'fs';
@@ -40,15 +42,34 @@ const DOCUMENT_EXTENSIONS = new Set(['pdf', 'docx', 'xlsx', 'pptx']);
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp']);
 const AUDIO_EXTENSIONS = new Set(['webm', 'ogg', 'oga', 'mp3', 'wav', 'm4a', 'mp4']);
 
+/**
+ * What the picker offers for an archive: `tgz`, and `gz` because the page's list is made of single extensions without a dot (portal/web/app.js readFeatures), so `project.tar.gz` can only be matched by
+ * its last one. The server accepts only a name that ends `.tgz` or `.tar.gz` and a file that starts like a gzip file (classifyUpload): a plain `.gz` the picker lets through is refused there.
+ */
+const ARCHIVE_PICKER_EXTENSIONS = ['tgz', 'gz'];
+
 /** Every extension the page's file picker offers (the server decides again, from the same lists). */
-export const ACCEPTED_EXTENSIONS = [...TEXT_EXTENSIONS, ...DOCUMENT_EXTENSIONS, ...IMAGE_EXTENSIONS].sort();
+export const ACCEPTED_EXTENSIONS = [...TEXT_EXTENSIONS, ...DOCUMENT_EXTENSIONS, ...IMAGE_EXTENSIONS, ...ARCHIVE_PICKER_EXTENSIONS].sort();
+
+/** The names of a project archive: the same two endings the sandbox's gate accepts for `upload` (src/sandbox/types.ts parseSandboxRequest). */
+const ARCHIVE_NAME = /\.(?:tgz|tar\.gz)$/i;
+export const isArchiveName = (name: string): boolean => ARCHIVE_NAME.test(name);
+/** gzip's first two bytes. */
+const GZIP_MAGIC = [0x1f, 0x8b];
+
+/** A name split where its extension begins, with `.tar.gz` as one extension (`path.extname` would make it `.gz`, and a second `project.tar.gz` would become `project.tar-2.gz`). */
+function splitName(name: string): { stem: string; ext: string } {
+  const ext = /\.tar\.gz$/i.test(name) ? name.slice(-7) : path.extname(name);
+  return { stem: name.slice(0, name.length - ext.length), ext };
+}
 
 /** A file name reduced to what is safe on the host and readable for the agent: no directories, letters, digits and . _ - only. */
 export function safeUploadName(name: string): string {
   const base = name.replace(/\\/g, '/').split('/').pop() || '';
-  let clean = base.normalize('NFKC').replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+/, '');
+  // (no leading dot, underscore or dash: a name that starts with `-` can pass for an option, and the sandbox's gate wants a letter or a digit first)
+  let clean = base.normalize('NFKC').replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._-]+/, '');
   if (clean.length > 80) {
-    const ext = path.extname(clean).slice(0, 12);
+    const ext = splitName(clean).ext.slice(0, 12);
     clean = clean.slice(0, 80 - ext.length) + ext;
   }
   return clean || 'file';
@@ -64,6 +85,11 @@ export function classifyUpload(name: string, body: Buffer): UploadKind | null {
   const ext = extensionOf(name);
   const stem = path.basename(name).toLowerCase();
   const head = body.subarray(0, 8192);
+  if (isArchiveName(name)) {
+    // By its name AND its bytes, and no larger than any other file: a renamed file is not an archive, and a plain `.gz` is none (it falls through to "not accepted"). The name it will be KEPT under
+    // must still end the same way (safeUploadName takes the whole of an odd one, `.tgz`, away), or the sandbox's gate would refuse the name the agent is given.
+    return isArchiveName(safeUploadName(name)) && body.length <= UPLOAD_MAX_BYTES && body[0] === GZIP_MAGIC[0] && body[1] === GZIP_MAGIC[1] ? 'archive' : null;
+  }
   if (DOCUMENT_EXTENSIONS.has(ext)) {
     const pdf = body.subarray(0, 5).toString('latin1') === '%PDF-';
     const zip = body[0] === 0x50 && body[1] === 0x4b && body[2] === 0x03 && body[3] === 0x04;
@@ -117,12 +143,18 @@ export class UploadStore {
     private readonly now: () => number = Date.now,
     /** Whether TAi may look at a picture (TAI_VISION): asked at each message, so the words and the container's tool follow the same setting (src/vision-env.ts). */
     private readonly vision: () => boolean = () => visionOn(),
+    /**
+     * Whether a voice call's model has the function look_at_image (src/voice/look-image.ts), asked at each message. OFF unless the host says so: the call's tool host does not have the tool until the
+     * owner has decided to give it the gateway's key (docs/RUN_CARDS.md), and words that promise a function that cannot work are worse than the words that say the limit. The switch above is on in
+     * production already, so it cannot be the one that decides this.
+     */
+    private readonly callVision: () => boolean = () => false,
   ) {}
 
   /** A pending upload nobody sent: forgotten, its file taken out of the student's workspace and its other copy let go. */
   private drop(up: PendingUpload): void {
     this.pending.delete(up.id);
-    if (up.kind === 'text' || up.kind === 'document' || (up.kind === 'image' && up.stored)) unlinkSafe(path.join(this.dirOf(up.folder), up.name), this.folderOf(up.folder));
+    if (up.kind === 'text' || up.kind === 'document' || up.kind === 'archive' || (up.kind === 'image' && up.stored)) unlinkSafe(path.join(this.dirOf(up.folder), up.name), this.folderOf(up.folder));
     try {
       this.onDrop?.(up);
     } catch {
@@ -183,8 +215,7 @@ export class UploadStore {
     if (used.files >= FOLDER_MAX_FILES * share || used.bytes + body.length > FOLDER_MAX_BYTES * share) return null;
     const dir = this.dirOf(folder);
     const safe = safeUploadName(name);
-    const ext = path.extname(safe);
-    const stem = safe.slice(0, safe.length - ext.length);
+    const { stem, ext } = splitName(safe);
     for (let i = 1; i < 1000; i++) {
       const candidate = i === 1 ? safe : `${stem}-${i}${ext}`;
       try {
@@ -198,8 +229,8 @@ export class UploadStore {
     return null;
   }
 
-  /** Keeps a text or document file in the student's workspace and remembers it as waiting for a message. */
-  keepFile(folder: string, name: string, kind: 'text' | 'document', body: Buffer): PendingUpload | { error: 'quota' | 'too-many-pending' } {
+  /** Keeps a text, document or archive file in the student's workspace and remembers it as waiting for a message. */
+  keepFile(folder: string, name: string, kind: 'text' | 'document' | 'archive', body: Buffer): PendingUpload | { error: 'quota' | 'too-many-pending' } {
     if (!STUDENT_FOLDER.test(folder)) throw new Error('not a student folder');
     this.sweep();
     if ([...this.pending.values()].filter((u) => u.folder === folder).length >= MAX_PENDING) return { error: 'too-many-pending' };
@@ -259,8 +290,9 @@ export class UploadStore {
    * no tool call); documents are named, to be read with the tools; a picture that is in the workspace is named with its path and the tool that
    * reads its TEXT (and with the fact that its looks are out of reach). With TAI_VISION on it is also told it can LOOK at the picture (look_at_image: charts,
    * diagrams, interfaces, screenshots) and must say so honestly when one is not clear. A picture that is not in the workspace, and every picture for a voice
-   * call (`audience` "call": the call's model has no tool that reads one), is named with the fact that TAi cannot see it, in the words it always
-   * had, switch or no switch: session.ts looks for "(a picture, " in that line to put a notice on the page.
+   * call (`audience` "call": the call's model has no tool that reads one), is named with the fact that TAi cannot see it, in the words it always had: session.ts looks for "(a picture, " in that line
+   * to put a notice on the page. Only where the host has said that a call's model has the function look_at_image (src/voice/look-image.ts: `callVision`, off by default, and TAI_VISION on),
+   * a picture that is in the workspace is named with it instead, still after "(a picture, ", and without "you cannot see pictures": the page's notice is for the lines that still say it. An archive (`.tgz`, `.tar.gz`) is named with the tool that runs it, run_go for the agent and run_code for a call.
    */
   messageFor(text: string, files: readonly PendingUpload[], audience: 'agent' | 'call' = 'agent'): string {
     if (files.length === 0) return text;
@@ -277,8 +309,21 @@ export class UploadStore {
           `- /workspace/group/uploads/${f.name} (a picture, ${humanSize(f.size)}): read the text in it with read_image_text, giving it this path; ` +
             'you cannot see charts, diagrams or what a screen looks like, so say so if the question is about that',
         );
+      } else if (f.kind === 'image' && f.stored && audience === 'call' && this.vision() && this.callVision()) {
+        // a call's model has the function look_at_image (src/voice/look-image.ts) where the host says so (callVision, off by default): the line names the picture, as the function wants it, and keeps
+        // "(a picture, " (the page's notice is keyed on it: session.ts shows "TAi cannot see pictures" only for a line that still says "you cannot see pictures")
+        lines.push(
+          `- ${f.name} (a picture, ${humanSize(f.size)}): you can look at it with look_at_image, giving it the name ${f.name} and the student's question (charts, diagrams, interfaces, screenshots; once for each picture, and it goes to an outside vision service); ` +
+            'if a picture is not clear to you, say so honestly, ask the student to describe it, and never guess what it shows',
+        );
       } else if (f.kind === 'image') {
         lines.push(`- ${f.name} (a picture, ${humanSize(f.size)}): you cannot see pictures; ask the student to paste the text or describe it`);
+      } else if (f.kind === 'archive') {
+        // a project the student packed, for the Go sandbox: the sandbox unpacks it, nothing here reads inside it, and a text tool would only find a compressed file
+        lines.push(
+          `- /workspace/group/uploads/${f.name} (archive, ${humanSize(f.size)}): a project they packed, not text to read; run it with ${audience === 'call' ? 'run_code' : 'run_go'} using upload: ${f.name} ` +
+            '(action run, test, vet or build; pkg is a package inside the project, like ./...)',
+        );
       } else {
         lines.push(`- /workspace/group/uploads/${f.name} (${f.kind === 'document' ? 'document' : 'text'}, ${humanSize(f.size)})`);
         if (f.kind === 'text') {

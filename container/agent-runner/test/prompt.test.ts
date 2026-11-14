@@ -111,6 +111,24 @@ describe('storedMemoriesOnly', () => {
     const only = '<memory_context>\n## Stored memories (from past sessions)\n- [fact] x\n</memory_context>';
     expect(storedMemoriesOnly(only)).toBe(only);
   });
+
+  it('keeps the work notes of a student who has no other stored memory (docs/STUDENT_STATE.md)', () => {
+    const work = `<memory_context>
+## Their work, from earlier sessions
+- Their code for Homework 2 is in their repository cs6650-hw2.
+These notes are from earlier sessions and may be out of date.
+
+## Recent conversation history
+[2026-10-30] Ann: what is a mutex?
+</memory_context>`;
+    const text = storedMemoriesOnly(work);
+    expect(text).toContain('cs6650-hw2');
+    expect(text).not.toContain('what is a mutex');
+    expect(text.endsWith('</memory_context>')).toBe(true);
+    // both sections, when a student has both
+    const both = work.replace('## Their work', '## Stored memories (from past sessions)\n- [fact] Ann prefers short answers\n\n## Their work');
+    expect(storedMemoriesOnly(both)).toContain('Ann prefers short answers');
+  });
 });
 
 describe('runContext: what goes in front of the first message of a run', () => {

@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+# The renderer's one entry point (docs/DOCUMENTS.md, docs/COURSE_DOCS.md):
+#   doc-render pdf <maxPages> <maxPx>       /in/source.pdf is a PDF
+#   doc-render office <maxPages> <maxPx>    /in/source.bin is a PowerPoint, Word or Excel file (a zip): it is made a PDF first (LibreOffice, headless), and from there it goes the way a PDF goes
+#
+# This runs INSIDE the disposable container, on a file nobody trusts: the root file system is read-only, /in is the read-only copy the host made (source.pdf, or source.bin: a neutral name, the kind is
+# decided here from the zip's own entry names and never from a name), /out is the one directory that is written for the host to read back, and /tmp is memory-backed and size-limited. There is no network.
+# What this script prints of its own is one line when it refuses the file (`doc: <reason>`, exit 2), for an Office file the milliseconds the conversion took (`doc-conv <ms>`) and, last, one line with the
+# peak memory of the container (`doc-mem <bytes>`): the host takes none of them for more than a line in a log, and matches a refusal against the few sentences it knows.
+# What matters is what is in /out when it ends:
+#   p001.png ...    one image of each page, longest side at most <maxPx> pixels (a page whose PNG is over the size cap is drawn again as p001.jpg, then rougher and smaller)
+#   w001.json ...   the words of each page with their boxes (render-words.py)
+#   meta.json       {"pages": n, "pagesInFile": n, "aspect": width / height of page 1}
+# The host reads back only files with those names, as regular files, and checks every byte of them itself. Every step below runs under `timeout`, and together the steps are held
+# to BUDGET seconds (70 for a PDF, 130 for an Office file), because the host kills the container at 90 (150).
+#
+# An Office file: office-kind.py reads the names of the zip's entries (never their content) and says pptx, docx or xlsx, or why not; soffice converts it in a profile of its own in /tmp, with macros switched off
+# in that profile, under `timeout`; the PDF it makes then goes through the same steps as a PDF, so /out is the same.
+
+set -u
+set -o pipefail
+export LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1
+export HOME=${HOME:-/tmp}
+
+IN=${DOC_IN:-/in}
+OUT=${DOC_OUT:-/out}
+IMAGE_BYTES=${DOC_IMAGE_BYTES:-921600}
+WORDS=${DOC_WORDS_SCRIPT:-/usr/local/bin/render-words.py}
+OFFICE_KIND=${DOC_OFFICE_KIND_SCRIPT:-/usr/local/bin/office-kind.py}
+# the tools by name (the tests put fakes under other names; nothing sets these in a container: the host passes a fixed environment)
+PDFINFO=${DOC_PDFINFO:-pdfinfo}
+PDFTOPPM=${DOC_PDFTOPPM:-pdftoppm}
+PDFTOTEXT=${DOC_PDFTOTEXT:-pdftotext}
+SOFFICE=${DOC_SOFFICE:-soffice}
+PYTHON=${DOC_PYTHON:-python3}
+WORKROOT=${DOC_TMP:-/tmp}
+# the longest the conversion may take (the budget is what is left of it for the steps after)
+CONVERT_SECONDS=${DOC_CONVERT_SECONDS:-95}
+START=$SECONDS
+WORK=''
+
+report_memory() {
+  local peak
+  peak=$(cat /sys/fs/cgroup/memory.peak 2> /dev/null) || return 0
+  [[ $peak =~ ^[0-9]{1,13}$ ]] && printf 'doc-mem %s\n' "$peak"
+  return 0
+}
+finish() {
+  [ -z "$WORK" ] || rm -rf -- "$WORK" 2> /dev/null
+  report_memory
+}
+trap finish EXIT
+
+refuse() {
+  printf 'doc: %s\n' "$1"
+  exit 2
+}
+
+# seconds of the budget that are left, and the time a step may take: its own maximum, or what is left, and at least one second
+left() { echo $((BUDGET - (SECONDS - START))); }
+step() {
+  local remaining
+  remaining=$(left)
+  [ "$remaining" -ge 1 ] || remaining=1
+  if [ "$1" -lt "$remaining" ]; then echo "$1"; else echo "$remaining"; fi
+}
+
+size_of() { stat -c %s -- "$1" 2> /dev/null || echo 0; }
+
+KIND=${1:-}
+PAGES=${2:-}
+PX=${3:-}
+case $KIND in
+  pdf)
+    SRC=$IN/source.pdf
+    BUDGET=${DOC_BUDGET:-70}
+    READ_ERROR='the file could not be read as a PDF.'
+    ;;
+  office)
+    SRC=$IN/source.bin
+    BUDGET=${DOC_BUDGET:-130}
+    # (the PDF is made here, by LibreOffice: a file that poppler cannot read at that point is one that was not converted)
+    READ_ERROR='the file could not be converted.'
+    ;;
+  *) refuse 'this renderer reads PDF and Office files only.' ;;
+esac
+[[ $PAGES =~ ^[0-9]{1,3}$ ]] && [ "$PAGES" -ge 1 ] && [ "$PAGES" -le 500 ] || refuse 'the page limit is not a number.'
+[[ $PX =~ ^[0-9]{3,4}$ ]] && [ "$PX" -ge 200 ] && [ "$PX" -le 4000 ] || refuse 'the size limit is not a number.'
+
+[ -f "$SRC" ] && [ ! -L "$SRC" ] || refuse 'there is no file to read.'
+[ -d "$OUT" ] && [ -w "$OUT" ] || refuse 'there is nowhere to put the pages.'
+
+# ---- an Office file becomes a PDF first
+# Macros are switched off in the profile the conversion runs with (the headless default is that a macro does not run; this says it, so that nothing depends on a default), and so is the updating of links
+# when a file is opened. The package is also refused when it carries a VBA project (office-kind.py).
+write_profile() { # write_profile FILE
+  cat > "$1" << 'XCU'
+<?xml version="1.0" encoding="UTF-8"?>
+<oor:items xmlns:oor="http://openoffice.org/2001/registry" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="MacroSecurityLevel" oor:op="fuse"><value>3</value></prop></item>
+<item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="DisableMacrosExecution" oor:op="fuse"><value>true</value></prop></item>
+<item oor:path="/org.openoffice.Office.Calc/Content/Update"><prop oor:name="Link" oor:op="fuse"><value>2</value></prop></item>
+<item oor:path="/org.openoffice.Office.Writer/Content/Update"><prop oor:name="Link" oor:op="fuse"><value>2</value></prop></item>
+</oor:items>
+XCU
+}
+
+# images are reduced to what a page image of 1,100 pixels can show (the PDF is only a step on the way)
+LO_IMAGES='"ReduceImageResolution":{"type":"boolean","value":"true"},"MaxImageResolution":{"type":"long","value":"150"},"Quality":{"type":"long","value":"85"}'
+
+convert_office() {
+  local kind code ext filter options began took
+  kind=$(timeout -s KILL "$(step 10)" "$PYTHON" -I "$OFFICE_KIND" "$SRC" 2> /dev/null < /dev/null)
+  code=$?
+  case $code in
+    0) ;;
+    3) refuse 'the file is not a PowerPoint, Word or Excel file.' ;;
+    4 | 5) refuse 'the file has too many parts or is too big when unpacked.' ;;
+    6) refuse 'the file contains macros.' ;;
+    8) refuse 'the file is protected with a password.' ;;
+    *) refuse 'the file could not be read as an Office file.' ;;
+  esac
+  case $kind in
+    pptx) ext=pptx; filter=impress_pdf_Export; options="{$LO_IMAGES}" ;;
+    docx) ext=docx; filter=writer_pdf_Export; options="{$LO_IMAGES}" ;;
+    # (a sheet can be thousands of pages: only the pages that will be kept are made)
+    xlsx) ext=xlsx; filter=calc_pdf_Export; options="{$LO_IMAGES,\"PageRange\":{\"type\":\"string\",\"value\":\"1-$PAGES\"}}" ;;
+    *) refuse 'the file could not be read as an Office file.' ;;
+  esac
+
+  WORK=$(mktemp -d "$WORKROOT/office.XXXXXX" 2> /dev/null) || refuse 'there is nowhere to convert the file.'
+  mkdir -p "$WORK/out" "$WORK/profile/user" || refuse 'there is nowhere to convert the file.'
+  # the file under a name that has the extension its parts say it has (a link: nothing is copied); the profile with the macro settings in it
+  ln -s "$SRC" "$WORK/deck.$ext" || refuse 'there is nowhere to convert the file.'
+  write_profile "$WORK/profile/user/registrymodifications.xcu" || refuse 'there is nowhere to convert the file.'
+
+  began=${EPOCHREALTIME:-0}
+  began=${began/./}
+  timeout -s KILL "$(step "$CONVERT_SECONDS")" "$SOFFICE" --headless --norestore --nolockcheck --nodefault --nofirststartwizard --nologo \
+    "-env:UserInstallation=file://$WORK/profile" --convert-to "pdf:$filter:$options" --outdir "$WORK/out" "$WORK/deck.$ext" < /dev/null > /dev/null 2>&1
+  code=$?
+  took=${EPOCHREALTIME:-0}
+  took=$(((${took/./} - began) / 1000))
+  [ "$took" -ge 0 ] || took=0
+  printf 'doc-conv %d\n' "$took"
+  if [ "$code" -eq 137 ] || [ "$code" -eq 124 ]; then refuse 'converting the file took too long.'; fi
+  [ -f "$WORK/out/deck.pdf" ] && [ ! -L "$WORK/out/deck.pdf" ] && [ -s "$WORK/out/deck.pdf" ] || refuse 'the file could not be converted.'
+  SRC=$WORK/out/deck.pdf
+}
+if [ "$KIND" = office ]; then convert_office; fi
+
+# ---- what the file says about itself
+info=$(timeout -s KILL "$(step 15)" "$PDFINFO" -f 1 -l "$PAGES" "$SRC" 2>&1 < /dev/null)
+status=$?
+if [ "$status" -ne 0 ]; then
+  case "$info" in
+    *[Pp]assword*) refuse 'the file is protected with a password.' ;;
+  esac
+  refuse "$READ_ERROR"
+fi
+PAGES_IN_FILE=$(awk '/^Pages:/ { print $2; exit }' <<< "$info")
+[[ $PAGES_IN_FILE =~ ^[0-9]{1,6}$ ]] || refuse "$READ_ERROR"
+[ "$PAGES_IN_FILE" -ge 1 ] || refuse 'the file has no pages.'
+N=$((PAGES_IN_FILE < PAGES ? PAGES_IN_FILE : PAGES))
+
+# which pages are turned (render-words.py needs it: pdftotext prints the size of a turned page from before the turn), and the shape of page 1 as it is shown
+ROTATIONS=$(awk '/^Page +[0-9]+ rot:/ { printf "%s%s", sep, $4; sep = "," }' <<< "$info")
+[[ $ROTATIONS =~ ^[0-9]+(,[0-9]+)*$ ]] || ROTATIONS=''
+# (a page turned a quarter is as wide as it is high)
+ASPECT=$(awk '
+  /^Page +1 size:/ { w = $4; h = $6 }
+  /^Page +1 rot:/ { r = $4 }
+  END { if (w > 0 && h > 0) { if (r == 90 || r == 270) { t = w; w = h; h = t } printf "%.4f", w / h } }' <<< "$info")
+[[ $ASPECT =~ ^[0-9]+\.[0-9]{4}$ ]] || ASPECT=''
+
+shopt -s nullglob
+
+# poppler names its files <prefix>-<page number> with a padding it chooses: take the number out of the name and make the name ours (p001.png)
+rename_pages() { # rename_pages PREFIX EXTENSION
+  local file name num
+  for file in "$OUT/$1"-*."$2"; do
+    name=${file##*/}
+    num=${name#"$1"-}
+    num=${num%."$2"}
+    if [[ $num =~ ^[0-9]{1,6}$ ]] && [ "$((10#$num))" -ge 1 ] && [ "$((10#$num))" -le "$N" ]; then
+      mv -f -- "$file" "$(printf '%s/p%03d.%s' "$OUT" "$((10#$num))" "$2")"
+    else
+      rm -f -- "$file"
+    fi
+  done
+}
+
+# ---- the pages as images
+timeout -s KILL "$(step 45)" "$PDFTOPPM" -png -cropbox -scale-to "$PX" -f 1 -l "$N" "$SRC" "$OUT/pg" < /dev/null > /dev/null 2>&1
+rename_pages pg png
+
+# page I as a JPEG that fits the cap (quality 70, then rougher and smaller); the PNG goes either way, and so does a JPEG that does not fit
+shrink_page() { # shrink_page I
+  local i=$1 base try quality px
+  base=$(printf '%s/p%03d' "$OUT" "$i")
+  for try in "70 $PX" "50 $((PX * 85 / 100))" "35 $((PX * 70 / 100))"; do
+    [ "$(left)" -ge 3 ] || break
+    quality=${try%% *}
+    px=${try##* }
+    timeout -s KILL "$(step 12)" "$PDFTOPPM" -jpeg -jpegopt "quality=$quality" -cropbox -scale-to "$px" -f "$i" -l "$i" -singlefile "$SRC" "$base" < /dev/null > /dev/null 2>&1
+    if [ -f "$base.jpg" ] && [ "$(size_of "$base.jpg")" -le "$IMAGE_BYTES" ]; then
+      rm -f -- "$base.png"
+      return 0
+    fi
+  done
+  rm -f -- "$base.png" "$base.jpg"
+  return 1
+}
+
+big=()
+for ((i = 1; i <= N; i++)); do
+  png=$(printf '%s/p%03d.png' "$OUT" "$i")
+  if [ -f "$png" ] && [ "$(size_of "$png")" -gt "$IMAGE_BYTES" ]; then big+=("$i"); fi
+done
+if [ "${#big[@]}" -gt 6 ] && [ "$(left)" -ge 20 ]; then
+  # most pages are pictures: one pass draws them all as JPEG instead of one process for each page
+  timeout -s KILL "$(step 30)" "$PDFTOPPM" -jpeg -jpegopt quality=70 -cropbox -scale-to "$PX" -f 1 -l "$N" "$SRC" "$OUT/pj" < /dev/null > /dev/null 2>&1
+  rename_pages pj jpg
+  for ((i = 1; i <= N; i++)); do
+    jpg=$(printf '%s/p%03d.jpg' "$OUT" "$i")
+    if [ -f "$jpg" ] && [ "$(size_of "$jpg")" -le "$IMAGE_BYTES" ]; then rm -f -- "$(printf '%s/p%03d.png' "$OUT" "$i")"; else rm -f -- "$jpg"; fi
+  done
+fi
+for ((i = 1; i <= N; i++)); do
+  png=$(printf '%s/p%03d.png' "$OUT" "$i")
+  if [ -f "$png" ] && [ "$(size_of "$png")" -gt "$IMAGE_BYTES" ]; then shrink_page "$i" || true; fi
+done
+
+# ---- what was drawn: the pages from 1 up to the first one that is missing (a page that does not fit the cap, or that poppler could not draw, ends the run)
+pages=0
+for ((i = 1; i <= N; i++)); do
+  base=$(printf '%s/p%03d' "$OUT" "$i")
+  if [ -f "$base.png" ] || [ -f "$base.jpg" ]; then pages=$i; else break; fi
+done
+[ "$pages" -ge 1 ] || refuse 'no page of the file could be drawn.'
+
+# ---- the words of each page that was drawn (one process for the whole file; a page that is missing here is a page with no words)
+timeout -s KILL "$(step 20)" "$PDFTOTEXT" -bbox-layout -cropbox -enc UTF-8 -f 1 -l "$pages" "$SRC" - < /dev/null 2> /dev/null \
+  | timeout -s KILL "$(step 20)" "$PYTHON" -I "$WORDS" "$OUT" "$pages" "$ROTATIONS" > /dev/null 2>&1
+
+printf '{"pages":%d,"pagesInFile":%d%s}\n' "$pages" "$PAGES_IN_FILE" "${ASPECT:+,\"aspect\":$ASPECT}" > "$OUT/meta.json"
+exit 0

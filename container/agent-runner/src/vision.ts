@@ -7,7 +7,8 @@
  * (LiteLLM, the alias `glm-vision`: openai/glm-5.3-flash at z.ai's OpenAI-compatible Coding Plan endpoint, api.z.ai/api/coding/paas/v4, with `thinking:
  * disabled` in extra_body; eval/litellm/config.yaml), which holds z.ai's key: no z.ai key is ever in a container, and nothing here calls z.ai itself. What a
  * container holds is the gateway's own key, the one the model already presents, handed to this server alone (mcp-servers.ts). The tool exists only when the
- * host switch TAI_VISION=1 is on (src/vision-env.ts) and never in the voice tool host.
+ * host switch TAI_VISION=1 is on (src/vision-env.ts): a student's own chat container has it and, since 2026-11-07 (the owner's decision), so does a voice call's tool host, which the host starts
+ * with it unless TAI_CALL_VISION=0.
  *
  * What it checks first, because a path and a file come from a model that a student is talking to: the path must resolve (every link followed) to a
  * regular file inside the student's uploads folder, opened once without following a link; at most 4 MB (the picture travels as base64, a third larger);
@@ -93,10 +94,9 @@ export interface VisionConfig {
 
 /**
  * What the MCP server (ipc-mcp-stdio.ts) is configured with: its own environment, which buildMcpServers filled in (visionServerEnv). Null, and no tool,
- * when it is incomplete or this is the voice tool host.
+ * when it is incomplete.
  */
 export function visionConfigFromEnv(env: Record<string, string | undefined>): VisionConfig | null {
-  if (env['TAI_MODE'] === 'tool-host') return null;
   const url = (env['TAI_VISION_URL'] ?? '').trim();
   const apiKey = (env['TAI_VISION_API_KEY'] ?? '').trim();
   if (!url || !apiKey) return null;
@@ -124,11 +124,11 @@ export function takeVisionConfig(env: Record<string, string | undefined>): Visio
 /**
  * The environment the nanoclaw MCP server is started with for this tool, from the container's own settings (mcp-servers.ts): the gateway the model already
  * uses (ANTHROPIC_BASE_URL, which has no /v1) with the key it already presents, and the alias that looks at pictures. Empty, so that the server does not
- * offer the tool, unless the host started this container for the tool (TAI_VISION=1: a student's own chat) and it is not the voice tool host, which runs
- * this same code and is not to get a key it has no use for. The names keep "API_KEY" so that anything that hides credentials from a shell hides this one too.
+ * offer the tool, unless the host started this container for the tool (TAI_VISION=1: a student's own chat, or a voice call's tool host:
+ * src/vision-env.ts visionForCall). The names keep "API_KEY" so that anything that hides credentials from a shell hides this one too.
  */
 export function visionServerEnv(env: Record<string, string | undefined>): Record<string, string> {
-  if (env['TAI_VISION'] !== '1' || env['TAI_MODE'] === 'tool-host') return {};
+  if (env['TAI_VISION'] !== '1') return {};
   const gateway = (env['ANTHROPIC_BASE_URL'] ?? '').trim().replace(/\/+$/, '').replace(/\/v1$/, '');
   const apiKey = (env['ANTHROPIC_AUTH_TOKEN'] || env['ANTHROPIC_API_KEY'] || '').trim();
   if (!/^https?:\/\/[^\s/]/i.test(gateway) || !apiKey) return {};

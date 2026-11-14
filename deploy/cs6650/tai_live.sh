@@ -39,6 +39,27 @@
 #   bash deploy/cs6650/tai_live.sh timers on|off                  every night: the backup, and the knowledge corpus rebuilt from what the world publishes
 #   bash deploy/cs6650/tai_live.sh humanness [--days N] [--split ISO] [--judge N] [--include-main]
 #                                                                 how much TAi's replies and calls read like a bot (docs/HUMANNESS.md); read-only
+#   bash deploy/cs6650/tai_live.sh sandbox build [--base IMAGE] | warm | status | smoke [--only TEXT]
+#                                                                 running a student's Go code (docs/GO_SANDBOX.md). build: ships deploy/cs6650/sandbox/ to the host and builds the
+#                                                                 image tai-go-sandbox:live (at most 2 CPUs and 3 GB, about ten minutes, a cache of the standard library and of the usual third-party packages compiled in it: not in class hours;
+#                                                                 --base names a mirror of the golang image when Docker Hub's pull limit for this address is reached). warm: fills the shared
+#                                                                 module cache (data/sandbox/gomodcache) with the modules the course's homework uses (warm/go.mod), through the modules container.
+#                                                                 status: the image and its size, the cache's size, sandbox containers running, run directories left, runs counted in the last
+#                                                                 hour. smoke: runs the checks against the real image (hostile programs and archives, the queue; up to 2 CPUs for several minutes)
+#   bash deploy/cs6650/tai_live.sh doc build [--base IMAGE] | status | smoke [--only TEXT]
+#                                                                 the document viewer's renderer (docs/DOCUMENTS.md). build: ships deploy/cs6650/doc-render/ to the host and builds the image
+#                                                                 tai-doc:live (poppler, LibreOffice and fonts on the python image the host has; at most 2 CPUs and 3 GB; about twelve minutes the first time and under one when only the scripts changed; --base names another copy of that image). status: the
+#                                                                 image, the prepared documents kept (counts and sizes only), renderer containers and run directories left. smoke: real PDFs
+#                                                                 (text, 10 and 150 pages, a scan, damaged and hostile files) through the real image, from the live tree's dist; up to 2 CPUs for a few minutes.
+#                                                                 The image reads PDF, PowerPoint, Word and Excel files (LibreOffice inside it: about ten minutes to build the first time, 940 MB)
+#   bash deploy/cs6650/tai_live.sh course-docs add <file-or-directory> [--title T] [--week N] | list | remove <id> | rename <id> [--title T] [--week N|none] | canvas [--course ID] [--yes] [--allow-host HOST]
+#                                                                 the course library (docs/COURSE_DOCS.md): the professor's decks, shown to EVERY student in the viewer and found by what they say
+#                                                                 (find_course_document). add: ships the files (PDF, PPTX, DOCX, XLSX, at most 20 MB each) to the host, which renders each through the renderer into the library
+#                                                                 and skips a file already in it (same SHA-256); the week is taken from a name such as "Week 5" or "W5" when --week is not given. list: id, week, pages, title, source.
+#                                                                 remove: by id (or the first six characters). canvas: lists the course's files that are PDF, PPTX, DOCX or XLSX (name, size, type, week) with the token stored on the host
+#                                                                 (read only; never printed, sent to Canvas' own host only); with --yes it downloads each (at most 20 MB, never to a host that is not Canvas' own: --allow-host names one
+#                                                                 that is fine) and adds it. TEACHING-SAFE: a deck in the library is course material a student may already open in Canvas, and it is yours to keep clear of solutions
+#                                                                 to graded assignments (nothing here looks at what a deck says); files Canvas hides from students are not taken
 #
 # On the host, everything is under ~/tai-live (TAI_LIVE_DIR): tai/ (the tree, its .env, store/ groups/ data/), base.env + credentials.env
 # (what .env is built from), orch.env, users.json (who may sign in), portal-secret, secrets.env (the gateway key), run/portal.sock, logs/,
@@ -100,6 +121,48 @@ if [ "$ON_HOST" = 0 ]; then
   if [ "$CMD" = timers ] && [ "${1:-}" = on ]; then
     # the timers run a copy of this script that stays on the host (the one streamed for a command is gone when it ends)
     tr -d '\r' < "${BASH_SOURCE[0]}" | "${SSH[@]}" "$HOST" 'mkdir -p ~/tai-live/bin && cat > ~/tai-live/bin/tai_live.sh && chmod 700 ~/tai-live/bin/tai_live.sh'
+  fi
+  if [ "$CMD" = sandbox ] && { [ "${1:-}" = build ] || [ "${1:-}" = warm ]; }; then
+    # the image's build context goes to the host first, in a stream of its own (the script is the other one); `warm` reads the warm list from it, so it ships it too
+    # (a warm needs no build before it: the image may have been built from a copy of the tree, and then nothing had left the list on the host)
+    ( cd "$HERE" && tar -czf - sandbox ) \
+      | "${SSH[@]}" "$HOST" 'set -e; L=${TAI_LIVE_DIR:-$HOME/tai-live}; rm -rf "$L/sandbox-build.new"; mkdir -p "$L/sandbox-build.new"; tar -xzf - -C "$L/sandbox-build.new"; rm -rf "$L/sandbox-build"; mv "$L/sandbox-build.new/sandbox" "$L/sandbox-build"; rmdir "$L/sandbox-build.new"' \
+      || { echo "could not ship deploy/cs6650/sandbox to $HOST" >&2; exit 1; }
+  fi
+  if [ "$CMD" = doc ] && [ "${1:-}" = build ]; then
+    # the renderer image's build context goes to the host first, in a stream of its own (the script is the other one)
+    ( cd "$HERE" && tar -czf - doc-render ) \
+      | "${SSH[@]}" "$HOST" 'set -e; L=${TAI_LIVE_DIR:-$HOME/tai-live}; rm -rf "$L/doc-build.new"; mkdir -p "$L/doc-build.new"; tar -xzf - -C "$L/doc-build.new"; rm -rf "$L/doc-build"; mv "$L/doc-build.new/doc-render" "$L/doc-build"; rmdir "$L/doc-build.new"' \
+      || { echo "could not ship deploy/cs6650/doc-render to $HOST" >&2; exit 1; }
+  fi
+  if [ "$CMD" = course-docs ] && [ "${1:-}" = add ]; then
+    # the files of the library's new decks go to the host first, in a stream of their own (the script is the other one); the host side renders each and then removes them
+    src=""; skip=0; first=1; kept=()
+    for a in "$@"; do
+      if [ "$first" = 1 ]; then first=0; continue; fi
+      if [ "$skip" = 1 ]; then skip=0; kept+=("$a"); continue; fi
+      case "$a" in
+        --title|--week) skip=1; kept+=("$a") ;;
+        --*) kept+=("$a") ;;
+        *) [ -z "$src" ] || { echo "tai_live.sh course-docs add takes ONE file or directory (the decks of a directory are all added)" >&2; exit 2; }; src=$a ;;
+      esac
+    done
+    # what goes to the host is the command and its flags: the path is a place on THIS machine, and the host side adds what was shipped
+    set -- add ${kept[@]+"${kept[@]}"}
+    [ -n "$src" ] || { echo "tai_live.sh course-docs add <file-or-directory> [--title T] [--week N]" >&2; exit 2; }
+    [ -e "$src" ] || { echo "course-docs add: there is no such file or directory: $src" >&2; exit 2; }
+    if [ -d "$src" ]; then
+      found=$( cd "$src" && find . -maxdepth 4 -type f \( -iname '*.pdf' -o -iname '*.pptx' -o -iname '*.docx' -o -iname '*.xlsx' \) -size -20481k ! -path '*/.*' | wc -l | tr -d ' ')
+      [ "$found" -gt 0 ] || { echo "course-docs add: no PDF, PPTX, DOCX or XLSX file of at most 20 MB under $src" >&2; exit 1; }
+      shipper() { ( cd "$src" && find . -maxdepth 4 -type f \( -iname '*.pdf' -o -iname '*.pptx' -o -iname '*.docx' -o -iname '*.xlsx' \) -size -20481k ! -path '*/.*' -print0 | tar --null -T - -czf - ); }
+    else
+      [[ "$src" =~ \.(pdf|pptx|docx|xlsx)$ ]] || [[ "$src" =~ \.(PDF|PPTX|DOCX|XLSX)$ ]] || { echo "course-docs add: that is not a PDF, PPTX, DOCX or XLSX file: $src" >&2; exit 2; }
+      [ "$(wc -c < "$src" | tr -d ' ')" -le 20971520 ] || { echo "course-docs add: that file is over 20 MB: $src" >&2; exit 1; }
+      shipper() { tar -czf - -C "$(dirname "$src")" -- "$(basename "$src")"; }
+    fi
+    # (the checks above are outside the pipe: an exit inside a pipe's side leaves only that side)
+    shipper | "${SSH[@]}" "$HOST" 'set -e; L=${TAI_LIVE_DIR:-$HOME/tai-live}; rm -rf "$L/course-in"; mkdir -p "$L/course-in"; tar -xzf - -C "$L/course-in"' ||
+      { echo "could not ship the files to $HOST" >&2; exit 1; }
   fi
   quoted=
   for a in "$@"; do quoted+=" $(printf '%q' "$a")"; done
@@ -1007,7 +1070,13 @@ PY
   for part in store/portal store/portal-media groups data/sessions; do
     if [ -e "$T/$part" ]; then
       mkdir -p "$work/$(dirname "$part")"
-      cp -a "$T/$part" "$work/$part"
+      if [ "$part" = store/portal ]; then
+        # the prepared documents (store/portal/docs: page images and words, up to 60 MB a student) are made again from the files in groups/<folder>/uploads: they are not records, and they are big
+        mkdir -p "$work/$part"
+        find "$T/$part" -mindepth 1 -maxdepth 1 ! -name docs -exec cp -a {} "$work/$part/" \;
+      else
+        cp -a "$T/$part" "$work/$part"
+      fi
     fi
   done
   find "$work/groups" -type d -name logs -prune -exec rm -rf {} + 2>/dev/null || true       # logs are not records
@@ -1074,6 +1143,210 @@ humanness() {        # humanness [report options]: the report of src/humanness (
   key=$(grep -m1 '^TAI_VOICE_LLM_KEY=' "$L/orch.env" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
   url=$(grep -m1 '^TAI_VOICE_LLM_URL=' "$L/orch.env" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
   ( cd "$T" && TAI_VOICE_LLM_KEY="$key" TAI_VOICE_LLM_URL="${url:-http://127.0.0.1:$VOICE_LLM_PORT}" "$L/node/bin/node" dist/humanness/cli.js --store store --groups groups ${dump:+--dump "$dump"} "$@" )
+}
+
+# ---- running a student's Go code (docs/GO_SANDBOX.md): the image, the shared module cache, and the checks. The orchestrator itself starts the containers; these are the operator's.
+SANDBOX_IMAGE=tai-go-sandbox:live
+sandbox_dir() { echo "$T/data/sandbox"; }
+
+sandbox_build() {      # sandbox_build [--base IMAGE]: the context was shipped by the PC-side part of this script into $L/sandbox-build
+  local base="" ctx="$L/sandbox-build" log="$L/logs/sandbox-build.log"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --base) [ -n "${2:-}" ] || die "--base needs an image name"; base=$2; shift 2 ;;
+      *) die "tai_live.sh sandbox build [--base IMAGE]" ;;
+    esac
+  done
+  [ -z "$base" ] || [[ "$base" =~ ^[A-Za-z0-9._/:@-]+$ ]] || die "--base is not an image name: $base"
+  command -v docker >/dev/null || die "docker is not available on this host"
+  [ -f "$ctx/Dockerfile" ] || die "no build context at $ctx: run this from the PC (it ships deploy/cs6650/sandbox first)"
+  mkdir -p "$L/logs"
+  say "== sandbox image $SANDBOX_IMAGE from $ctx: at most 2 CPUs and 3 GB for about ten minutes (the standard library and the course's usual third-party packages are compiled into it); not in class hours"
+  local args=(--cpu-period=100000 --cpu-quota=200000 --memory=3g --memory-swap=3g -t "$SANDBOX_IMAGE")
+  [ -z "$base" ] || args+=(--build-arg "GO_IMAGE=$base")
+  if ! docker build "${args[@]}" "$ctx" > "$log" 2>&1; then
+    tail -n 12 "$log" | cut -c1-200 >&2
+    if grep -q toomanyrequests "$log"; then
+      say "Docker Hub's pull limit for this address was reached. Wait, or build from a mirror of the same official image: tai_live.sh sandbox build --base mirror.gcr.io/library/golang:<go version>-bookworm"
+    fi
+    die "the sandbox image did not build (log: $log)"
+  fi
+  say "built $SANDBOX_IMAGE ($(docker images --format '{{.Size}}' "$SANDBOX_IMAGE")); the next step: tai_live.sh sandbox warm"
+}
+
+sandbox_warm() {      # the shared module cache, filled through a container with a network that runs `go mod download` and nothing else (the same one the runner uses), once for each module of warm/
+  local dir cache src group run n=0
+  dir=$(sandbox_dir); cache="$dir/gomodcache"; src="$L/sandbox-build/warm"
+  docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1 || die "no $SANDBOX_IMAGE yet: tai_live.sh sandbox build"
+  compgen -G "$src/*/go.mod" >/dev/null || die "no warm list at $src/*/go.mod: tai_live.sh sandbox build ships it (deploy/cs6650/sandbox/warm/)"
+  mkdir -p "$cache"
+  for group in "$src"/*/; do
+    [ -f "$group/go.mod" ] || continue
+    n=$((n + 1))
+    run=$(mktemp -d "$L/.sandbox-warm.XXXXXX")
+    mkdir -p "$run/in/files"
+    cp "$group/go.mod" "$run/in/files/go.mod"
+    chmod -R a+rX "$run/in"
+    say "== downloading $(basename "$group") into $cache (checked against the Go checksum database; no student code runs here)"
+    if ! docker run --rm --name "tai-sandbox-warm-$$" --label tai-sandbox=1 --pull never --init --log-driver none --cap-drop ALL --security-opt no-new-privileges --read-only         --pids-limit 128 --memory 1g --memory-swap 1g --cpus 1 --user "$(id -u):$(id -g)" --ulimit nofile=256:256 --ulimit core=0 --hostname sandbox         --tmpfs /tmp:rw,exec,nosuid,nodev,size=512m --tmpfs /work:rw,exec,nosuid,nodev,size=96m,mode=1777 --workdir /work         -v "$run/in:/in:ro" -v "$cache:/gomodcache:rw"         -e 'GOFLAGS=-mod=mod -modcacherw' -e GOPROXY=https://proxy.golang.org -e GOSUMDB=sum.golang.org -e GOTOOLCHAIN=local -e GOPRIVATE= -e GONOSUMDB= -e GONOPROXY= -e GOINSECURE=         -e GOMODCACHE=/gomodcache -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/gopath -e HOME=/tmp -e GOWORK=off -e 'GOVCS=*:off'         "$SANDBOX_IMAGE" /usr/local/bin/sandbox-modules 600 - 2>&1 | tail -n 15 >&2; then
+      rm -rf "$run"
+      die "the download of $(basename "$group") failed"
+    fi
+    rm -rf "$run"
+  done
+  say "module cache: $(du -sm "$cache" | cut -f1) MB in $cache ($n module(s) of the warm list)"
+}
+
+sandbox_status() {
+  local dir; dir=$(sandbox_dir)
+  if docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1; then
+    echo "image:        $SANDBOX_IMAGE present, $(docker images --format '{{.Size}}' "$SANDBOX_IMAGE"), built $(docker image inspect "$SANDBOX_IMAGE" --format '{{.Created}}' | cut -c1-19)"
+  else
+    echo "image:        $SANDBOX_IMAGE NOT built (tai_live.sh sandbox build): running code is off"
+  fi
+  echo "module cache: $([ -d "$dir/gomodcache" ] && du -sm "$dir/gomodcache" | cut -f1 || echo 0) MB in $dir/gomodcache (the orchestrator empties it above 3000 MB: SANDBOX_LIMITS.moduleCacheMb; sandbox warm refills it)"
+  echo "containers:   $(docker ps --filter 'label=tai-sandbox=1' --format '{{.Names}}' | grep -c . || true) sandbox container(s) running"
+  echo "run dirs:     $(find "$dir" -maxdepth 1 -type d -name 'run-*' 2>/dev/null | wc -l) left in $dir"
+  python3 - "$T/store/messages.db" 2>/dev/null <<'PY' || echo "runs:         no data (the database could not be read)"
+import sqlite3, sys, time
+con = sqlite3.connect("file:%s?mode=ro" % sys.argv[1], uri=True)
+try:
+    since = int((time.time() - 3600) * 1000)
+    hour = con.execute("select count(*), count(distinct student_folder) from sandbox_runs where started_at >= ?", (since,)).fetchone()
+    day = con.execute("select count(*) from sandbox_runs where started_at >= ?", (since - 23 * 3600 * 1000,)).fetchone()
+    print("runs:         %d in the last hour (%d student(s)), %d in the last day" % (hour[0], hour[1], day[0]))
+except sqlite3.OperationalError:
+    print("runs:         n/a (no sandbox_runs table yet: this build has not run since the sandbox was deployed)")
+PY
+}
+
+sandbox_smoke() {      # the checks of docs/GO_SANDBOX.md against the real image
+  [ -f "$T/dist/sandbox/smoke.js" ] || die "this build has no sandbox smoke (dist/sandbox/smoke.js): deploy first"
+  docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1 || die "no $SANDBOX_IMAGE yet: tai_live.sh sandbox build"
+  say "== the sandbox smoke: hostile programs and archives, up to 2 CPUs for several minutes; not in class hours, not during a voice call"
+  ( cd "$T" && node dist/sandbox/smoke.js "$@" )
+}
+
+sandbox_cmd() {
+  local sub=${1:-status}
+  shift || true
+  case "$sub" in
+    build) sandbox_build "$@" ;;
+    warm) sandbox_warm ;;
+    status) sandbox_status ;;
+    smoke) sandbox_smoke "$@" ;;
+    *) die "tai_live.sh sandbox build [--base IMAGE] | warm | status | smoke [--only TEXT]" ;;
+  esac
+}
+
+# ---- the document viewer's renderer (docs/DOCUMENTS.md): the image, what is kept, and the checks. The orchestrator itself starts the containers; these are the operator's.
+DOC_IMAGE=tai-doc:live
+doc_dir() { echo "$T/data/docs"; }
+doc_store() { echo "$T/store/portal/docs"; }
+
+doc_build() {      # doc_build [--base IMAGE]: the context was shipped by the PC-side part of this script into $L/doc-build
+  local base="" ctx="$L/doc-build" log="$L/logs/doc-build.log"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --base) [ -n "${2:-}" ] || die "--base needs an image name"; base=$2; shift 2 ;;
+      *) die "tai_live.sh doc build [--base IMAGE]" ;;
+    esac
+  done
+  [ -z "$base" ] || [[ "$base" =~ ^[A-Za-z0-9._/:@-]+$ ]] || die "--base is not an image name: $base"
+  command -v docker >/dev/null || die "docker is not available on this host"
+  [ -f "$ctx/Dockerfile" ] || die "no build context at $ctx: run this from the PC (it ships deploy/cs6650/doc-render first)"
+  mkdir -p "$L/logs"
+  say "== document renderer image $DOC_IMAGE from $ctx: at most 2 CPUs and 3 GB for about twelve minutes the first time (poppler, LibreOffice and fonts from the Debian mirrors; under a minute when only the scripts changed); not in class hours"
+  local args=(--cpu-period=100000 --cpu-quota=200000 --memory=3g --memory-swap=3g -t "$DOC_IMAGE")
+  [ -z "$base" ] || args+=(--build-arg "BASE_IMAGE=$base")
+  if ! docker build "${args[@]}" "$ctx" > "$log" 2>&1; then
+    tail -n 12 "$log" | cut -c1-200 >&2
+    if grep -q toomanyrequests "$log"; then
+      say "Docker Hub's pull limit for this address was reached. Wait, or build from a mirror of the same image: tai_live.sh doc build --base mirror.gcr.io/library/python:3.12-slim"
+    fi
+    die "the document renderer image did not build (log: $log)"
+  fi
+  say "built $DOC_IMAGE ($(docker images --format '{{.Size}}' "$DOC_IMAGE")); the next step: tai_live.sh doc smoke (after a deploy that has dist/docs/smoke.js)"
+}
+
+doc_status() {
+  local dir store docs students
+  dir=$(doc_dir); store=$(doc_store)
+  if docker image inspect "$DOC_IMAGE" >/dev/null 2>&1; then
+    echo "image:        $DOC_IMAGE present, $(docker images --format '{{.Size}}' "$DOC_IMAGE"), built $(docker image inspect "$DOC_IMAGE" --format '{{.Created}}' | cut -c1-19)"
+  else
+    echo "image:        $DOC_IMAGE NOT built (tai_live.sh doc build): opening documents is off"
+  fi
+  docs=0; students=0
+  if [ -d "$store" ]; then
+    docs=$(find "$store" -mindepth 2 -maxdepth 2 -type d -regextype posix-extended -regex '.*/[0-9a-f]{32}' 2>/dev/null | wc -l | tr -d ' ')
+    students=$(find "$store" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+  fi
+  echo "documents:    $docs prepared document(s) of $students student(s), $([ -d "$store" ] && du -sm "$store" | cut -f1 || echo 0) MB in $store (kept 30 days after the last open, at most 8 documents and 60 MB a student; the backup leaves them out)"
+  echo "course docs:  $(find "$T/store/course-docs" -mindepth 1 -maxdepth 1 -type d -regextype posix-extended -regex '.*/[0-9a-f]{32}' 2>/dev/null | wc -l | tr -d ' ') in $T/store/course-docs (tai_live.sh course-docs list)"
+  echo "containers:   $(docker ps -a --filter 'label=tai-doc=1' --format '{{.Names}}' | grep -c . || true) renderer container(s) running or left, $(docker ps -a --filter 'label=tai-doc-operator=1' --format '{{.Names}}' | grep -c . || true) of the operator's"
+  echo "run dirs:     $(find "$dir" -maxdepth 1 -type d -name 'run-*' 2>/dev/null | wc -l | tr -d ' ') left in $dir"
+}
+
+doc_smoke() {      # the checks of docs/DOCUMENTS.md against the real image
+  [ -f "$T/dist/docs/smoke.js" ] || die "this build has no document smoke (dist/docs/smoke.js): deploy first"
+  docker image inspect "$DOC_IMAGE" >/dev/null 2>&1 || die "no $DOC_IMAGE yet: tai_live.sh doc build"
+  say "== the document smoke: real PDFs (text, 10 and 150 pages, a scan, damaged and hostile files), up to 2 CPUs for a few minutes; not in class hours, not during a voice call"
+  ( cd "$T" && node dist/docs/smoke.js "$@" )
+}
+
+doc_cmd() {
+  local sub=${1:-status}
+  shift || true
+  case "$sub" in
+    build) doc_build "$@" ;;
+    status) doc_status ;;
+    smoke) doc_smoke "$@" ;;
+    *) die "tai_live.sh doc build [--base IMAGE] | status | smoke [--only TEXT]" ;;
+  esac
+}
+
+# ---- the course library (docs/COURSE_DOCS.md): the professor's decks, for every student. The commands are node's (dist/docs/course-docs.js, from the live tree), with the library in the store and the renderer's own
+# run directory (data/docs-operator: the service's reaper never looks there). The Canvas token is read from the host's env file by name and handed to the command through its environment, never on a command line.
+course_docs_node() {
+  [ -f "$T/dist/docs/course-docs.js" ] || die "this build has no course-docs command (dist/docs/course-docs.js): deploy first"
+  ( cd "$T" && node dist/docs/course-docs.js "$@" --store "$T/store" --data "$T/data/docs-operator" )
+}
+
+course_docs_add() {
+  local in="$L/course-in" rc=0
+  [ -d "$in" ] || die "no files were shipped: run this from the PC (tai_live.sh course-docs add <file-or-directory>)"
+  [ -f "$T/dist/docs/course-docs.js" ] || { rm -rf "$in"; die "this build has no course-docs command (dist/docs/course-docs.js): deploy first"; }
+  docker image inspect "$DOC_IMAGE" >/dev/null 2>&1 || { rm -rf "$in"; die "no $DOC_IMAGE yet: tai_live.sh doc build"; }
+  say "== adding to the course library: each file is rendered in a container of its own (a few seconds to a minute each); every student will see what is added: only course material, nothing that solves a graded assignment"
+  course_docs_node add --dir "$in" "$@" || rc=$?
+  rm -rf "$in"
+  return "$rc"
+}
+
+course_docs_canvas() {
+  local file="$L/credentials.env" token base course
+  [ -f "$file" ] || die "no credentials are stored yet: run tai_credentials.sh first"
+  token=$(grep -m1 '^CANVAS_API_TOKEN=' "$file" | cut -d= -f2- | tr -d '"' || true)
+  base=$(grep -m1 '^CANVAS_BASE_URL=' "$file" | cut -d= -f2- | tr -d '"' || true)
+  course=$(grep -m1 '^CANVAS_COURSE_ID=' "$file" | cut -d= -f2- | tr -d '"' || true)
+  [ -n "$token" ] && [ -n "$base" ] || die "no Canvas address or token is stored on this host: tai_credentials.sh canvas"
+  [ -f "$T/dist/docs/course-docs.js" ] || die "this build has no course-docs command (dist/docs/course-docs.js): deploy first"
+  case " $* " in *" --yes "*) docker image inspect "$DOC_IMAGE" >/dev/null 2>&1 || die "no $DOC_IMAGE yet: tai_live.sh doc build" ;; esac
+  ( cd "$T" && CANVAS_API_TOKEN="$token" CANVAS_BASE_URL="$base" CANVAS_COURSE_ID="$course" node dist/docs/course-docs.js canvas "$@" --store "$T/store" --data "$T/data/docs-operator" )
+}
+
+course_docs_cmd() {
+  local sub=${1:-}
+  shift || true
+  case "$sub" in
+    add) course_docs_add "$@" ;;
+    list) course_docs_node list "$@" ;;
+    remove) course_docs_node remove "$@" ;;
+    rename) course_docs_node rename "$@" ;;
+    canvas) course_docs_canvas "$@" ;;
+    *) die "tai_live.sh course-docs add <file-or-directory> [--title T] [--week N] | list | remove <id> | rename <id> [--title T] [--week N|none] | canvas [--course ID] [--yes] [--allow-host HOST]" ;;
+  esac
 }
 
 case "$CMD" in
@@ -1151,6 +1424,9 @@ case "$CMD" in
   backup) backup_cmd "$@" ;;
   timers) timers_cmd "$@" ;;
   humanness) humanness "$@" ;;
+  sandbox) sandbox_cmd "$@" ;;
+  doc) doc_cmd "$@" ;;
+  course-docs) course_docs_cmd "$@" ;;
   corpus) build_corpus ;;
   manifest) manifest ;;
   course) course_cmd "$@" ;;

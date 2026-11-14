@@ -10,6 +10,10 @@
 // student's history (the words of a turn, role user for the student and assistant for TAi, with the id of the call; and markers with an
 // `event`: `start` with the kind of call, `mode` when it switches, `end` with its length in seconds), through the history and the poll.
 // The socket still sends its transcripts, which the page does not draw. The call's summary card follows the end marker a little later.
+//
+// The viewer (docs/VIEWER.md): the page's `view` messages are kept (`views` of GET /voice, and `onView(folder, view)`), and the control port can make the call do what the real one does
+// to the student's screen: `show` (open a document at a page), `point` (draw boxes: given, or found for a phrase by `findPhrase(doc, page, phrase)`), `doc-state` (preparing, failed), and
+// `show-point` (a show and a point back to back, as the host sends them when TAi points at a phrase on a page that is not open).
 import { WebSocketServer } from 'ws';
 
 const OUT_RATE = 24000;
@@ -30,10 +34,12 @@ export function tone(ms, freq = 330, amp = 0.3) {
 }
 
 export class FakeVoice {
-  /** history: the page's HistoryStore (a call's summary goes there); wake(folder): tells the page's pollers to look. */
-  constructor({ history, wake }) {
+  /** history: the page's HistoryStore (a call's summary goes there); wake(folder): tells the page's pollers to look; onView(folder, view): the page's view, as a call's socket carries it; findPhrase(doc, page, phrase): the boxes of a phrase. */
+  constructor({ history, wake, onView, findPhrase }) {
     this.history = history;
     this.wake = wake;
+    this.onView = onView || (() => undefined);
+    this.findPhrase = findPhrase || (() => null);
     this.wss = new WebSocketServer({ noServer: true });
     this.sessions = new Map();          // folder -> the live call (kept 30 s after a drop, to be resumed)
     this.nextError = '';                // the next "start" is refused with this code
@@ -42,7 +48,7 @@ export class FakeVoice {
   }
 
   reset() {
-    this.stats = { connections: 0, starts: [], mutes: [], ends: 0, pings: 0, injected: [], frames: 0, sizes: {}, times: [], samples: 0, sumSq: 0, crossings: 0, sign: 0, warms: [], order: [] };
+    this.stats = { connections: 0, starts: [], mutes: [], ends: 0, pings: 0, injected: [], frames: 0, sizes: {}, times: [], samples: 0, sumSq: 0, crossings: 0, sign: 0, warms: [], order: [], views: [] };
   }
 
   /**
@@ -113,6 +119,10 @@ export class FakeVoice {
       if (msg.type === 'start') this.start(ws, user, msg);
       else if (msg.type === 'mute') this.stats.mutes.push(!!msg.muted);
       else if (msg.type === 'ping') this.stats.pings++;
+      else if (msg.type === 'view') {
+        this.stats.views.push(msg.view);
+        this.onView(user.folder, msg.view);
+      }
       else if (msg.type === 'end') {
         this.stats.ends++;
         if (mine) this.close(s, 'user');
@@ -363,7 +373,7 @@ export class FakeVoice {
       frames: st.frames, sizes: st.sizes, fps: span > 0 ? (st.times.length - 1) / span : 0, seconds,
       rms: st.samples ? Math.sqrt(st.sumSq / st.samples) : 0, pitch: seconds > 0 ? st.crossings / 2 / seconds : 0,
       live: [...this.sessions.values()].map((s) => ({ mode: s.mode, connected: !!s.ws })),
-      warms: st.warms, order: st.order,
+      warms: st.warms, order: st.order, views: st.views,
     };
   }
 
@@ -412,6 +422,29 @@ export class FakeVoice {
         return true;
       case 'status':
         this.send(s, { type: 'status', state: params.get('state') || 'thinking' });
+        return true;
+      // what the real call does to the student's screen (docs/CHAT_OBJECTS.md, "Documents"): open a document at a page, draw boxes on a page, say a document is being prepared or failed
+      case 'show':
+        this.send(s, { type: 'show', doc: params.get('doc'), page: parseInt(params.get('page') || '1', 10), title: params.get('title') || '', pages: parseInt(params.get('pages') || '1', 10) });
+        return true;
+      case 'point': {
+        const page = parseInt(params.get('page') || '1', 10);
+        const given = params.get('boxes');
+        const found = params.get('phrase') ? this.findPhrase(params.get('doc'), page, params.get('phrase')) : null;
+        const boxes = given ? given.split(';').map((box) => box.split(',').map(Number)) : found ? found.boxes : [];
+        this.send(s, { type: 'point', doc: params.get('doc'), page, boxes });
+        return boxes.length > 0;
+      }
+      case 'show-point': {
+        // what the host does when TAi points at a phrase on a page the student does not have open: a show, then a point, back to back
+        const page = parseInt(params.get('page') || '1', 10);
+        const found = this.findPhrase(params.get('doc'), page, params.get('phrase') || '');
+        this.send(s, { type: 'show', doc: params.get('doc'), page, title: params.get('title') || '', pages: parseInt(params.get('pages') || '1', 10) });
+        this.send(s, { type: 'point', doc: params.get('doc'), page, boxes: found ? found.boxes : [] });
+        return !!found;
+      }
+      case 'doc-state':
+        this.send(s, { type: 'doc_state', state: params.get('state') || 'preparing', ...(params.get('title') ? { title: params.get('title') } : {}), ...(params.get('message') ? { message: params.get('message') } : {}) });
         return true;
       case 'notice':
         this.send(s, { type: 'notice', text: params.get('text') || 'Dropped image: I cannot see images' });

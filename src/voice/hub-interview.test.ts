@@ -130,14 +130,16 @@ describe('the interview\'s start names the student\'s code', () => {
     ]);
   });
 
-  it('puts the interviewer\'s whole kit in the switch: the walkthrough protocol and six functions, none of them able to name another account', async () => {
+  it('puts the interviewer\'s whole kit in the switch: the walkthrough protocol and seven functions, none of them able to name another account', async () => {
     h = await createHarness({ toolHandlers: course() });
     const { conn } = await interviewOf(h, h.user(1));
     const think: any = conn.ofType('UpdateThink')[0];
     expect(think.think.prompt).toContain('## CODE WALKTHROUGH');
-    expect(think.think.functions.map((f: any) => f.name)).toEqual(['evaluate_answer', 'query_knowledge', 'read_competency', 'query_github', 'send_to_chat', 'end_interview']);
+    expect(think.think.functions.map((f: any) => f.name)).toEqual(['evaluate_answer', 'query_knowledge', 'read_competency', 'query_github', 'run_code', 'look_at_week', 'look_at_screen', 'send_to_chat', 'end_interview']);
     const github = think.think.functions.find((f: any) => f.name === 'query_github');
     expect(github.parameters.properties).not.toHaveProperty('owner');
+    // and the one that looks at their week again takes no account either: the student is who the tool host is bound to
+    expect(think.think.functions.find((f: any) => f.name === 'look_at_week').parameters).toEqual({ type: 'object', properties: {} });
   });
 
   it('keeps the repository in the prompt when Deepgram drops the call and its Settings are sent again: what was only appended is not lost', async () => {

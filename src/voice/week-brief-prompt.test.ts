@@ -167,6 +167,60 @@ describe('an interview with a week brief', () => {
   });
 });
 
+describe('the interviewer\'s opening question, its way of looking again, and how it speaks (the owner\'s call of 2026-11-06)', () => {
+  const RULE_1 = '1. ONE short question per turn, in plain spoken words: at most two short sentences, about 15 words each. Never stack questions and never explain why you ask.';
+  const RULE_5 = '5. If the student says they are confused, did not understand, or sounds annoyed: say sorry in a few words, then ask it ONCE more in different words, with a small concrete example. If they still do not follow, drop it and ask about something else: never the same question a third time.';
+  const RULE_8B = '8b. When they ask you to look at, check or open their Canvas, Piazza or GitHub, or say they just submitted, pushed or posted something, call look_at_week: you can look, so never say you cannot. If it shows nothing, say so in ONE short sentence and ask about the assignment itself (a requirement, a design choice), never about what they finished or skipped.';
+  const plain = interviewerPrompt(person, ic({ week: null }), 15, repo);
+  const withBrief = build();
+
+  it('opens with ONE concrete part of the assignment, never with a list of what they finished or skipped: the old opening is gone from the prompt, its structure and the late update', () => {
+    expect(withBrief).toContain('Your first question (the warm-up): pick ONE concrete part of the assignment from the ASSIGNMENT section');
+    expect(withBrief).toContain('NEVER ask them to list what they finished or skipped; only when the ASSIGNMENT section names no concrete part, ask once: "which part did you start with?"');
+    expect(withBrief).toContain('1. Their approach to the assignment (warm-up): pick ONE concrete part of it from the ASSIGNMENT section and ask how they approached it.');
+    const update = appendices.interviewMaterial(ic(), { room: 30_000, nonce: NONCE });
+    expect(update).toContain('Your first question (the warm-up): pick ONE concrete part of the assignment');
+    for (const text of [withBrief, update, plain]) {
+      for (const gone of ['which requirements they covered', 'which of its requirements they covered', 'which they left', 'Early on (your first question']) expect(text).not.toContain(gone);
+    }
+  });
+
+  it('says in the rules of every interview (with a brief or without) to call look_at_week when asked to look, never to say it cannot, and what to do when it shows nothing', () => {
+    for (const text of [withBrief, plain]) {
+      expect(text).toContain(RULE_8B);
+      expect(text.indexOf('\n8. send_to_chat')).toBeLessThan(text.indexOf('\n8b. When they ask you to look'));
+      expect(text.indexOf('\n8b. When they ask you to look')).toBeLessThan(text.indexOf('\n9. Call end_interview'));
+    }
+    // the function it names is the one the interviewer has, and the rule names no other look-up (the existing test checks every other name)
+    expect(functionsFor('interviewer').map((f) => f.name)).toContain('look_at_week');
+    // the late update carries the week's rules; the rule about looking is in the prompt the call began with, once
+    expect(count(withBrief, 'call look_at_week')).toBe(1);
+    expect(appendices.interviewMaterial(ic(), { room: 30_000, nonce: NONCE })).not.toContain('look_at_week');
+  });
+
+  it('asks for short turns, no explanation of why it asks, and one rewording with a concrete example and then another question: not the same one four times', () => {
+    for (const text of [withBrief, plain]) {
+      expect(text).toContain(RULE_1);
+      expect(text).toContain(RULE_5);
+      expect(text).not.toContain('at most about 25 words');
+      expect(text).not.toContain('ask the same thing again, simpler, with a small hint');
+      // the numbering is untouched: the rules a test or a model refers to keep their numbers
+      expect(text).toContain('10. You have about 15 minutes in total.');
+    }
+  });
+
+  it('keeps the whole prompt inside 24,000 characters, with the rules and the end intact, at the largest repository (a hundred-character paths) and with the brief at its maxima', () => {
+    // measured 2026-11-06: the three changes cost 528 characters of every interviewer prompt and 865 of one with a brief (the worst case, a hundred-character
+    // paths: 22,595 before, 23,460 now); the budget tests below hold the line for everything else, this one is the case with the least room
+    const text = build(worst(), manyFiles(100));
+    expect(text.length).toBeLessThanOrEqual(PROMPT_MAX);
+    expect(text).toContain(RULE_1);
+    expect(text).toContain(RULE_8B);
+    expect(text).toContain('Your first question (the warm-up)');
+    expect(text.trimEnd().endsWith('never read the result aloud.')).toBe(true);
+  });
+});
+
 describe('the three beats in the interviewer\'s prompt', () => {
   it('are a step of INTERVIEW STRUCTURE and two more rules after the tenth; an interview with no brief has neither', () => {
     const p = build();
@@ -341,7 +395,7 @@ describe('the update that carries the week late', () => {
 });
 
 describe('the conversational prompt offers this week\'s assignment when the student does not say what to practice', () => {
-  const ctx: StudentContext = { competencySummary: 'x', competencyText: null, memories: [], recentChat: [], courseStatus: 'Upcoming deadlines:\n- Homework 7: Distributed Locking: due in 5 days (Mon Nov 9, 9:00 AM PST)' };
+  const ctx: StudentContext = { competencySummary: 'x', competencyText: null, memories: [], work: [], recentChat: [], courseStatus: 'Upcoming deadlines:\n- Homework 7: Distributed Locking: due in 5 days (Mon Nov 9, 9:00 AM PST)' };
   const text = conversationalPrompt(person, ctx);
   const rule = /11\. (If the student wants a mock interview[^\n]*)/.exec(text)?.[1] ?? '';
 

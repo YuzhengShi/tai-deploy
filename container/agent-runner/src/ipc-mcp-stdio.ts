@@ -18,10 +18,14 @@ import { resolveGithubParams } from './github-access.js';
 import { READ_IMAGE_TEXT_DESCRIPTION, readImageText } from './image-text.js';
 import { RESULT_WAIT_MS, awaitIpcResult, newRequestId } from './ipc-result.js';
 import { RetryGuard, type ToolReply } from './retry-guard.js';
+import { RUN_GO_DESCRIPTION, runGo } from './run-go.js';
+import { FIND_COURSE_DOCUMENT_DESCRIPTION, findCourseDocument } from './course-docs.js';
+import { SHOW_DOCUMENT_DESCRIPTION, showDocument } from './show-document.js';
+import { ASK_TO_PREDICT_DESCRIPTION, SHOW_CHART_DESCRIPTION, SHOW_TRACE_DESCRIPTION, askToPredict, showChart, showTrace } from './chat-cards.js';
 import { checkNewTask, type TaskCounts } from './task-limits.js';
 import { TOOL_LIMITS, ToolLimiter } from './tool-limits.js';
 import { LOOK_AT_IMAGE_DESCRIPTION, lookAtImage, takeVisionConfig } from './vision.js';
-import { acceptGithubHost, briefSummary, buildWeekBrief, execPy, formatWeekBrief, pickPrimaryAssignment, type WeekBrief } from './weekly-brief.js';
+import { acceptGithubHost, briefSummary, buildWeekBrief, execPy, pickPrimaryAssignment, weeklyBriefAnswer, type WeekBrief } from './weekly-brief.js';
 
 const IPC_DIR = '/workspace/ipc';
 const MESSAGES_DIR = path.join(IPC_DIR, 'messages');
@@ -264,6 +268,108 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
 
     return askHost(data, 'The request to schedule it was sent, but the system did not confirm it within ten seconds, so it may or may not be set up. Check list_tasks before you tell the student it is, and say so honestly if you cannot tell.');
   },
+);
+
+// --- Running a student's Go code: the host runs it in a disposable container (run-go.ts has what the tool says and does; docs/GO_SANDBOX.md) ---
+
+server.tool(
+  'run_go',
+  RUN_GO_DESCRIPTION,
+  {
+    action: z.enum(['run', 'test', 'vet', 'build']).describe('run = go run, test = go test, vet = go vet, build = go build'),
+    files: z.array(z.object({ path: z.string().describe('A relative path like main.go or store/store.go'), content: z.string() })).optional().describe('The code itself, for a tiny demo or a few lines pasted in the chat. Give exactly one of files, repo, upload.'),
+    repo: z.object({ name: z.string().describe('The repository name only, without the owner'), path: z.string().optional().describe('A folder of the repository'), ref: z.string().optional().describe('A branch or tag') }).optional().describe("A repository of the student's own. Give exactly one of files, repo, upload."),
+    upload: z.string().optional().describe('The name of a .go file or a .tgz / .tar.gz of a project the student attached. Give exactly one of files, repo, upload.'),
+    pkg: z.string().optional().describe('The package of that code: ".", "./..." or "./cmd/server" (run takes one package; the others default to "./...")'),
+    race: z.boolean().optional().describe('test only: run with the race detector'),
+    testRun: z.string().optional().describe('test only: a test name pattern, like TestHandler'),
+    args: z.array(z.string()).optional().describe('run only: at most 4 short arguments for the program'),
+    stdin: z.string().optional().describe('run only: what the program reads on stdin, at most 4 KB'),
+  },
+  // (the arguments go to the host as they are: the host checks them, and decides the student and the account)
+  async (args) => runGo(args, { scheduled: accessFlags.isScheduledTask, limit: () => checkRateLimit('run_go'), writeTask: (data) => void writeIpcFile(TASKS_DIR, data), resultsDir: RESULTS_DIR }),
+);
+
+// --- Putting a document in the chat to look at together: the host prepares the pages in a disposable container and leaves a card (show-document.ts has what the tool says and does; docs/DOCUMENTS.md) ---
+
+server.tool(
+  'show_document',
+  SHOW_DOCUMENT_DESCRIPTION,
+  {
+    name: z.string().describe("The title of one of the student's prepared documents or of a deck of the course library, the name of a PDF, PowerPoint, Word or Excel file they attached (as it appears in their message), or the name of a file of the course on Canvas (as canvas_query files gives it). The system finds the file itself."),
+    page: z.number().int().min(1).max(500).optional().describe('The page the card opens at (default 1)'),
+  },
+  // (the name and page go to the host as they are: the host finds the file among the student's own, and decides the student)
+  async (args) => showDocument(args, { scheduled: accessFlags.isScheduledTask, toolHost: process.env.TAI_MODE === 'tool-host', limit: () => checkRateLimit('show_document'), writeTask: (data) => void writeIpcFile(TASKS_DIR, data), resultsDir: RESULTS_DIR }),
+);
+
+// --- Finding a slide of the course decks by what it says: the host searches the library of decks the professor's slides were turned into (course-docs.ts has what the tool says and does; docs/COURSE_DOCS.md) ---
+
+server.tool(
+  'find_course_document',
+  FIND_COURSE_DOCUMENT_DESCRIPTION,
+  {
+    query: z.string().describe('A few words about the topic to look for (for example "leader election")'),
+  },
+  // (the words go to the host as they are: the host cleans them, searches, and writes the answer)
+  async (args) => findCourseDocument(args, { scheduled: accessFlags.isScheduledTask, toolHost: process.env.TAI_MODE === 'tool-host', limit: () => checkRateLimit('find_course_document'), writeTask: (data) => void writeIpcFile(TASKS_DIR, data), resultsDir: RESULTS_DIR }),
+);
+
+// --- Cards in the chat: a chart of numbers, a sequence to step through, a program to guess the output of. The host checks the data and makes the card (chat-cards.ts has what the tools say and do; docs/CARDS.md) ---
+
+server.tool(
+  'show_chart',
+  SHOW_CHART_DESCRIPTION,
+  {
+    title: z.string().describe('What the chart shows, in a few words'),
+    kind: z.enum(['line', 'bar', 'scatter']).describe('line, bar or scatter'),
+    x_label: z.string().describe('What the horizontal axis is (for example "threads")'),
+    y_label: z.string().describe('What the vertical axis is (for example "p99 latency")'),
+    x_unit: z.string().optional().describe('The unit of x, if it has one'),
+    y_unit: z.string().optional().describe('The unit of y, if it has one (for example "ms")'),
+    categories: z.array(z.string()).optional().describe('Bar charts: the name of each bar, in order'),
+    series: z
+      .array(z.object({ name: z.string(), points: z.array(z.unknown()).describe('Numbers (y; x is the position in the list) or pairs [x, y]') }))
+      .describe('At most 6 series of at most 200 points'),
+    note: z.string().optional().describe('What the numbers are and where they came from'),
+  },
+  // (the arguments go to the host as they are: the host checks them, and decides the student)
+  async (args) => showChart(args, { scheduled: accessFlags.isScheduledTask, toolHost: process.env.TAI_MODE === 'tool-host', limit: () => checkRateLimit('show_chart'), writeTask: (data) => void writeIpcFile(TASKS_DIR, data), resultsDir: RESULTS_DIR }),
+);
+
+server.tool(
+  'show_trace',
+  SHOW_TRACE_DESCRIPTION,
+  {
+    title: z.string().describe('What the sequence shows, in a few words (for example "Raft leader election")'),
+    actors: z.array(z.string()).describe('The lanes: 2 to 8 short names (for example "Candidate", "Follower 1")'),
+    events: z
+      .array(
+        z.object({
+          from: z.string().describe('The actor that sends, or the one it happens at'),
+          to: z.string().optional().describe('The actor that receives; leave out for something that happens at one actor'),
+          label: z.string().describe('What is sent or what happens, in a few words'),
+          note: z.string().optional().describe('One sentence of detail, shown when they reach the step'),
+          state: z.array(z.object({ actor: z.string(), text: z.string() })).optional().describe('What actors hold after this step'),
+        }),
+      )
+      .describe('The steps in order, at most 120'),
+    note: z.string().optional().describe('One sentence under the whole sequence'),
+  },
+  async (args) => showTrace(args, { scheduled: accessFlags.isScheduledTask, toolHost: process.env.TAI_MODE === 'tool-host', limit: () => checkRateLimit('show_trace'), writeTask: (data) => void writeIpcFile(TASKS_DIR, data), resultsDir: RESULTS_DIR }),
+);
+
+server.tool(
+  'ask_to_predict',
+  ASK_TO_PREDICT_DESCRIPTION,
+  {
+    question: z.string().describe('What they should guess (for example "What does this print?")'),
+    action: z.enum(['run', 'test']).describe('run = go run, test = go test'),
+    pkg: z.string().optional().describe('The package: "." for run (the default), "./..." for test (the default)'),
+    files: z.array(z.object({ path: z.string().describe('A relative path like main.go'), content: z.string() })).describe('The program: a few lines, at most six small files'),
+    choices: z.array(z.string()).optional().describe('Two to six short options to guess from; leave out and they type a guess'),
+  },
+  async (args) => askToPredict(args, { scheduled: accessFlags.isScheduledTask, toolHost: process.env.TAI_MODE === 'tool-host', limit: () => checkRateLimit('ask_to_predict'), writeTask: (data) => void writeIpcFile(TASKS_DIR, data), resultsDir: RESULTS_DIR }),
 );
 
 server.tool(
@@ -835,8 +941,8 @@ server.tool(
 // --- Looking at a picture the student attached (a vision model behind the gateway; vision.ts has what it checks, sends and answers with) ---
 
 // Settings read once, and the key taken out of this process's environment (takeVisionConfig: the Canvas, GitHub and Piazza tools hand their scripts `...process.env`).
-// The tool is registered only when the host turned it on for this container (TAI_VISION=1 and the gateway's settings, which mcp-servers.ts passes on) and this is
-// not the voice tool host.
+// The tool is registered only when the host turned it on for this container (TAI_VISION=1 and the gateway's settings, which mcp-servers.ts passes on): a student's own chat or a voice
+// call's tool host.
 const vision = takeVisionConfig(process.env);
 if (vision) {
   server.tool(
@@ -961,6 +1067,7 @@ It is about the student you are talking to and nobody else. Each source can be m
     student_folder: z.string().optional().describe('Student folder name (e.g. "yuzheng"). Only needed from the admin channel; ignored in a student chat.'),
     canvas_user_id: z.string().optional().describe('Canvas user ID. Admin channel only; ignored in a student chat, where it is always the one linked to the chat.'),
     github_username: z.string().optional().describe('GitHub username. Admin channel only; ignored in a student chat, where it is always the one linked to the chat.'),
+    format: z.enum(['text', 'json']).optional().describe('Leave it out: you get the brief as text. "json" is for the voice call\'s own program, which reads the same brief as one JSON object; it is not for you.'),
   },
   async (args) => {
     const rl = checkRateLimit('weekly_brief');
@@ -977,7 +1084,7 @@ It is about the student you are talking to and nobody else. Each source can be m
     if (!who.ok) return { content: [{ type: 'text' as const, text: who.message }], isError: true };
 
     const brief = await buildWeekBrief({ runPy: execPy({ timeoutMs: 15000 }), identity: who.identity, primaryAssignmentId: args.assignment_id });
-    return { content: [{ type: 'text' as const, text: formatWeekBrief(brief) }] };
+    return { content: [{ type: 'text' as const, text: weeklyBriefAnswer(brief, args.format) }] };
   },
 );
 

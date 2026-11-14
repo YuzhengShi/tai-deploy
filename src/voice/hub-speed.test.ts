@@ -47,7 +47,8 @@ describe('the pace of a call', () => {
     conn.userSays('homework three, the concurrency one');
     conn.callFunction('fc-iv', 'start_interview', { topic: 'HW3 concurrency' });
     const update: any = await conn.waitFor('UpdateSpeak');
-    expect(update.speak.provider).toEqual({ type: 'deepgram', version: 'v2', model: 'flux-miles-en', speed: 1.35 });
+    // the interviewer's voice (Aura, no `version`) takes the student's 1.35 times its pace factor 0.9 (settings.ts PACE_OF), in steps of 0.05
+    expect(update.speak.provider).toEqual({ type: 'deepgram', model: 'aura-2-mars-en', speed: 1.2 });
   });
 
   it('is the deployment\'s (1.2) for a student who has chosen nothing, and for a file that is broken or says something unusable', async () => {

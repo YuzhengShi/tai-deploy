@@ -56,7 +56,7 @@ describe('findInCourse and the student\'s own clock', () => {
 });
 
 describe('the conversational prompt and the student\'s own clock', () => {
-  const ctx: StudentContext = { competencyText: null, competencySummary: '', memories: [], recentChat: [], courseStatus: '' };
+  const ctx: StudentContext = { competencyText: null, competencySummary: '', memories: [], work: [], recentChat: [], courseStatus: '' };
   const prompt = conversationalPrompt({ studentName: 'Ana Lopez', firstName: 'Ana', today: 'Monday, November 2, 2026' }, ctx);
 
   it('keeps the Pacific rule and adds what to do with due_local', () => {

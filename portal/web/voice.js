@@ -57,6 +57,23 @@ export function rmsOf(samples) {
 /** The level an orb shows from one reading to the next: up at once, down at a pace, never outside 0 to 1. */
 export const followLevel = (previous, reading) => Math.max(0, Math.min(1, Math.max(Number(reading) || 0, previous * OUT_RELEASE)));
 
+/** What TAi does to the student's screen in a call (docs/CHAT_OBJECTS.md, "Documents"): the server's `show`, `point` and `doc_state` messages, which the page's viewer takes (`onScreen`). */
+export const SCREEN_TYPES = new Set(['show', 'point', 'doc_state']);
+
+/**
+ * The page's view (docs/CHAT_OBJECTS.md, "The view") over a call's socket, as `{ type: 'view', view }`. True when it was sent; false when the socket is not open (the caller then
+ * posts the view instead) or it could not be sent. Never throws.
+ */
+export function sendViewOver(ws, view) {
+  try {
+    if (!ws || ws.readyState !== 1) return false;        // 1 is WebSocket.OPEN
+    ws.send(JSON.stringify({ type: 'view', view }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function stopTracks(stream) {
   if (stream) for (const track of stream.getTracks()) track.stop();
 }
@@ -355,9 +372,10 @@ export function createWarmer({ fetchImpl, base, now = Date.now, every = WARM_EVE
 /**
  * The call's client. `onChange(live)`: a call began or ended (app.js lays the message box out for it); `onSpeaking(kind)`: `started` (the
  * server heard the student begin to speak), `voice` (their microphone is audibly in use), `heard` (the call has the words of a turn of
- * theirs) or `stop` (they muted), for the "..." of words that have not come back as a line yet.
+ * theirs) or `stop` (they muted), for the "..." of words that have not come back as a line yet. `onScreen(message)`: what TAi does to the student's screen, the server's `show`,
+ * `point` and `doc_state` messages as they came (the viewer checks them); `sendView(view)` (on what is returned) puts the page's view on the socket.
  */
-export function createCall({ toast, onChange, onSpeaking = () => undefined }) {
+export function createCall({ toast, onChange, onSpeaking = () => undefined, onScreen = () => undefined }) {
   const panel = $('#call');
   const stateText = $('#call-state');
   const badge = $('#call-badge');
@@ -535,6 +553,21 @@ export function createCall({ toast, onChange, onSpeaking = () => undefined }) {
     if (c.ws && c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify(message));
   }
 
+  /** The page's view, over the socket of the call that is going: true when it was sent, false when it was not (app.js then posts it). Only once the server has said "ready". */
+  function sendView(view) {
+    const c = call;
+    return !!c && c.phase === 'live' && c.ready && sendViewOver(c.ws, view);
+  }
+
+  /** What TAi does to the student's screen goes to the page's viewer, which checks it; nothing the viewer does may take the call down. */
+  function deliverScreen(message) {
+    try {
+      onScreen(message);
+    } catch {
+      /* the call goes on */
+    }
+  }
+
   function connect(c, resume) {
     const url = new URL('api/voice', document.baseURI);   // wss://host/tai/api/voice behind the proxy: the page's own origin and base path
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -599,7 +632,8 @@ export function createCall({ toast, onChange, onSpeaking = () => undefined }) {
       case 'closed':
         return onClosed(c, msg);
       default:
-        return;                                             // something newer than this page
+        if (SCREEN_TYPES.has(msg.type)) deliverScreen(msg);   // `show`, `point`, `doc_state`: the viewer's
+        return;                                             // anything else is something newer than this page
     }
   }
 
@@ -909,5 +943,5 @@ export function createCall({ toast, onChange, onSpeaking = () => undefined }) {
     finish(c, 'Call ended.');
   });
 
-  return { start, end, active: live, warm };
+  return { start, end, active: live, warm, sendView };
 }

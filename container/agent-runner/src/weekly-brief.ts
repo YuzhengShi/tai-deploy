@@ -802,3 +802,13 @@ export function formatWeekBrief(brief: WeekBrief): string {
   }
   return lines.join('\n');
 }
+
+/**
+ * What the weekly_brief tool answers: the text above for the text agent (the default, and exactly what it always was), or with format "json" the brief itself,
+ * the very object start_mock_interview stores as `weekBrief` in interview_context.json, for a program to read: the voice call's host asks for it when the
+ * interviewer looks at the student's week again (src/voice/week-look.ts) and reads it with the parser that reads that file (src/voice/week-brief.ts parseWeekBrief).
+ * Kept here, apart from ipc-mcp-stdio.ts (which starts a server when imported), so that it can be unit tested.
+ */
+export function weeklyBriefAnswer(brief: WeekBrief, format?: 'text' | 'json'): string {
+  return format === 'json' ? JSON.stringify(brief) : formatWeekBrief(brief);
+}

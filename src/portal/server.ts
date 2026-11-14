@@ -78,6 +78,8 @@ export interface PortalVoice {
   relay(req: http.IncomingMessage, res: http.ServerResponse): Promise<void>;
   isActive(folder: string): boolean;
   inject(folder: string, text: string): boolean;
+  /** A call is on and the page knows something the model should answer (a prediction card was run: src/portal/predict-routes.ts): said to it as a note of the host's, not as anything the student typed. False when no call is on or it cannot take it. Optional: a voice side without it is told nothing, and the text agent is. */
+  tellCall?(folder: string, text: string): boolean;
   /** The call button was pressed and the microphone has not been asked for yet: start the student's tool host now (src/portal/voice-routes.ts, POST /api/voice/warm). Optional: a voice side without it just has no head start. */
   warm?(user: PortalUser): { ok: boolean; state: string };
 }
@@ -104,6 +106,11 @@ export interface PortalRoute {
   path: string;
   method: 'GET' | 'POST';
   access?: 'student' | 'owner';
+  /**
+   * The route has a limiter of its own and is not counted in the shared per-student read limit (which /api/poll and the page's other reads use): a student who turns the pages of a document
+   * quickly must not use up what keeps their chat connected. The cookie, the origin checks and the not-enrolled refusal still apply before the handler; the handler's own limiter is its business.
+   */
+  ownLimit?: boolean;
   handler(ctx: PortalRouteContext): void | Promise<void>;
 }
 
@@ -164,6 +171,15 @@ export interface PortalOptions {
   sourceHosts?: ReadonlySet<string>;
   /** Learns from each poll whether the student's page is open and in front (src/notify/presence.ts: it decides whether a push is needed); absent: nobody asks. */
   presence?: PortalPresence;
+  /**
+   * The note about what the student has open on their page (docs/CHAT_OBJECTS.md "The view", src/voice/screen.ts createTextNotes), to put AFTER their message for TAi's text agent: lines that open
+   * `[The student sees] ` (the reply budget, the student-model writer and the state writer read the student's own words past them), or null when there is nothing new to say (no view, one older than three
+   * minutes, or one that was passed on already). Asked only for a message that goes to the agent: never for one a voice call takes. The history line keeps only the student's own words. It goes after them,
+   * as the lines about an attachment do, because what reads the start of a stored message (the memory context cuts each at 250 characters, the interaction summary at 160) must still read what they said.
+   */
+  viewNote?: (folder: string) => string | null;
+  /** Takes back the note `viewNote` gave for a message that did not reach the agent, so that the next message carries it again. */
+  viewNoteUndo?: (folder: string) => void;
   now?: () => number;
   log?: Pick<typeof logger, 'info' | 'warn'>;
 }
@@ -475,6 +491,15 @@ export class Portal {
     this.wake(folder);
   }
 
+  /**
+   * A card in a student's chat (docs/CHAT_OBJECTS.md): through the history's gate (src/chat-objects/clean.ts), then the page is woken. It THROWS when the gate refuses or the folder is not a chat folder,
+   * so that whoever tells a model "the student sees it" (a run card) never says so about a card that was not written.
+   */
+  postObject(folder: string, obj: unknown): void {
+    if (!this.opts.history.forFolder(folder).appendObject(obj, new Date(this.now()))) throw new Error('the chat did not take the card');
+    this.wake(folder);
+  }
+
   private onOutbound(entry: OutboundEntry): void {
     const folder = entry.jid.startsWith('web:') ? entry.jid.slice(4) : '';
     if (!isChatFolder(folder) || (folder === ADMIN_FOLDER && !this.opts.core.ensureAdmin)) return;      // the evaluation's chats, or anything else on the web channel, are not this page's
@@ -750,7 +775,7 @@ export class Portal {
     const user = this.authenticate(req, res);
     if (!user) return;
     if (route.access === 'owner' && user.role !== 'owner') return this.json(res, 403, { error: 'not-owner' });
-    if (!this.readLimit.allow(user.folder)) return this.json(res, 429, { error: 'rate-limited' });
+    if (!route.ownLimit && !this.readLimit.allow(user.folder)) return this.json(res, 429, { error: 'rate-limited' });
     await route.handler({
       req,
       res,
@@ -1414,14 +1439,35 @@ export class Portal {
       return this.json(res, 200, { ok: true, n: entry.n });
     }
     // The name TAi is told is the allowlist's, not Google's display name: that one is the student's to choose and would reach the prompt.
-    // The student's emoji and thumbs on TAi's earlier messages go ahead of their words, for TAi only (never into the student's bubble or the call).
-    const sent = this.opts.core.submit(jid, noted + toAgent, user.name, messageId);
+    // The student's emoji and thumbs on TAi's earlier messages go ahead of their words, for TAi only (never into the student's bubble or the call); what they have open on their page goes after them.
+    const screen = this.screenNote(user.folder);
+    const afterWords = screen ? (toAgent.endsWith('\n') ? '' : '\n') + screen : '';
+    const sent = this.opts.core.submit(jid, noted + toAgent + afterWords, user.name, messageId);
     this.wake(user.folder);
     if (!sent.ok) {
+      if (screen) this.undoScreenNote(user.folder);
       this.log.warn({ folder: user.folder, status: sent.status }, 'portal could not hand a message to TAi');
       return this.json(res, 502, { error: 'unavailable' });
     }
     this.json(res, 200, { ok: true, n: entry.n });
+  }
+
+  /** What the student has open on their page, as lines for the agent (viewNote), or '' when there is none or the option is not given. A note that cannot be made is a message without one. */
+  private screenNote(folder: string): string {
+    try {
+      return this.opts.viewNote?.(folder) ?? '';
+    } catch (err) {
+      this.log.warn({ folder, err: (err as Error).message }, 'portal could not make the note about what the student has open');
+      return '';
+    }
+  }
+
+  private undoScreenNote(folder: string): void {
+    try {
+      this.opts.viewNoteUndo?.(folder);
+    } catch {
+      /* the note is lost, as the emoji notes are when a message does not get through */
+    }
   }
 }
 

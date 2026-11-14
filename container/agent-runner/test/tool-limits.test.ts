@@ -54,6 +54,12 @@ describe('the per-conversation limits of the tools that cost something', () => {
       weekly_brief: 3,
       read_image_text: 10,
       look_at_image: 5,
+      run_go: 8,
+      show_document: 6,
+      show_chart: 6,
+      show_trace: 6,
+      ask_to_predict: 4,
+      find_course_document: 8,
     });
   });
 });

@@ -1,0 +1,39 @@
+{
+  "_how": "The student's rule for a Canvas file, as a table: a file with these flags and dates, looked at on `now`, is taken (skip: null) or left out for the reason given. canvas_api.py why_not_for_students (the container's `files` and `file_content`) and src/docs/canvas-files.ts whySkipped (the viewer's Canvas path) are the same rule written twice, and both are run on this table: test_canvas_api_student_files.py runs the first on it, and listCanvasFiles (which reports whySkipped as `skip`) was run on it for the second (a one-time check, 2026-11-07; see docs/SECURITY.md). `flags` are merged into a complete file (a numeric id, a .pdf name, an address, a size within the viewer's limits), so that a row is not dropped before the rule looks at it. The sizes are not part of the rule here: 'over 20 MB' and 'empty' are the viewer's own limits. No row holds a datetime without an offset: JavaScript reads it as local time, and the answer would depend on the machine.",
+  "now": "2026-11-07T12:00:00Z",
+  "cases": [
+    { "name": "no flag and no date", "flags": {}, "skip": null },
+    { "name": "hidden", "flags": { "hidden": true }, "skip": "hidden or locked for students" },
+    { "name": "hidden for the user", "flags": { "hidden_for_user": true }, "skip": "hidden or locked for students" },
+    { "name": "locked", "flags": { "locked": true }, "skip": "hidden or locked for students" },
+    { "name": "locked for the user", "flags": { "locked_for_user": true }, "skip": "hidden or locked for students" },
+    { "name": "every flag false", "flags": { "hidden": false, "hidden_for_user": false, "locked": false, "locked_for_user": false }, "skip": null },
+    { "name": "a flag that is not exactly true counts for nothing (a string, a number)", "flags": { "hidden": "true", "locked": 1 }, "skip": null },
+    { "name": "flags that are null", "flags": { "hidden": null, "hidden_for_user": null, "locked": null, "locked_for_user": null }, "skip": null },
+
+    { "name": "unlocks in a few weeks", "flags": { "unlock_at": "2026-12-01T08:00:00Z" }, "skip": "not released to students yet (unlocks 2026-12-01)" },
+    { "name": "unlocked a month ago", "flags": { "unlock_at": "2026-10-01T08:00:00Z" }, "skip": null },
+    { "name": "unlocks at this very moment", "flags": { "unlock_at": "2026-11-07T12:00:00Z" }, "skip": null },
+    { "name": "unlocks one second from now", "flags": { "unlock_at": "2026-11-07T12:00:01Z" }, "skip": "not released to students yet (unlocks 2026-11-07)" },
+    { "name": "locked since October", "flags": { "lock_at": "2026-10-01T08:00:00Z" }, "skip": "no longer available to students (locked 2026-10-01)" },
+    { "name": "locks at this very moment", "flags": { "lock_at": "2026-11-07T12:00:00Z" }, "skip": "no longer available to students (locked 2026-11-07)" },
+    { "name": "locks one second from now", "flags": { "lock_at": "2026-11-07T12:00:01Z" }, "skip": null },
+    { "name": "locks next month", "flags": { "lock_at": "2026-12-31T08:00:00Z" }, "skip": null },
+    { "name": "inside its window", "flags": { "unlock_at": "2026-10-01T08:00:00Z", "lock_at": "2026-12-31T08:00:00Z" }, "skip": null },
+
+    { "name": "both dates null", "flags": { "unlock_at": null, "lock_at": null }, "skip": null },
+    { "name": "dates that are not dates (text, a number)", "flags": { "unlock_at": "not a date", "lock_at": 12345 }, "skip": null },
+    { "name": "empty strings", "flags": { "unlock_at": "", "lock_at": "" }, "skip": null },
+
+    { "name": "a fraction of a second", "flags": { "unlock_at": "2026-12-01T08:00:00.000Z" }, "skip": "not released to students yet (unlocks 2026-12-01)" },
+    { "name": "a fraction that is cut to milliseconds (12:00:00.999 is after 12:00:00)", "flags": { "unlock_at": "2026-11-07T12:00:00.999999Z" }, "skip": "not released to students yet (unlocks 2026-11-07)" },
+    { "name": "an offset: 12:00:01 UTC written as 04:00:01-08:00", "flags": { "unlock_at": "2026-11-07T04:00:01-08:00" }, "skip": "not released to students yet (unlocks 2026-11-07)" },
+    { "name": "an offset: 12:00:00 UTC written as 04:00:00-08:00", "flags": { "unlock_at": "2026-11-07T04:00:00-08:00" }, "skip": null },
+    { "name": "an offset ahead of UTC: 12:00:00 UTC written as 17:30:00+05:30", "flags": { "lock_at": "2026-11-07T17:30:00+05:30" }, "skip": "no longer available to students (locked 2026-11-07)" },
+    { "name": "a day alone is that day's UTC midnight: today", "flags": { "lock_at": "2026-11-07" }, "skip": "no longer available to students (locked 2026-11-07)" },
+    { "name": "a day alone: tomorrow", "flags": { "unlock_at": "2026-11-08" }, "skip": "not released to students yet (unlocks 2026-11-08)" },
+
+    { "name": "hidden counts before any date", "flags": { "hidden": true, "unlock_at": "2026-12-01T08:00:00Z" }, "skip": "hidden or locked for students" },
+    { "name": "the release date is looked at before the withdrawal date", "flags": { "unlock_at": "2026-12-01T08:00:00Z", "lock_at": "2026-10-01T08:00:00Z" }, "skip": "not released to students yet (unlocks 2026-12-01)" }
+  ]
+}

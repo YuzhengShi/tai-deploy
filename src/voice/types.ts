@@ -19,12 +19,14 @@ export type AgentMode = 'conversational' | 'interviewer' | 'listener';
  * about, its title, and the longer account the page's card opens: src/portal/history.ts).
  */
 export interface ChatExtra {
-  kind?: 'voice' | 'activity' | 'speech';
+  kind?: 'voice' | 'activity' | 'speech' | 'object';
   type?: string;
   title?: string;
   detail?: string;
   /** activity of a mock interview: the questions it asked (at most eight; src/portal/history.ts cleanItems cleans them), each with how it went in a word and a stronger answer. */
   items?: ActivityItem[];
+  /** object: a card for the chat (docs/CHAT_OBJECTS.md): what src/chat-objects/clean.ts `cleanObject` accepts, and nothing else becomes a line. The line's text is the card's own summary. */
+  obj?: unknown;
   /** speech: the call's session id; a marker line (text '') says `event` (start, mode, end) with the call's `mode`, or on `end` how many `seconds` it lasted */
   call?: string;
   event?: 'start' | 'mode' | 'end';

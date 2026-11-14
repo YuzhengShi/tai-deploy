@@ -30,6 +30,13 @@ export interface EarsHandlers {
    * over several segments; LabGPU's adapter sends it whole). Flux: `EndOfTurn`. `trigger` is Flux's (`model`, `manual`, `timeout`), `confidence` its `end_of_turn_confidence`.
    */
   final(text: string, at: number, info: { trigger?: string; confidence?: number }): void;
+  /**
+   * Flux `EagerEndOfTurn`, only when the stream was opened with an `eager_eot_threshold`: the turn may be over; `text` is what has been said so far. It is a guess that `turnResumed` may
+   * take back, so nothing may be said or done on it (docs/VOICE_SELFBUILT.md 5.2 rule 5: the engine only asks the model early, and keeps the answer back until the turn is confirmed).
+   */
+  eagerEndOfTurn?(text: string, at: number): void;
+  /** Flux `TurnResumed`: the student went on after an eager end of turn. */
+  turnResumed?(at: number): void;
   /** The socket went away after it had been up (closed by the far side, an error, or no data at all while audio was being sent). `connect()` is for the first time only. */
   down(reason: string): void;
 }
@@ -58,6 +65,13 @@ export interface Ears {
 export interface EarsContext {
   clock: LabClock;
   log: VoiceLog;
+}
+
+/** What the engine tells a factory about the stream it wants besides the handlers: the course words, the turn-taking fields, and (Flux only) the eager end-of-turn threshold, 0 or undefined for none. */
+export interface EarsRequest {
+  keyterms: string[];
+  turn: TurnFields;
+  eagerEot?: number;
 }
 
 export type EarsFactory = (handlers: EarsHandlers, ctx: EarsContext) => Ears;

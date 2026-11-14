@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { loadLabConfig, turnParamsFor, DEFAULT_LABGPU_ASR, DEFAULT_LABGPU_TTS } from './config.js';
+import { forChain, isChainName, loadLabConfig, turnParamsFor, DEFAULT_LABGPU_ASR, DEFAULT_LABGPU_TTS, DEFAULT_EAGER_EOT } from './config.js';
 
 const cfg = (env: Record<string, string> = {}, warnings: string[] = []) => loadLabConfig((k) => env[k], (m) => warnings.push(m));
 
@@ -48,6 +48,59 @@ describe('loadLabConfig', () => {
     expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_LABGPU_VOICE: 'dr-berg' }).labgpuVoice).toBe('af_bella');
     expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_LABGPU_VOICE: 'af_heart' }).labgpuVoice).toBe('af_heart');
     expect(warnings).toHaveLength(1);
+  });
+});
+
+describe('the barge-in and the eager end of turn (round 2, A10 and A11)', () => {
+  it('ask for 200 ms of loud speech in a window of 300 ms, and for nothing early, unless told', () => {
+    const c = cfg({ TAI_VOICE_LAB: '1' });
+    expect(c).toMatchObject({ bargeMinVoicedMs: 200, bargeWindowMs: 300, bargeRmsFactor: 1.5, eagerEot: 0, chain: '' });
+    expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_BARGE_WINDOW_MS: '500', TAI_VOICE_LAB_BARGE_MS: '240' })).toMatchObject({ bargeMinVoicedMs: 240, bargeWindowMs: 500 });
+  });
+
+  it('the eager threshold is 0 (off) or in the range Flux takes, and a value outside it leaves it off with a warning', () => {
+    expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_EAGER_EOT: '0.45' }).eagerEot).toBe(0.45);
+    expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_EAGER_EOT: '0.1' }).eagerEot).toBe(0.3);       // lifted to the lowest Flux takes
+    expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_EAGER_EOT: '0' }).eagerEot).toBe(0);
+    const warnings: string[] = [];
+    expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_EAGER_EOT: '0.95' }, warnings).eagerEot).toBe(0);
+    expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_EAGER_EOT: 'soon' }, warnings).eagerEot).toBe(0);
+    expect(warnings).toHaveLength(2);
+  });
+});
+
+describe('forChain', () => {
+  const base = cfg({ TAI_VOICE_LAB: '1' });
+
+  it('knows exactly four chains', () => {
+    expect(['d', 'h', 'fd', 'c'].every(isChainName)).toBe(true);
+    for (const x of ['', 'D', 'labgpu', 'h ', 'hh', undefined, null, 4]) expect(isChainName(x)).toBe(false);
+  });
+
+  it('d: LabGPU ears and mouth, nothing asked early; h: the same with Flux beside LabGPU asking the model early', () => {
+    expect(forChain(base, 'd')).toMatchObject({ chain: 'd', ears: 'labgpu', mouth: 'labgpu', shadowEars: 'flux', eagerEot: 0 });
+    expect(forChain(base, 'h')).toMatchObject({ chain: 'h', ears: 'labgpu', mouth: 'labgpu', shadowEars: 'flux', eagerEot: DEFAULT_EAGER_EOT });
+  });
+
+  it('fd: Flux ears and LabGPU mouth; c: Flux ears and Aura mouth, both with the eager end of turn, LabGPU ears as the shadow and as the fallback', () => {
+    expect(forChain(base, 'fd')).toMatchObject({ chain: 'fd', ears: 'flux', earsFallback: 'labgpu', shadowEars: 'labgpu', mouth: 'labgpu', eagerEot: DEFAULT_EAGER_EOT });
+    expect(forChain(base, 'c')).toMatchObject({ chain: 'c', ears: 'flux', earsFallback: 'labgpu', shadowEars: 'labgpu', mouth: 'aura', mouthFallback: 'labgpu', eagerEot: DEFAULT_EAGER_EOT });
+  });
+
+  it('the threshold of TAI_VOICE_LAB_EAGER_EOT is the one the chains that use the eager end of turn take', () => {
+    const tuned = cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_EAGER_EOT: '0.6' });
+    expect(forChain(tuned, 'h').eagerEot).toBe(0.6);
+    expect(forChain(tuned, 'd').eagerEot).toBe(0);
+  });
+
+  it('anything else is the settings of the process, untouched (a typo does not turn a call into another chain)', () => {
+    for (const x of [undefined, null, '', 'x', 'H', 'labgpu']) expect(forChain(base, x)).toBe(base);
+  });
+
+  it('does not change the configuration it was given', () => {
+    const copy = { ...base };
+    forChain(base, 'c');
+    expect(base).toEqual(copy);
   });
 });
 

@@ -52,6 +52,13 @@ export class FakeEars implements Ears {
   startOfTurn(text = 'hi'): void {
     this.handlers.startOfTurn?.(this.clock(), text);
   }
+  /** Flux's EagerEndOfTurn and TurnResumed (only when the engine asked for them: a recognizer opened with no eager threshold never says them). */
+  eager(text: string): void {
+    this.handlers.eagerEndOfTurn?.(text, this.clock());
+  }
+  resumed(): void {
+    this.handlers.turnResumed?.(this.clock());
+  }
   drop(reason = 'closed'): void {
     this.connected = false;
     this.handlers.down(reason);

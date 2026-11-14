@@ -53,6 +53,9 @@ const ANSWER_VERBS = new Set(['think', 'guess', 'hope', 'believe', 'suppose', 'e
 
 const wordsOf = (text: string): string[] => text.toLowerCase().match(/[a-z0-9']+/g) ?? [];
 
+/** The words of a text, lower case, without punctuation, as one string: two recognizers heard "the same words" when their keys are equal ("What is a mutex?" and "what is a mutex" are). */
+export const wordKey = (text: string): string => wordsOf(text).join(' ');
+
 /** Is this text a finished turn, a half-said one, only a filler, or nothing? Pure, tested on real texts (the adapter's own output is in the tests). */
 export function judgeTurnText(text: string): TurnVerdict {
   const t = text.trim();

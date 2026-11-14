@@ -39,7 +39,11 @@ export function defaultFactories(cfg: LabConfig, deepgramKey: () => string, log:
           c,
         );
       }
-      return new FluxEars({ url: cfg.fluxUrl, apiKey: deepgramKey, keyterms: ctx.keyterms, eotThreshold: ctx.turn.eotThreshold, eotTimeoutMs: ctx.turn.eotTimeoutMs }, handlers, c);
+      return new FluxEars(
+        { url: cfg.fluxUrl, apiKey: deepgramKey, keyterms: ctx.keyterms, eotThreshold: ctx.turn.eotThreshold, eotTimeoutMs: ctx.turn.eotTimeoutMs, ...(ctx.eagerEot ? { eagerEotThreshold: ctx.eagerEot } : {}) },
+        handlers,
+        c,
+      );
     },
     makeMouth: (kind) => (kind === 'labgpu' ? new LabGPUMouth({ baseUrl: cfg.ttsUrl, voices: [cfg.labgpuVoice] }) : new AuraMouth({ apiKey: deepgramKey, baseUrl: cfg.auraUrl })),
   };

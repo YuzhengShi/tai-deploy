@@ -24,6 +24,8 @@ export interface VadOptions {
 }
 
 const MIN_HISTORY_FRAMES = 25;
+/** How many frames of the strict view are kept for `strictWindow` (3 s). */
+const STRICT_HISTORY_FRAMES = 150;
 
 export const DEFAULT_VAD: VadOptions = { rmsMin: 350, ratio: 3, openFrames: 3, closeFrames: 6, frameMs: 20, floorWindowMs: 3000, strictFactor: 1.5 };
 
@@ -59,6 +61,8 @@ export class Vad {
   private _frames = 0;
   private _voicedFrames = 0;
   private lastRms = 0;
+  /** The strict view of the latest frames (loud or not, and when each ended), for `strictWindow`. */
+  private readonly strictHist: Array<{ loud: boolean; endAt: number }> = [];
 
   constructor(
     private readonly clock: LabClock,
@@ -94,6 +98,26 @@ export class Vad {
     return this.voicedRun * this.opts.frameMs;
   }
 
+  /**
+   * The strict view over a window instead of a run (amendment A11): how much loud speech (strict frames) the last `windowMs` held, and where the first of those frames began. The
+   * latest frame must be loud, else 0 (a dip is waited out: the next frame reads the window again). A stop consonant or the gap between two syllables drops a frame or three below the
+   * bar, and a run that must be unbroken restarts at each of them (round 1: two of eight interruptions took 0.9 and 1.2 s to confirm, against 0.2 to 0.45 s for the others); a window
+   * that must hold 240 ms of loud frames in 300 still needs the same sustained speech (a cough or a click does not hold 12 loud frames in 15), and the echo is kept out by the bar, as before.
+   */
+  strictWindow(windowMs: number): { voicedMs: number; startedAt: number } {
+    const hist = this.strictHist;
+    if (!hist.length || !hist[hist.length - 1].loud) return { voicedMs: 0, startedAt: 0 };
+    const n = Math.min(hist.length, Math.max(1, Math.round(windowMs / this.opts.frameMs)));
+    let loud = 0;
+    let first = -1;
+    for (let i = hist.length - n; i < hist.length; i++) {
+      if (!hist[i].loud) continue;
+      loud++;
+      if (first < 0) first = i;
+    }
+    return { voicedMs: loud * this.opts.frameMs, startedAt: first < 0 ? 0 : hist[first].endAt - this.opts.frameMs };
+  }
+
   /** The start of the current (or last) voiced run, clock ms. */
   get runStartedAt(): number {
     return this._runStartedAt;
@@ -111,6 +135,7 @@ export class Vad {
     this.quietRun = 0;
     this.strictRun = 0;
     this._voiced = false;
+    this.strictHist.length = 0;
   }
 
   /**
@@ -138,7 +163,10 @@ export class Vad {
     for (const v of this.recent) if (v < floor) floor = v;
     // the noise floor needs some history: a stream that begins with speech must not take its first frames for the room's noise and then shut speech out
     const threshold = this.recent.length < MIN_HISTORY_FRAMES ? this.opts.rmsMin : Math.max(this.opts.rmsMin, this.opts.ratio * floor);
-    this.strictRun = rms >= threshold * this.opts.strictFactor ? this.strictRun + 1 : 0;
+    const loud = rms >= threshold * this.opts.strictFactor;
+    this.strictRun = loud ? this.strictRun + 1 : 0;
+    this.strictHist.push({ loud, endAt });
+    if (this.strictHist.length > STRICT_HISTORY_FRAMES) this.strictHist.shift();
     if (rms < threshold) {
       this.voicedRun = 0;
       this.quietRun++;

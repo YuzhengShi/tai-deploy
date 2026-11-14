@@ -23,9 +23,9 @@ import { stretch } from './mouth/tempo.js';
 import { SentenceCutter } from './sentences.js';
 import { Speaker, wordsPlayed, type SpokenReport } from './speaker.js';
 import { think, ThinkError, type ToolDef } from './think.js';
-import { newTurnTrace, finishDerived, type RoundTrace, type TraceSink, type TurnTrace } from './trace.js';
-import { TurnTracker, type TurnParams } from './turn.js';
-import { MouthError, OUT_RATE, type Ears, type EarsHandlers, type LabClock, type Mouth, type TurnFields, type TurnProfile } from './types.js';
+import { newTurnTrace, finishDerived, type RoundTrace, type SpecTrace, type TraceSink, type TurnTrace } from './trace.js';
+import { TurnTracker, judgeTurnText, wordKey, type TurnParams } from './turn.js';
+import { MouthError, OUT_RATE, type Ears, type EarsHandlers, type EarsRequest, type LabClock, type Mouth, type TurnFields, type TurnProfile } from './types.js';
 import { Vad } from './vad.js';
 
 export interface LabAgentDeps {
@@ -39,7 +39,7 @@ export interface LabAgentDeps {
   relayUrl: string;
   /** The turn-taking fields the session sends for each mode (the hub's VoiceConfig): how a Settings is told which mode it is for. */
   profiles: Record<TurnProfile, TurnFields>;
-  makeEars(kind: EarsKind, handlers: EarsHandlers, ctx: { keyterms: string[]; turn: TurnFields }): Ears;
+  makeEars(kind: EarsKind, handlers: EarsHandlers, ctx: EarsRequest): Ears;
   makeMouth(kind: MouthKind): Mouth;
   /** Whether the Deepgram key is there (Aura as a mouth or fallback, Flux/nova as ears). */
   haveDeepgramKey(): boolean;
@@ -84,6 +84,29 @@ interface Run {
   toolsUsed: boolean;
   /** A model request is in flight: more of the answer may still come, so the speech is not over when the audio queued so far has played out. */
   thinking: boolean;
+  /**
+   * An eager request (docs A10) that nobody has confirmed yet: its sentences wait in `heldSentences`, no function is requested, the page is told nothing. `adoption` settles true when the
+   * turn is confirmed with the same words (the held sentences go out and the run goes on as any run), false when the request is dropped.
+   */
+  held: boolean;
+  heldSentences: string[];
+  adoption: Promise<boolean> | null;
+  settleAdoption: ((adopted: boolean) => void) | null;
+  /** Set by the first round of a held run: puts the held sentences into the speech, in order, and ends the holding. */
+  flushHeld: (() => void) | null;
+  /** The request of a held run failed (the gateway, the relay's limits): it cannot be adopted, the turn asks again. */
+  failed: boolean;
+}
+
+/** An eager request that has not been confirmed or dropped yet (at most one at a time). */
+interface Speculation {
+  text: string;
+  key: string;
+  /** The history's revision when it was asked: a conversation that has changed since is another conversation. */
+  rev: number;
+  askedAt: number;
+  source: SpecTrace['source'];
+  run: Run;
 }
 
 const MAX_ROUNDS = 8;
@@ -151,6 +174,9 @@ export class LabAgent {
   private waitingForEarsSince = 0;
   private lastCommitText = '';
   private turnTrace: TurnTrace | null = null;
+  /** The eager request that is waiting for its turn to be confirmed, and the notes of those that were dropped since the last turn (docs A10). */
+  private spec: Speculation | null = null;
+  private specNotes: SpecTrace[] = [];
   /** The first six characters of the call's session id, as the session's own log lines carry it; read from the relay token's shape, which is never logged. */
   private sid = '';
 
@@ -392,6 +418,14 @@ export class LabAgent {
         if (this.ears?.decidesTurn) this.commit(text, 'ears', at);
         else this.tracker.onFinal(text, at, this.vadView());
       },
+      eagerEndOfTurn: (text, at) => {
+        this.lastEarsAt = at;
+        if (this.cfg.eagerEot > 0) this.onEager(text, 'flux');
+      },
+      turnResumed: (at) => {
+        this.lastEarsAt = at;
+        this.dropSpec('resumed');
+      },
       down: (reason) => void this.onEarsDown(reason),
     };
   }
@@ -411,7 +445,7 @@ export class LabAgent {
         continue;
       }
       const made = this.turnFields;
-      const ears = this.deps.makeEars(kind, this.earsHandlers(), { keyterms: this.keyterms, turn: made });
+      const ears = this.deps.makeEars(kind, this.earsHandlers(), { keyterms: this.keyterms, turn: made, eagerEot: kind === 'flux' && this.cfg.eagerEot > 0 ? this.cfg.eagerEot : undefined });
       this.connecting = ears;
       try {
         await ears.connect(this.cfg.earsConnectTimeoutMs);
@@ -441,18 +475,21 @@ export class LabAgent {
     const kind = this.cfg.shadowEars;
     if (kind === 'none' || kind === this.earsKind) return;
     if (kind !== 'labgpu' && !this.deps.haveDeepgramKey()) return;
+    // beside LabGPU's ears, Flux's eager end of turn is the cue to ask the model early (chain h, docs A10); its words never decide anything else
+    const eager = kind === 'flux' && this.cfg.eagerEot > 0 && !this.ears?.decidesTurn;
     const handlers: EarsHandlers = {
       partial: () => undefined,
       final: (text, at) => {
         this.shadowFinals.push({ text: text.slice(0, 400), at });
         if (this.shadowFinals.length > 40) this.shadowFinals.shift();
       },
+      ...(eager ? { eagerEndOfTurn: (text: string) => this.onEager(text, 'flux-shadow'), turnResumed: () => this.dropSpec('resumed') } : {}),
       down: (reason) => {
         this.log.warn({ kind, reason }, 'voice lab: the shadow recognizer went away');
         this.shadow = null;
       },
     };
-    const ears = this.deps.makeEars(kind, handlers, { keyterms: this.keyterms, turn: this.turnFields });
+    const ears = this.deps.makeEars(kind, handlers, { keyterms: this.keyterms, turn: this.turnFields, eagerEot: eager ? this.cfg.eagerEot : undefined });
     try {
       await ears.connect(this.cfg.earsConnectTimeoutMs);
       if (this.closed) return void ears.close();
@@ -513,6 +550,8 @@ export class LabAgent {
   private onVadOnset(at: number): void {
     if (this.closed) return;
     this.speechStartAt = this.speechStartAt ?? at;
+    // the student begins again: an eager request made for the turn that seemed to be over is not the answer to what is being said now
+    this.dropSpec('speech');
     if (!this.waitingForEarsSince) this.waitingForEarsSince = this.clock();
     // the agent is not speaking: the student's onset is Deepgram's UserStartedSpeaking (when it IS speaking, the barge-in rule decides, in the tick)
     if (!this.ears?.decidesTurn && !this.speaker.speaking && !this.userStartedSent) {
@@ -522,6 +561,7 @@ export class LabAgent {
   }
 
   private onEarsStartOfTurn(): void {
+    this.dropSpec('start of turn');
     if (this.speaker.speaking) return this.bargeIn('startOfTurn');
     if (this.run && !this.run.latencySent && !this.speaker.pending) this.resume();
     if (!this.userStartedSent) {
@@ -534,9 +574,14 @@ export class LabAgent {
     if (this.closed || !this.applied) return;
     const now = this.clock();
     const decides = !!this.ears?.decidesTurn;
+    // Barge-in on the engine's own VAD whichever recognizer is listening: with ears that decide turns (Flux) its StartOfTurn is a second cue, but it comes 0.6 s after the onset (probe of 10.2),
+    // against 0.2 to 0.3 s here; the barge-in must not get slower because the ears changed (A10).
+    if (this.speaker.speaking) {
+      const heard = this.bargeHeardMs();
+      if (heard >= this.cfg.bargeMinVoicedMs) this.bargeIn('vad');
+    }
     if (!decides) {
-      if (this.speaker.speaking && this.vad.strictRunMs >= this.cfg.bargeMinVoicedMs) this.bargeIn('vad');
-      else if (this.run && !this.run.latencySent && !this.speaker.speaking && this.vad.voicedRunMs >= this.cfg.bargeMinVoicedMs) this.resume();
+      if (this.run && !this.run.latencySent && !this.speaker.speaking && this.vad.voicedRunMs >= this.cfg.bargeMinVoicedMs) this.resume();
       const d = this.tracker.tick(now, this.vadView());
       if (d?.kind === 'commit') {
         this.commit(d.text, d.reason, d.at, d.speechEndAt);
@@ -560,11 +605,17 @@ export class LabAgent {
     // a turn that was being answered but has not begun to be spoken is replaced: the new words are the same turn, continued
     if (this.run && !this.run.latencySent) this.resume();
     this.finishTrace('superseded');
+    // an eager request (docs A10) is the answer to this turn when it was asked with these very words on this very conversation; otherwise it is dropped and the turn asks as it always did
+    const spec = this.takeSpec(clean);
     const now = this.clock();
     this.turnNo++;
     this.lastCommitText = clean;
     this.userStartedSent = false;
-    const trace = newTurnTrace({ sid: this.sid, mode: this.profile, ears: this.earsKind ?? '', mouth: this.mouthKind, turn: this.turnNo, at: new Date((this.deps.wallNow ?? Date.now)()).toISOString() });
+    const stamp = new Date((this.deps.wallNow ?? Date.now)()).toISOString();
+    const trace = spec ? spec.run.trace : newTurnTrace({ sid: this.sid, mode: this.profile, ears: this.earsKind ?? '', mouth: this.mouthKind, turn: this.turnNo, at: stamp });
+    trace.turn = this.turnNo;
+    trace.at = stamp;
+    if (this.cfg.chain) trace.chain = this.cfg.chain;
     trace.speechStart = this.speechStartAt !== undefined ? this.rel(this.speechStartAt) : undefined;
     trace.speechEnd = speechEndAt !== undefined ? this.rel(speechEndAt) : this.vad.lastVoicedEndAt > 0 ? this.rel(this.vad.lastVoicedEndAt) : undefined;
     trace.earsPartialFirst = this.earsFirstPartialAt !== undefined ? this.rel(this.earsFirstPartialAt) : undefined;
@@ -572,6 +623,9 @@ export class LabAgent {
     trace.commit = this.rel(now);
     trace.commitReason = reason;
     trace.userText = clean.slice(0, 80);
+    const specs = this.specNotes.splice(0);
+    if (spec) specs.push({ askedAt: this.rel(spec.askedAt), source: spec.source, outcome: 'adopted', endedAt: this.rel(now), ...(trace.firstSentenceReady !== undefined ? { readyAt: trace.firstSentenceReady } : {}) });
+    if (specs.length) trace.specs = specs;
     this.speechStartAt = undefined;
     this.earsFirstPartialAt = undefined;
     this.earsFinalAt = undefined;
@@ -580,7 +634,8 @@ export class LabAgent {
     this.callTail = [];
     this.history.addUser(clean);
     this.send({ type: 'ConversationText', role: 'user', content: clean });
-    void this.startRun(trace, now, speechEndAt ?? (this.vad.lastVoicedEndAt || undefined));
+    if (spec) this.adopt(spec, now, speechEndAt ?? (this.vad.lastVoicedEndAt || undefined));
+    else void this.startRun(trace, now, speechEndAt ?? (this.vad.lastVoicedEndAt || undefined));
     void at;
   }
 
@@ -636,7 +691,7 @@ export class LabAgent {
 
   // ---------------------------------------------------------------- the think loop
 
-  private async startRun(trace: TurnTrace, commitAt: number, speechEndAt: number | undefined): Promise<void> {
+  private newRun(trace: TurnTrace, commitAt: number, speechEndAt: number | undefined, held: boolean): Run {
     const run: Run = {
       id: ++this.runId,
       controller: new AbortController(),
@@ -652,13 +707,40 @@ export class LabAgent {
       finished: false,
       toolsUsed: false,
       thinking: false,
+      held,
+      heldSentences: [],
+      adoption: null,
+      settleAdoption: null,
+      flushHeld: null,
+      failed: false,
     };
+    if (held) {
+      run.adoption = new Promise<boolean>((resolve) => {
+        run.settleAdoption = resolve;
+      });
+    }
+    return run;
+  }
+
+  private async startRun(trace: TurnTrace, commitAt: number, speechEndAt: number | undefined): Promise<void> {
+    const run = this.newRun(trace, commitAt, speechEndAt, false);
     this.run = run;
     this.send({ type: 'AgentThinking', content: this.lastCommitText.slice(0, 200) });
+    await this.loop(run);
+  }
+
+  /**
+   * The think loop of a run: ask the model, speak what it says, run the functions it asks for and ask again, up to MAX_ROUNDS. A held run (an eager request, docs A10) asks the first round on the
+   * conversation plus `extraUser`, and holds everything of its answer until `adopt` says the turn is confirmed: its sentences wait, and no function is requested before then.
+   */
+  private async loop(run: Run, extraUser?: string): Promise<void> {
     try {
       for (let round = 0; round < MAX_ROUNDS; round++) {
         if (run.controller.signal.aborted || this.closed) return;
-        const toolCalls = await this.completion(run, round);
+        const toolCalls = await this.completion(run, round, round === 0 ? extraUser : undefined);
+        if (run.controller.signal.aborted || this.closed) return;
+        // an answer that came before the turn was confirmed is not acted on: no function runs (it may have a side effect: "Yeah. Sure." once started a search nobody asked for), until it is
+        if (run.held && !(await run.adoption)) return;
         if (run.controller.signal.aborted || this.closed) return;
         if (!toolCalls.length) break;
         run.toolsUsed = true;
@@ -673,12 +755,19 @@ export class LabAgent {
       }
     } catch (err) {
       if (!run.controller.signal.aborted) {
-        const kind = err instanceof ThinkError ? err.kind : 'internal';
-        this.log.warn({ kind, status: err instanceof ThinkError ? err.status : undefined }, 'voice lab: the think step failed');
-        this.send({ type: 'Error', code: 'THINK_REQUEST_FAILED', description: 'The language model could not be reached.' });
+        if (run.held) {
+          // an eager request that failed (the gateway, the relay's limits): nothing was shown and nothing is owed; the turn asks again when it is confirmed
+          run.failed = true;
+          this.log.debug({ kind: err instanceof ThinkError ? err.kind : 'internal', status: err instanceof ThinkError ? err.status : undefined }, 'voice lab: an eager request failed');
+        } else {
+          const kind = err instanceof ThinkError ? err.kind : 'internal';
+          this.log.warn({ kind, status: err instanceof ThinkError ? err.status : undefined }, 'voice lab: the think step failed');
+          this.send({ type: 'Error', code: 'THINK_REQUEST_FAILED', description: 'The language model could not be reached.' });
+        }
       }
     } finally {
       run.finished = true;
+      if (run.held) run.settleAdoption?.(false);
       if (this.run === run) {
         if (!this.speaker.speaking && !this.speaker.pending) {
           // nothing was said (an empty answer, a failed request): the turn is over; the page must not be left on "thinking"
@@ -690,12 +779,86 @@ export class LabAgent {
     }
   }
 
-  private async completion(run: Run, round: number): Promise<Array<{ id: string; name: string; arguments: string }>> {
+  // ---------------------------------------------------------------- the eager request (docs A10)
+
+  /**
+   * The recognizer's eager end of turn (Flux): the student may have finished. The model is asked now, on the conversation as it stands plus these words, and its answer is held back until the turn is
+   * confirmed with the same words (`commit`): nothing is said, no function is requested, nothing is written to the history or told to the page. At the commit it goes out at once, as if the model
+   * had been asked `commit - askedAt` earlier. If the student goes on, or the words differ, the request is dropped. A talk-through is left out (it waits seconds after a pause anyway, and its answers are nudges).
+   */
+  private onEager(text: string, source: SpecTrace['source']): void {
+    const clean = text.trim();
+    if (this.closed || !this.applied || !this.think_ || !clean || this.profile === 'talk') return;
+    // an answer is on its way, or being spoken, or a function is running: this is not a turn to answer
+    if (this.run || this.speaker.speaking || this.speaker.pending || this.pending.size > 0) return;
+    // the turn rule would hold these words (an unfinished sentence): a request made on them would be wasted
+    if (judgeTurnText(clean) !== 'complete') return;
+    const key = wordKey(clean);
+    if (this.spec) {
+      if (this.spec.key === key) return;
+      this.dropSpec('replaced');
+    }
+    const now = this.clock();
+    const trace = newTurnTrace({ sid: this.sid, mode: this.profile, ears: this.earsKind ?? '', mouth: this.mouthKind, turn: 0, at: new Date((this.deps.wallNow ?? Date.now)()).toISOString() });
+    const run = this.newRun(trace, 0, undefined, true);
+    this.spec = { text: clean, key, rev: this.history.revision, askedAt: now, source, run };
+    void this.loop(run, clean);
+  }
+
+  /** The eager request, if it is the answer to the turn that is being committed: asked with these words, on this conversation, and not failed. Otherwise it is dropped (with the reason) and null comes back. */
+  private takeSpec(committed: string): Speculation | null {
+    const spec = this.spec;
+    if (!spec) return null;
+    if (spec.run.failed) {
+      this.dropSpec('failed');
+      return null;
+    }
+    if (spec.rev !== this.history.revision) {
+      this.dropSpec('history changed');
+      return null;
+    }
+    if (spec.key !== wordKey(committed)) {
+      this.dropSpec('different words');
+      return null;
+    }
+    this.spec = null;
+    return spec;
+  }
+
+  /** The turn is confirmed and the eager request is its answer: it becomes the run (the page is told the agent is thinking), its held sentences go out in order, and what is still to come goes out as it arrives. */
+  private adopt(spec: Speculation, now: number, speechEndAt: number | undefined): void {
+    const run = spec.run;
+    run.commitAt = now;
+    run.speechEndAt = speechEndAt;
+    this.run = run;
+    this.send({ type: 'AgentThinking', content: this.lastCommitText.slice(0, 200) });
+    run.flushHeld?.();
+    run.held = false;
+    run.settleAdoption?.(true);
+  }
+
+  /** The eager request is not the answer (the student went on, said other words, the conversation changed, the call ended): it is aborted and noted for the trace. */
+  private dropSpec(why: string): void {
+    const spec = this.spec;
+    if (!spec) return;
+    this.spec = null;
+    try {
+      spec.run.controller.abort();
+    } catch {
+      /* aborted */
+    }
+    spec.run.settleAdoption?.(false);
+    const readyAt = spec.run.trace.firstSentenceReady;
+    this.specNotes.push({ askedAt: this.rel(spec.askedAt), source: spec.source, outcome: 'dropped', why, endedAt: this.rel(this.clock()), ...(readyAt !== undefined ? { readyAt } : {}) });
+    if (this.specNotes.length > 20) this.specNotes.shift();
+  }
+
+  private async completion(run: Run, round: number, extraUser?: string): Promise<Array<{ id: string; name: string; arguments: string }>> {
     const cfg = this.think_;
     if (!cfg) throw new ThinkError('network', 'no think configuration');
     // the first sentence of the answer is the one the student waits for: a short opener ("Right.") goes out at once
     const cutter = new SentenceCutter({ firstMinWords: 1 });
-    const speak = (sentence: string): void => {
+    const speakNow = (sentence: string): void => {
       const original = sentence.trim();
       if (!original || !spokenText(original)) return;
       const tag = this.nextTag(true, original);
@@ -708,6 +871,23 @@ export class LabAgent {
       if (run.trace.firstSentence === undefined) run.trace.firstSentence = this.rel(this.clock());
       this.speaker.say(original, tag);
     };
+    // an eager request's sentences wait for the turn to be confirmed (docs A10): `flushHeld` puts them into the speech, in order, and from then on the answer goes out as it arrives
+    const speak = (sentence: string): void => {
+      if (run.held) {
+        const original = sentence.trim();
+        if (!original || !spokenText(original)) return;
+        if (run.trace.firstSentenceReady === undefined) run.trace.firstSentenceReady = this.rel(this.clock());
+        run.heldSentences.push(original);
+        return;
+      }
+      speakNow(sentence);
+    };
+    if (run.held && round === 0) {
+      run.flushHeld = () => {
+        run.held = false;
+        for (const held of run.heldSentences.splice(0)) speakNow(held);
+      };
+    }
     run.thinkSentAt = this.clock();
     run.firstTokenAt = null;
     if (round === 0) run.trace.thinkSent = this.rel(run.thinkSentAt);
@@ -715,7 +895,7 @@ export class LabAgent {
     if (round > 0 && run.lastAnswerRel !== null) roundRec.afterAnswerMs = roundRec.thinkSent - run.lastAnswerRel;
     run.trace.rounds.push(roundRec);
     run.thinking = true;
-    const messages = this.history.toMessages();
+    const messages = extraUser !== undefined ? this.history.messagesWithUser(extraUser) : this.history.toMessages();
     const repaired = this.history.takeRepairs();
     if (repaired) this.log.warn({ repaired }, 'voice lab: the conversation held a function call without its reply (or a reply without its call); the request was repaired');
     const result = await think({
@@ -825,6 +1005,12 @@ export class LabAgent {
 
   // ---------------------------------------------------------------- barge-in and resume
 
+  /** How much loud speech the barge-in rule has heard: the loud frames of the last `bargeWindowMs` (A11), or the unbroken run when the window is no longer than what is asked for (round 1's rule). */
+  private bargeHeardMs(): number {
+    const window = this.cfg.bargeWindowMs;
+    return window > this.cfg.bargeMinVoicedMs ? this.vad.strictWindow(window).voicedMs : this.vad.strictRunMs;
+  }
+
   /** The student spoke over the agent: everything stops, and the history keeps what was said. */
   private bargeIn(by: 'vad' | 'startOfTurn'): void {
     if (this.closed || !this.speaker.speaking) return;
@@ -840,7 +1026,10 @@ export class LabAgent {
     this.history.cutTail(items.map((i) => i.text).join(' '), this.keptOf(items, report));
     const trace = run?.trace ?? this.turnTrace;
     if (trace) {
-      const onset = this.vad.runStartedAt > 0 ? this.rel(this.vad.runStartedAt) : this.rel(now);
+      // the first loud frame of what was heard (the window rule's own start: a dip splits the normal view's run)
+      const windowed = this.cfg.bargeWindowMs > this.cfg.bargeMinVoicedMs ? this.vad.strictWindow(this.cfg.bargeWindowMs).startedAt : 0;
+      const startedAt = windowed > 0 ? windowed : this.vad.runStartedAt;
+      const onset = startedAt > 0 ? this.rel(startedAt) : this.rel(now);
       trace.bargeIn = {
         onset,
         confirmed: this.rel(now),
@@ -1022,6 +1211,7 @@ export class LabAgent {
     this.closed = true;
     if (this.tickTimer) clearInterval(this.tickTimer);
     this.tickTimer = null;
+    this.dropSpec('closed');
     try {
       this.run?.controller.abort();
     } catch {

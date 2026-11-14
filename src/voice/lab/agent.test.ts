@@ -10,7 +10,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 
 import { silentLog } from '../types.js';
 import { LabAgent } from './agent.js';
-import { loadLabConfig, type LabConfig } from './config.js';
+import { forChain, loadLabConfig, type LabConfig } from './config.js';
 import { PcmCache } from './mouth/cache.js';
 import { nullSink, type TraceSink, type TurnTrace } from './trace.js';
 import { FakeEars, FakeMouth, failingMouth } from './testing/fake-parts.js';
@@ -30,8 +30,10 @@ interface Rig {
   client: WebSocket;
   msgs: Array<{ at: number; m: Msg }>;
   audio: Array<{ at: number; bytes: number }>;
-  relay: { requests: Array<{ messages: Array<Record<string, unknown>>; tools?: unknown[]; at: number }>; script: (n: number, body: { messages: Array<Record<string, unknown>> }) => Step[] };
+  relay: { requests: Array<{ messages: Array<Record<string, unknown>>; tools?: unknown[]; at: number; aborted: boolean }>; script: (n: number, body: { messages: Array<Record<string, unknown>> }) => Step[] };
   earsMade: FakeEars[];
+  /** What the agent asked the factory for, in order: the kind, and the eager threshold it passed. */
+  earsAsked: Array<{ kind: string; eagerEot?: number }>;
   mouths: Record<string, FakeMouth>;
   traces: TurnTrace[];
   relayUrl: string;
@@ -91,14 +93,18 @@ function sse(steps: Step[], res: http.ServerResponse): void {
   next();
 }
 
-async function rig(opts: { env?: Record<string, string>; ears?: (kind: string, h: EarsHandlers) => Ears | null; mouths?: Record<string, FakeMouth>; profiles?: boolean; haveKey?: boolean; sink?: TraceSink } = {}): Promise<Rig> {
+async function rig(opts: { env?: Record<string, string>; chain?: string; ears?: (kind: string, h: EarsHandlers) => Ears | null; mouths?: Record<string, FakeMouth>; profiles?: boolean; haveKey?: boolean; sink?: TraceSink } = {}): Promise<Rig> {
   const relay = { requests: [] as Rig['relay']['requests'], script: ((): Step[] => [{ text: 'Okay.' }]) as Rig['relay']['script'] };
   const relayServer = http.createServer((req, res) => {
     const parts: Buffer[] = [];
     req.on('data', (c) => parts.push(c));
     req.on('end', () => {
       const body = JSON.parse(Buffer.concat(parts).toString()) as { messages: Array<Record<string, unknown>>; tools?: unknown[] };
-      relay.requests.push({ ...body, at: performance.now() });
+      const entry = { ...body, at: performance.now(), aborted: false };
+      relay.requests.push(entry);
+      res.on('close', () => {
+        if (!res.writableFinished) entry.aborted = true;
+      });
       const problem = sequenceProblem(body.messages);
       if (problem) {
         res.writeHead(400, { 'content-type': 'application/json' });
@@ -129,11 +135,12 @@ async function rig(opts: { env?: Record<string, string>; ears?: (kind: string, h
     TAI_VOICE_LAB_SHADOW_EARS: 'none',
     ...(opts.env ?? {}),
   };
-  const config: LabConfig = loadLabConfig((k) => env[k]);
+  const config: LabConfig = forChain(loadLabConfig((k) => env[k]), opts.chain);
   config.earsConnectTimeoutMs = 300;
   config.silentEarsMs = 600;
 
   const earsMade: FakeEars[] = [];
+  const earsAsked: Rig['earsAsked'] = [];
   const mouths: Record<string, FakeMouth> = opts.mouths ?? { labgpu: new FakeMouth({ name: 'labgpu', ms: 500 }), aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 500 }) };
   const traces: TurnTrace[] = [];
 
@@ -159,7 +166,8 @@ async function rig(opts: { env?: Record<string, string>; ears?: (kind: string, h
     log: process.env.LAB_DEBUG ? { ...silentLog, warn: (o, m) => console.log('WARN', m, JSON.stringify(o)), info: (o, m) => console.log('INFO', m, JSON.stringify(o)) } : silentLog,
     relayUrl,
     profiles: { chat: { eotThreshold: 0.75, eotTimeoutMs: 5000 }, interview: { eotThreshold: 0.88, eotTimeoutMs: 8000 }, talk: { eotThreshold: 0.9, eotTimeoutMs: 10000 } },
-    makeEars: (kind, handlers) => {
+    makeEars: (kind, handlers, ctx) => {
+      earsAsked.push({ kind, eagerEot: ctx.eagerEot });
       const custom = opts.ears?.(kind, handlers);
       if (custom) return custom;
       const e = new FakeEars(kind, kind === 'flux', handlers, () => performance.now());
@@ -179,6 +187,7 @@ async function rig(opts: { env?: Record<string, string>; ears?: (kind: string, h
     audio,
     relay,
     earsMade,
+    earsAsked,
     mouths,
     traces,
     relayUrl,
@@ -720,4 +729,325 @@ describe('LabAgent: the shadow recognizer', () => {
     expect(r.traces[0].shadow?.finals.map((f) => f.text)).toEqual(['What is a mute x?']);
     void nullSink;
   });
+});
+
+describe('LabAgent: the eager end of turn (A10)', () => {
+  const FUNCS = [{ name: 'recall_memory', description: 'Look in memory.', parameters: { type: 'object', properties: {} } }];
+
+  /** Chain h: LabGPU's ears (earsMade[0]) with Flux listening beside them (earsMade[1]) once the call is up; the student has just stopped speaking and 100 ms of quiet have gone by. */
+  async function afterSpeech(r: Rig, over: Parameters<typeof settings>[1] = {}): Promise<{ labgpu: FakeEars; flux: FakeEars }> {
+    await started(r, over);
+    await r.until(() => r.earsMade.length === 2);
+    await r.feed(400, 6000);
+    await r.feed(100, 0);
+    return { labgpu: r.earsMade[0], flux: r.earsMade[1] };
+  }
+
+  /** What the page and the speech were told after `from` (the greeting and earlier turns do not count). */
+  const toldAfter = (r: Rig, from: number, types = ['ConversationText', 'AgentThinking', 'FunctionCallRequest', 'LatencyReport']) => r.msgs.slice(from).filter((x) => types.includes(String(x.m.type)));
+
+  it('asks the model on the eager text, says and does nothing until the turn is confirmed, and then goes out at once without asking again', async () => {
+    const r = await rig({ chain: 'h' });
+    const { labgpu, flux } = await afterSpeech(r);
+    const from = r.msgs.length;
+    const audioFrom = r.audio.length;
+    r.relay.script = () => [{ delayMs: 100, text: 'A mutex is a lock.' }];
+    flux.eager('What is a mutex?');
+    await r.until(() => r.relay.requests.length === 1);
+    expect(r.relay.requests[0].messages[r.relay.requests[0].messages.length - 1]).toEqual({ role: 'user', content: 'What is a mutex?' });
+    await r.feed(500, 0);                                                         // longer than the model takes: the answer is ready, and held
+    expect(toldAfter(r, from)).toEqual([]);                                       // the page was told nothing: no student line, no "thinking", no function, no latency
+    expect(r.audio.length).toBe(audioFrom);
+    labgpu.partial('What is a mutex?');                                            // LabGPU's text covers the speech: the turn is confirmed with the same words
+    await r.until(() => r.of('ConversationText').some((m) => m.role === 'user'));
+    const commitAt = r.msgs.find((x) => x.m.type === 'ConversationText' && x.m.role === 'user')!.at;
+    await r.until(() => r.of('AgentAudioDone').length === 2);
+    expect(r.relay.requests).toHaveLength(1);                                     // not asked again
+    expect(r.audio.find((a) => a.at > commitAt)!.at - commitAt).toBeLessThan(400); // the held answer went out right at the commit, not a model's wait after it
+    expect(r.of('ConversationText').filter((m) => m.role === 'assistant').map((m) => m.content)).toEqual(['Hi, I am TAi.', 'A mutex is a lock.']);
+    const trace = r.traces.find((t) => t.turn === 1)!;
+    expect(trace.chain).toBe('h');
+    expect(trace.specs).toHaveLength(1);
+    expect(trace.specs![0]).toMatchObject({ outcome: 'adopted', source: 'flux-shadow' });
+    expect(trace.thinkSent!).toBeLessThan(trace.commit!);
+    expect(trace.derived.headStart).toBeGreaterThan(300);
+    expect(trace.firstSentenceReady!).toBeLessThan(trace.commit!);
+    // and the history is the same as if it had been asked at the commit
+    r.relay.script = () => [{ text: 'Okay.' }];
+    await r.feed(400, 6000);
+    await r.feed(300, 0);
+    labgpu.partial('And a semaphore?');
+    await r.until(() => r.relay.requests.length === 2);
+    expect(r.relay.requests[1].messages.map((m) => `${m.role}:${m.content}`).slice(1)).toEqual(['assistant:Hi, I am TAi.', 'user:What is a mutex?', 'assistant:A mutex is a lock.', 'user:And a semaphore?']);
+  }, 60_000);
+
+  it('other words at the commit: the held request is aborted and the turn asks again, once, with the words that were confirmed', async () => {
+    const r = await rig({ chain: 'h' });
+    const { labgpu, flux } = await afterSpeech(r);
+    r.relay.script = (n) => (n === 1 ? [{ delayMs: 600, text: 'An answer to the wrong words.' }] : [{ text: 'The right answer.' }]);
+    flux.eager('What is a mutex?');
+    await r.until(() => r.relay.requests.length === 1);
+    await r.feed(100, 0);
+    labgpu.partial('What is a mutual exclusion?');
+    await r.until(() => r.relay.requests.length === 2);
+    await r.until(() => r.of('AgentAudioDone').length === 2);
+    expect(r.relay.requests[0].aborted).toBe(true);
+    expect(r.relay.requests[1].messages[r.relay.requests[1].messages.length - 1]).toEqual({ role: 'user', content: 'What is a mutual exclusion?' });
+    expect(r.of('ConversationText').filter((m) => m.role === 'assistant').map((m) => m.content)).toEqual(['Hi, I am TAi.', 'The right answer.']);
+    expect(r.traces.find((t) => t.turn === 1)!.specs).toEqual([expect.objectContaining({ outcome: 'dropped', why: 'different words', source: 'flux-shadow' })]);
+  }, 60_000);
+
+  it('capital letters, punctuation and spacing are not different words', async () => {
+    const r = await rig({ chain: 'h' });
+    const { labgpu, flux } = await afterSpeech(r);
+    r.relay.script = () => [{ text: 'It is a lock.' }];
+    flux.eager('what is a MUTEX');
+    await r.until(() => r.relay.requests.length === 1);
+    await r.feed(100, 0);
+    labgpu.partial('What is a mutex?');
+    await r.until(() => r.of('AgentAudioDone').length === 2);
+    expect(r.relay.requests).toHaveLength(1);
+  }, 60_000);
+
+  it('Flux taking the turn back (TurnResumed) drops the request without a word to the page; the next turn asks as usual', async () => {
+    const r = await rig({ chain: 'h' });
+    const { labgpu, flux } = await afterSpeech(r);
+    const from = r.msgs.length;
+    r.relay.script = (n) => (n === 1 ? [{ delayMs: 800, text: 'Too early.' }] : [{ text: 'Both parts.' }]);
+    flux.eager('Tell me about Raft.');
+    await r.until(() => r.relay.requests.length === 1);
+    flux.resumed();
+    await r.until(() => r.relay.requests[0].aborted);
+    labgpu.partial('Tell me about');                                               // (what LabGPU's adapter had of the first part: it ends on a dangling word, so it is held)
+    await r.feed(200, 0);
+    expect(toldAfter(r, from)).toEqual([]);
+    expect(r.of('Error')).toEqual([]);
+    await r.feed(300, 6000);                                                      // the student goes on
+    await r.feed(160, 0);
+    labgpu.partial('Tell me about Raft and Paxos.');
+    await r.until(() => r.of('AgentAudioDone').length === 2);
+    expect(r.relay.requests).toHaveLength(2);
+    expect(r.traces.find((t) => t.turn === 1)!.specs).toEqual([expect.objectContaining({ outcome: 'dropped', why: 'resumed' })]);
+  }, 60_000);
+
+  it('the engine hearing the student begin again drops it too, whatever Flux says', async () => {
+    const r = await rig({ chain: 'h' });
+    const { flux } = await afterSpeech(r);
+    r.relay.script = () => [{ delayMs: 1000, text: 'Too early.' }];
+    flux.eager('What is a mutex?');
+    await r.until(() => r.relay.requests.length === 1);
+    await r.feed(300, 0);                                                         // the room is quiet again: the VAD can see the next onset
+    await r.feed(300, 6000);
+    await r.until(() => r.relay.requests[0].aborted);
+  }, 60_000);
+
+  it('a held answer that asks for a function does not run it (the "Yeah. Sure." that once started a search nobody asked for), and Flux taking the turn back ends it', async () => {
+    const r = await rig({ chain: 'h' });
+    const { flux } = await afterSpeech(r, { think: { functions: FUNCS } });
+    const from = r.msgs.length;
+    r.relay.script = () => [{ tool: { name: 'recall_memory' } }];
+    flux.eager('Yeah. Sure.');
+    await r.until(() => r.relay.requests.length === 1);
+    await r.feed(500, 0);
+    expect(toldAfter(r, from)).toEqual([]);                                       // no FunctionCallRequest: nothing was asked of the session
+    flux.resumed();
+    await r.feed(300, 0);
+    expect(r.of('FunctionCallRequest')).toHaveLength(0);
+    expect(r.of('Error')).toEqual([]);
+  }, 60_000);
+
+  it('a held answer that asks for a function runs it once the turn is confirmed, and the loop goes on as any turn does', async () => {
+    const r = await rig({ chain: 'h' });
+    const { labgpu, flux } = await afterSpeech(r, { think: { functions: FUNCS } });
+    r.relay.script = (n) => (n === 1 ? [{ text: 'Let me look. ' }, { tool: { name: 'recall_memory' } }] : [{ text: 'You did Docker last week.' }]);
+    flux.eager('What did I do last week?');
+    await r.until(() => r.relay.requests.length === 1);
+    await r.feed(300, 0);
+    expect(r.of('FunctionCallRequest')).toHaveLength(0);
+    labgpu.partial('What did I do last week?');
+    await r.until(() => r.of('FunctionCallRequest').length === 1);
+    const call = (r.of('FunctionCallRequest')[0].functions as Array<{ id: string; name: string }>)[0];
+    expect(call.name).toBe('recall_memory');
+    r.send({ type: 'FunctionCallResponse', id: call.id, name: call.name, content: 'Docker.' });
+    await r.until(() => r.relay.requests.length === 2);
+    expect(r.relay.requests[1].messages.map((m) => m.role).slice(-4)).toEqual(['assistant', 'user', 'assistant', 'tool']);
+    await r.until(() => r.of('AgentAudioDone').length === 2);
+    expect(r.of('ConversationText').filter((m) => m.role === 'assistant').map((m) => m.content)).toEqual(['Hi, I am TAi.', 'Let me look.', 'You did Docker last week.']);
+    expect(r.relay.requests).toHaveLength(2);
+  }, 60_000);
+
+  it('a conversation that changed between the eager text and the commit is another conversation: the held answer is not used', async () => {
+    const r = await rig({ chain: 'h' });
+    const { labgpu, flux } = await afterSpeech(r);
+    r.relay.script = (n) => (n === 1 ? [{ delayMs: 300, text: 'Before the note.' }] : [{ text: 'After the note.' }]);
+    flux.eager('What is a mutex?');
+    await r.until(() => r.relay.requests.length === 1);
+    r.send({ type: 'UpdatePrompt', prompt: 'Be brief.' });
+    await r.until(() => r.of('PromptUpdated').length === 1);
+    await r.feed(100, 0);
+    labgpu.partial('What is a mutex?');
+    await r.until(() => r.of('AgentAudioDone').length === 2);
+    expect(r.relay.requests).toHaveLength(2);
+    expect(r.relay.requests[1].messages.some((m) => m.role === 'system' && m.content === 'Be brief.')).toBe(true);
+    expect(r.traces.find((t) => t.turn === 1)!.specs).toEqual([expect.objectContaining({ outcome: 'dropped', why: 'history changed' })]);
+  }, 60_000);
+
+  it('does not ask on words the turn rule would hold, nor while an answer is being spoken, nor in a talk-through', async () => {
+    const r = await rig({ chain: 'h', mouths: { labgpu: new FakeMouth({ name: 'labgpu', ms: 2500 }), aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 500 }) } });
+    const { labgpu, flux } = await afterSpeech(r);
+    flux.eager('So the leader sends heartbeats to');                               // ends on a dangling word
+    flux.eager('Um.');
+    await r.feed(200, 0);
+    expect(r.relay.requests).toHaveLength(0);
+    // while the agent speaks
+    r.relay.script = () => [{ text: 'A long answer that goes on for a while.' }];
+    labgpu.partial('Explain Raft.');
+    await r.until(() => r.of('ConversationText').filter((m) => m.role === 'assistant').length >= 2);
+    flux.eager('And what about Paxos?');
+    await sleep(200);
+    expect(r.relay.requests).toHaveLength(1);
+    // a talk-through: the thresholds of its profile
+    const t = await rig({ chain: 'h' });
+    await started(t, { listen: { eot_threshold: 0.9, eot_timeout_ms: 10000 } });
+    await t.until(() => t.earsMade.length === 2);
+    await t.feed(400, 6000);
+    await t.feed(100, 0);
+    t.earsMade[1].eager('I think the leader replicates the log entry to a majority.');
+    await t.feed(300, 0);
+    expect(t.relay.requests).toHaveLength(0);
+  }, 60_000);
+
+  it('a held request that fails is not an error for the page: the turn asks again when it is confirmed', async () => {
+    const r = await rig({ chain: 'h' });
+    const { labgpu, flux } = await afterSpeech(r);
+    r.relay.script = (n) => {
+      if (n === 1) throw new Error('rate limited');
+      return [{ text: 'Second time lucky.' }];
+    };
+    flux.eager('What is a mutex?');
+    await r.until(() => r.relay.requests.length === 1);
+    await r.feed(300, 0);
+    expect(r.of('Error')).toEqual([]);
+    labgpu.partial('What is a mutex?');
+    await r.until(() => r.of('AgentAudioDone').length === 2);
+    expect(r.relay.requests).toHaveLength(2);
+    expect(r.traces.find((t) => t.turn === 1)!.specs).toEqual([expect.objectContaining({ outcome: 'dropped', why: 'failed' })]);
+  }, 60_000);
+
+  it('chain d (and a process with no chain) never asks early, whatever the second recognizer says', async () => {
+    for (const chain of ['d', undefined]) {
+      const r = await rig({ chain, env: { TAI_VOICE_LAB_SHADOW_EARS: 'flux' } });
+      await started(r);
+      await r.until(() => r.earsMade.length === 2);
+      await r.feed(400, 6000);
+      await r.feed(100, 0);
+      r.earsMade[1].eager('What is a mutex?');
+      await r.feed(300, 0);
+      expect(r.relay.requests).toHaveLength(0);
+    }
+  }, 60_000);
+
+  it('chain c: Flux ears ask early on their own eager text and the EndOfTurn with the same words confirms it; with other words it asks again', async () => {
+    const r = await rig({ chain: 'c' });
+    await started(r);
+    const flux = r.earsMade[0];
+    expect(flux.name).toBe('flux');
+    r.relay.script = (n) => (n === 1 ? [{ delayMs: 100, text: 'A lock.' }] : n === 2 ? [{ delayMs: 400, text: 'Wrong.' }] : [{ text: 'Right.' }]);
+    flux.eager('What is a mutex?');
+    await r.until(() => r.relay.requests.length === 1);
+    await sleep(300);
+    expect(r.of('ConversationText').some((m) => m.role === 'user')).toBe(false);
+    flux.final('What is a mutex?', { trigger: 'model', confidence: 0.9 });
+    await r.until(() => r.of('AgentAudioDone').length === 2);
+    expect(r.relay.requests).toHaveLength(1);
+    expect(r.traces.find((t) => t.turn === 1)!.specs![0]).toMatchObject({ outcome: 'adopted', source: 'flux' });
+    flux.eager('And a semaphore?');
+    await r.until(() => r.relay.requests.length === 2);
+    flux.final('And a semaphore please?', { trigger: 'model', confidence: 0.9 });
+    await r.until(() => r.relay.requests.length === 3);
+    await r.until(() => r.of('AgentAudioDone').length === 3);
+    expect(r.relay.requests[1].aborted).toBe(true);
+    expect(r.of('ConversationText').filter((m) => m.role === 'assistant').map((m) => m.content)).toEqual(['Hi, I am TAi.', 'A lock.', 'Right.']);
+  }, 60_000);
+
+  it('the recognizer is asked for the eager end of turn only where it is used: Flux ears and a Flux shadow beside LabGPU, with the threshold of the chain', async () => {
+    const expected: Record<string, Array<{ kind: string; eagerEot?: number }>> = {
+      h: [{ kind: 'labgpu' }, { kind: 'flux', eagerEot: 0.45 }],
+      c: [{ kind: 'flux', eagerEot: 0.45 }, { kind: 'labgpu' }],
+      d: [{ kind: 'labgpu' }, { kind: 'flux' }],
+    };
+    for (const chain of ['h', 'c', 'd']) {
+      const r = await rig({ chain });
+      await started(r);
+      await r.until(() => r.earsAsked.length === 2);
+      expect(r.earsAsked.map((a) => ({ kind: a.kind, ...(a.eagerEot ? { eagerEot: a.eagerEot } : {}) })), chain).toEqual(expected[chain]);
+    }
+    const tuned = await rig({ chain: 'h', env: { TAI_VOICE_LAB_EAGER_EOT: '0.6' } });
+    await started(tuned);
+    await tuned.until(() => tuned.earsAsked.length === 2);
+    expect(tuned.earsAsked[1]).toEqual({ kind: 'flux', eagerEot: 0.6 });
+  }, 60_000);
+});
+
+describe('LabAgent: barge-in does not depend on the recognizer (A10) and reads a window of loud frames (A11)', () => {
+  async function speakLong(r: Rig, flux: boolean): Promise<void> {
+    r.relay.script = () => [{ text: 'Raft elects a leader first. ' }, { text: 'Then the leader sends heartbeats to everyone.' }];
+    if (flux) r.earsMade[0].final('Explain Raft.');
+    else await say(r, 'Explain Raft.');
+    await r.until(() => r.audio.length > 0);
+  }
+  const longMouth = () => ({ labgpu: new FakeMouth({ name: 'labgpu', ms: 3000 }), aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 500 }) });
+
+  it('with Flux ears the student speaking over the agent stops it on the engine\'s own VAD, without waiting for the recognizer\'s start of turn', async () => {
+    const r = await rig({ env: { TAI_VOICE_LAB_EARS: 'flux', TAI_VOICE_LAB_EARS_FALLBACK: 'none' }, mouths: longMouth() });
+    await started(r, { greeting: null });
+    await speakLong(r, true);
+    const n = r.of('UserStartedSpeaking').length;
+    await r.feed(360, 7000);                                                      // Flux says nothing: no startOfTurn is sent
+    await r.until(() => r.of('UserStartedSpeaking').length === n + 1);
+    const trace = r.traces.find((t) => t.bargeIn);
+    expect(trace?.bargeIn?.by).toBe('vad');
+    const settled = r.audio.reduce((a, x) => a + x.bytes, 0);
+    await sleep(300);
+    expect(r.audio.reduce((a, x) => a + x.bytes, 0)).toBe(settled);
+  }, 60_000);
+
+  it('a stop consonant inside the first word does not make the barge-in wait for the next one', async () => {
+    const r = await rig({ mouths: longMouth(), env: { TAI_VOICE_LAB_BARGE_MS: '200', TAI_VOICE_LAB_BARGE_WINDOW_MS: '300' } });
+    await started(r, { greeting: null });
+    await speakLong(r, false);
+    const n = r.of('UserStartedSpeaking').length;
+    const t0 = performance.now();
+    await r.feed(160, 7000);                                                      // 160 ms, a closure of 80 ms, 160 ms more
+    await r.feed(80, 0);
+    await r.feed(160, 7000);
+    await r.until(() => r.of('UserStartedSpeaking').length === n + 1);
+    expect(performance.now() - t0).toBeLessThan(2000);
+    const trace = r.traces.find((t) => t.bargeIn)!;
+    expect(trace.bargeIn!.confirmed - trace.bargeIn!.onset).toBeLessThan(500);
+  }, 60_000);
+
+  it('with the round-1 window (no longer than the 240 ms asked for) the same dip makes it wait for an unbroken run', async () => {
+    const r = await rig({ mouths: longMouth(), env: { TAI_VOICE_LAB_BARGE_MS: '240', TAI_VOICE_LAB_BARGE_WINDOW_MS: '240' } });
+    await started(r, { greeting: null });
+    await speakLong(r, false);
+    const n = r.of('UserStartedSpeaking').length;
+    await r.feed(160, 7000);
+    await r.feed(80, 0);
+    await r.feed(160, 7000);
+    await r.feed(100, 0);
+    expect(r.of('UserStartedSpeaking').length).toBe(n);                           // 160 + 160 ms with a gap: never 240 in a row
+  }, 60_000);
+
+  it('clicks are not a barge-in: loud frames one in four never make 200 ms of speech in 300', async () => {
+    const r = await rig({ mouths: longMouth(), env: { TAI_VOICE_LAB_BARGE_MS: '200', TAI_VOICE_LAB_BARGE_WINDOW_MS: '300' } });
+    await started(r, { greeting: null });
+    await speakLong(r, false);
+    const n = r.of('UserStartedSpeaking').length;
+    for (let i = 0; i < 12; i++) {
+      await r.feed(40, 7000);
+      await r.feed(120, 0);
+    }
+    expect(r.of('UserStartedSpeaking').length).toBe(n);
+  }, 60_000);
 });

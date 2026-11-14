@@ -1,0 +1,892 @@
+{
+  "version": 2,
+  "note": "Round 2 of the voice lab (docs/VOICE_SELFBUILT.md amendments A8 to A12), written 2026-11-14 AFTER the round-1 results were known and BEFORE any round-2 run. What differs from testset.json (round 1, which stays as the frozen record): bargein.eval is replaced by twelve NEW interruptions, because the eight of round 1 were all looked at while the barge-in rule was analysed (section 9.3: an eval scenario that is looked at for tuning is replaced); bargein.tuning gets four more phrases, the only barge-in clips the new rule may be replayed and tuned on; and `tools` is new: eight spoken requests that make the model call tools that take a while, for C4 (fillers). Everything else (recognition, latency, turntaking, modes) is the round-1 text, unchanged. Spoken by Windows' own voices (David and Zira) through make_audio.ps1: synthetic native voices, so they say nothing about Chinese-accented English.",
+  "voices": [
+    "Microsoft David Desktop",
+    "Microsoft Zira Desktop"
+  ],
+  "recognition": [
+    {
+      "id": "r01",
+      "text": "Can you explain how Raft elects a new leader when the old one crashes?",
+      "terms": [
+        "raft",
+        "leader"
+      ]
+    },
+    {
+      "id": "r02",
+      "text": "I am confused about the difference between Paxos and Raft.",
+      "terms": [
+        "paxos",
+        "raft"
+      ]
+    },
+    {
+      "id": "r03",
+      "text": "How does a goroutine differ from an operating system thread?",
+      "terms": [
+        "goroutine",
+        "thread"
+      ]
+    },
+    {
+      "id": "r04",
+      "text": "Why does my WaitGroup never finish when I call Done inside a loop?",
+      "terms": [
+        "waitgroup"
+      ]
+    },
+    {
+      "id": "r05",
+      "text": "I used a mutex to protect the counter but the race detector still complains.",
+      "terms": [
+        "mutex"
+      ]
+    },
+    {
+      "id": "r06",
+      "text": "What does consistent hashing buy us when we add a new node to the cluster?",
+      "terms": [
+        "consistent hashing"
+      ]
+    },
+    {
+      "id": "r07",
+      "text": "In MapReduce, what happens if a worker dies in the middle of a map task?",
+      "terms": [
+        "mapreduce"
+      ]
+    },
+    {
+      "id": "r08",
+      "text": "Our Docker container exits right away on EC2 and I cannot see why.",
+      "terms": [
+        "docker",
+        "ec2"
+      ]
+    },
+    {
+      "id": "r09",
+      "text": "Should I run the service on ECS with Fargate or on plain EC2 instances?",
+      "terms": [
+        "ecs",
+        "fargate",
+        "ec2"
+      ]
+    },
+    {
+      "id": "r10",
+      "text": "Terraform says the state is locked, how do I unlock it safely?",
+      "terms": [
+        "terraform"
+      ]
+    },
+    {
+      "id": "r11",
+      "text": "How would a load balancer decide which backend gets the next request?",
+      "terms": [
+        "load balancer"
+      ]
+    },
+    {
+      "id": "r12",
+      "text": "Can you walk me through the CAP theorem with a real example?",
+      "terms": [
+        "cap theorem"
+      ]
+    },
+    {
+      "id": "r13",
+      "text": "My DynamoDB table throttles even though the capacity looks fine.",
+      "terms": [
+        "dynamodb"
+      ]
+    },
+    {
+      "id": "r14",
+      "text": "When should I put an SQS queue between the API and the workers?",
+      "terms": [
+        "sqs"
+      ]
+    },
+    {
+      "id": "r15",
+      "text": "What is the difference between SNS and SQS for fan out?",
+      "terms": [
+        "sns",
+        "sqs"
+      ]
+    },
+    {
+      "id": "r16",
+      "text": "Locust shows a very high latency after a few hundred users.",
+      "terms": [
+        "locust"
+      ]
+    },
+    {
+      "id": "r17",
+      "text": "Is gRPC faster than a REST API for service to service calls?",
+      "terms": [
+        "grpc",
+        "rest"
+      ]
+    },
+    {
+      "id": "r18",
+      "text": "How does Kafka keep messages in order inside a partition?",
+      "terms": [
+        "kafka",
+        "partition"
+      ]
+    },
+    {
+      "id": "r19",
+      "text": "What did Lamport mean by the happened before relation?",
+      "terms": [
+        "lamport"
+      ]
+    },
+    {
+      "id": "r20",
+      "text": "I posted my question on Piazza but Professor Coady has not answered yet.",
+      "terms": [
+        "piazza",
+        "coady"
+      ]
+    },
+    {
+      "id": "r21",
+      "text": "Why does Amdahl's law say that adding more threads stops helping?",
+      "terms": [
+        "amdahl",
+        "threads"
+      ]
+    },
+    {
+      "id": "r22",
+      "text": "Can you quiz me on replication and partitioning for the mastery?",
+      "terms": [
+        "replication",
+        "partitioning"
+      ]
+    },
+    {
+      "id": "r23",
+      "text": "My unit test passes locally but the deadlock only shows up under load.",
+      "terms": [
+        "deadlock"
+      ]
+    },
+    {
+      "id": "r24",
+      "text": "Homework seven asks about cost savings, where should I start?",
+      "terms": [
+        "cost savings"
+      ]
+    },
+    {
+      "id": "r25",
+      "text": "Okay, that makes sense, thank you.",
+      "terms": []
+    },
+    {
+      "id": "r26",
+      "text": "Can you say that again, a bit more slowly?",
+      "terms": []
+    }
+  ],
+  "latency": [
+    {
+      "id": "l01",
+      "text": "Hi, how are you today?"
+    },
+    {
+      "id": "l02",
+      "text": "Can you hear me okay?"
+    },
+    {
+      "id": "l03",
+      "text": "What can you help me with?"
+    },
+    {
+      "id": "l04",
+      "text": "Give me a quick tip for staying focused while debugging."
+    },
+    {
+      "id": "l05",
+      "text": "In one sentence, what is a race condition?"
+    },
+    {
+      "id": "l06",
+      "text": "Why do we use containers instead of virtual machines?"
+    },
+    {
+      "id": "l07",
+      "text": "What is the difference between concurrency and parallelism?"
+    },
+    {
+      "id": "l08",
+      "text": "Is it a good idea to take a short break now?"
+    },
+    {
+      "id": "l09",
+      "text": "Explain what a timeout is, in simple words."
+    },
+    {
+      "id": "l10",
+      "text": "What does idempotent mean?"
+    }
+  ],
+  "turntaking": {
+    "tuning": [
+      {
+        "id": "t-p1",
+        "class": "pause",
+        "segments": [
+          {
+            "text": "The thing I do not get about Paxos is",
+            "pauseAfterMs": 1500
+          },
+          {
+            "text": "why a proposer needs two phases."
+          }
+        ]
+      },
+      {
+        "id": "t-p2",
+        "class": "pause",
+        "segments": [
+          {
+            "text": "If I put the lock around the whole function",
+            "pauseAfterMs": 1700
+          },
+          {
+            "text": "then nothing runs in parallel."
+          }
+        ]
+      },
+      {
+        "id": "t-p3",
+        "class": "pause",
+        "segments": [
+          {
+            "text": "Can you remind me how the commit index",
+            "pauseAfterMs": 1400
+          },
+          {
+            "text": "moves forward in Raft?"
+          }
+        ]
+      },
+      {
+        "id": "t-p4",
+        "class": "pause",
+        "segments": [
+          {
+            "text": "I want to deploy the service on ECS and",
+            "pauseAfterMs": 1600
+          },
+          {
+            "text": "scale it behind a load balancer."
+          }
+        ]
+      },
+      {
+        "id": "t-s1",
+        "class": "short",
+        "segments": [
+          {
+            "text": "Yes, that is right."
+          }
+        ]
+      },
+      {
+        "id": "t-s2",
+        "class": "short",
+        "segments": [
+          {
+            "text": "I think so."
+          }
+        ]
+      },
+      {
+        "id": "t-s3",
+        "class": "short",
+        "segments": [
+          {
+            "text": "No, not yet."
+          }
+        ]
+      },
+      {
+        "id": "t-f1",
+        "class": "filler",
+        "segments": [
+          {
+            "text": "Um",
+            "pauseAfterMs": 1000
+          },
+          {
+            "text": "how do I start the homework?"
+          }
+        ]
+      },
+      {
+        "id": "t-f2",
+        "class": "filler",
+        "segments": [
+          {
+            "text": "Uh, so",
+            "pauseAfterMs": 900
+          },
+          {
+            "text": "what is a partition key?"
+          }
+        ]
+      },
+      {
+        "id": "t-f3",
+        "class": "filler",
+        "segments": [
+          {
+            "text": "Hmm",
+            "pauseAfterMs": 1100
+          },
+          {
+            "text": "why is my channel blocking?"
+          }
+        ]
+      }
+    ],
+    "eval": [
+      {
+        "id": "e-p01",
+        "class": "pause",
+        "segments": [
+          {
+            "text": "So the leader sends heartbeats to",
+            "pauseAfterMs": 1500
+          },
+          {
+            "text": "all of the followers, right?"
+          }
+        ]
+      },
+      {
+        "id": "e-p02",
+        "class": "pause",
+        "segments": [
+          {
+            "text": "I think the problem is that the goroutine",
+            "pauseAfterMs": 1800
+          },
+          {
+            "text": "never gets scheduled."
+          }
+        ]
+      },
+      {
+        "id": "e-p03",
+        "class": "pause",
+        "segments": [
+          {
+            "text": "When a node fails, the client should",
+            "pauseAfterMs": 1200
+          },
+          {
+            "text": "retry with a different replica."
+          }
+        ]
+      },
+      {
+        "id": "e-p04",
+        "class": "pause",
+        "segments": [
+          {
+            "text": "My understanding of consistent hashing is that",
+            "pauseAfterMs": 2000
+          },
+          {
+            "text": "keys move only a little when nodes change."
+          }
+        ]
+      },
+      {
+        "id": "e-p05",
+        "class": "pause",
+        "segments": [
+          {
+            "text": "The reason we need a mutex here is",
+            "pauseAfterMs": 1400
+          },
+          {
+            "text": "two goroutines write the same map."
+          }
+        ]
+      },
+      {
+        "id": "e-p06",
+        "class": "pause",
+        "segments": [
+          {
+            "text": "Because the queue can grow without limit",
+            "pauseAfterMs": 1600
+          },
+          {
+            "text": "the workers fall behind."
+          }
+        ]
+      },
+      {
+        "id": "e-p07",
+        "class": "pause",
+        "segments": [
+          {
+            "text": "I am trying to decide between Kafka and",
+            "pauseAfterMs": 1800
+          },
+          {
+            "text": "SQS for this assignment."
+          }
+        ]
+      },
+      {
+        "id": "e-p08",
+        "class": "pause",
+        "segments": [
+          {
+            "text": "What happens if the primary dies right after",
+            "pauseAfterMs": 1500
+          },
+          {
+            "text": "it acknowledged the write?"
+          }
+        ]
+      },
+      {
+        "id": "e-p09",
+        "class": "pause",
+        "segments": [
+          {
+            "text": "Let me think about how the load balancer",
+            "pauseAfterMs": 1700
+          },
+          {
+            "text": "would know a server is unhealthy."
+          }
+        ]
+      },
+      {
+        "id": "e-p10",
+        "class": "pause",
+        "segments": [
+          {
+            "text": "Okay so first the container starts, then",
+            "pauseAfterMs": 1300
+          },
+          {
+            "text": "the health check runs, and after that traffic arrives."
+          }
+        ]
+      },
+      {
+        "id": "e-s01",
+        "class": "short",
+        "segments": [
+          {
+            "text": "Yes."
+          }
+        ]
+      },
+      {
+        "id": "e-s02",
+        "class": "short",
+        "segments": [
+          {
+            "text": "No."
+          }
+        ]
+      },
+      {
+        "id": "e-s03",
+        "class": "short",
+        "segments": [
+          {
+            "text": "Raft."
+          }
+        ]
+      },
+      {
+        "id": "e-s04",
+        "class": "short",
+        "segments": [
+          {
+            "text": "I do not know."
+          }
+        ]
+      },
+      {
+        "id": "e-s05",
+        "class": "short",
+        "segments": [
+          {
+            "text": "Two."
+          }
+        ]
+      },
+      {
+        "id": "e-s06",
+        "class": "short",
+        "segments": [
+          {
+            "text": "Maybe the second one."
+          }
+        ]
+      },
+      {
+        "id": "e-s07",
+        "class": "short",
+        "segments": [
+          {
+            "text": "Okay."
+          }
+        ]
+      },
+      {
+        "id": "e-s08",
+        "class": "short",
+        "segments": [
+          {
+            "text": "Sounds good."
+          }
+        ]
+      },
+      {
+        "id": "e-s09",
+        "class": "short",
+        "segments": [
+          {
+            "text": "The leader."
+          }
+        ]
+      },
+      {
+        "id": "e-s10",
+        "class": "short",
+        "segments": [
+          {
+            "text": "Not really."
+          }
+        ]
+      },
+      {
+        "id": "e-f01",
+        "class": "filler",
+        "segments": [
+          {
+            "text": "Um",
+            "pauseAfterMs": 900
+          },
+          {
+            "text": "what is a mutex?"
+          }
+        ]
+      },
+      {
+        "id": "e-f02",
+        "class": "filler",
+        "segments": [
+          {
+            "text": "So, uh",
+            "pauseAfterMs": 1000
+          },
+          {
+            "text": "how does Paxos reach agreement?"
+          }
+        ]
+      },
+      {
+        "id": "e-f03",
+        "class": "filler",
+        "segments": [
+          {
+            "text": "Hmm, let me see",
+            "pauseAfterMs": 1100
+          },
+          {
+            "text": "why is the leader election randomized?"
+          }
+        ]
+      },
+      {
+        "id": "e-f04",
+        "class": "filler",
+        "segments": [
+          {
+            "text": "Well",
+            "pauseAfterMs": 900
+          },
+          {
+            "text": "I guess my question is about replication."
+          }
+        ]
+      },
+      {
+        "id": "e-f05",
+        "class": "filler",
+        "segments": [
+          {
+            "text": "Uh, okay",
+            "pauseAfterMs": 1000
+          },
+          {
+            "text": "can you explain the CAP theorem again?"
+          }
+        ]
+      },
+      {
+        "id": "e-f06",
+        "class": "filler",
+        "segments": [
+          {
+            "text": "Um, so",
+            "pauseAfterMs": 1200
+          },
+          {
+            "text": "what does the WaitGroup do exactly?"
+          }
+        ]
+      },
+      {
+        "id": "e-f07",
+        "class": "filler",
+        "segments": [
+          {
+            "text": "Er",
+            "pauseAfterMs": 800
+          },
+          {
+            "text": "how do I read the load test results?"
+          }
+        ]
+      },
+      {
+        "id": "e-f08",
+        "class": "filler",
+        "segments": [
+          {
+            "text": "Okay, um",
+            "pauseAfterMs": 1000
+          },
+          {
+            "text": "I need help with Terraform."
+          }
+        ]
+      },
+      {
+        "id": "e-f09",
+        "class": "filler",
+        "segments": [
+          {
+            "text": "Hmm",
+            "pauseAfterMs": 1000
+          },
+          {
+            "text": "is Fargate more expensive than EC2?"
+          }
+        ]
+      },
+      {
+        "id": "e-f10",
+        "class": "filler",
+        "segments": [
+          {
+            "text": "Like",
+            "pauseAfterMs": 900
+          },
+          {
+            "text": "how many followers can Raft have?"
+          }
+        ]
+      }
+    ]
+  },
+  "bargein": {
+    "ask": "Please explain in detail how Raft handles log replication, step by step.",
+    "afterFirstAudioMs": 2000,
+    "tuning": [
+      "Wait, stop.",
+      "Hang on.",
+      "Quick question.",
+      "Hold on a moment.",
+      "Wait, what?",
+      "Hmm, no, stop there."
+    ],
+    "eval": [
+      "Sorry, can I stop you there?",
+      "Okay, but what does that mean?",
+      "Wait, I did not get the last part.",
+      "Can you slow down a little?",
+      "Hold on, what is a log entry?",
+      "Actually, I have a different question.",
+      "Pause for a second, please.",
+      "So, what happens if the leader crashes?",
+      "Excuse me, I am confused.",
+      "Could you repeat that, please?",
+      "Stop, stop, I need to ask something.",
+      "That is too much, let me think."
+    ]
+  },
+  "modes": {
+    "interview": {
+      "note": "Calls started with mode interview: a pause of two to three seconds in the middle of an answer must not end the turn.",
+      "eval": [
+        {
+          "id": "i-p1",
+          "class": "pause",
+          "segments": [
+            {
+              "text": "I would say the leader replicates the log entry to",
+              "pauseAfterMs": 2500
+            },
+            {
+              "text": "a majority of the followers before it commits."
+            }
+          ]
+        },
+        {
+          "id": "i-p2",
+          "class": "pause",
+          "segments": [
+            {
+              "text": "My function starts a goroutine for every request and",
+              "pauseAfterMs": 2200
+            },
+            {
+              "text": "waits for all of them with a WaitGroup."
+            }
+          ]
+        },
+        {
+          "id": "i-p3",
+          "class": "pause",
+          "segments": [
+            {
+              "text": "The reason I chose DynamoDB is",
+              "pauseAfterMs": 3000
+            },
+            {
+              "text": "the access pattern is mostly lookups by key."
+            }
+          ]
+        },
+        {
+          "id": "i-p4",
+          "class": "pause",
+          "segments": [
+            {
+              "text": "If the container crashes then",
+              "pauseAfterMs": 2400
+            },
+            {
+              "text": "the orchestrator starts a new one."
+            }
+          ]
+        },
+        {
+          "id": "i-p5",
+          "class": "pause",
+          "segments": [
+            {
+              "text": "The tradeoff here is between latency and",
+              "pauseAfterMs": 2800
+            },
+            {
+              "text": "consistency, because a quorum read is slower."
+            }
+          ]
+        }
+      ]
+    },
+    "talk": {
+      "note": "Calls started with mode talk: a pause of three to five seconds while the student explains must not end the turn.",
+      "eval": [
+        {
+          "id": "k-p1",
+          "class": "pause",
+          "segments": [
+            {
+              "text": "Okay so a goroutine is a lightweight thread that the Go runtime schedules and",
+              "pauseAfterMs": 3500
+            },
+            {
+              "text": "it starts with a very small stack that grows when needed."
+            }
+          ]
+        },
+        {
+          "id": "k-p2",
+          "class": "pause",
+          "segments": [
+            {
+              "text": "In Raft there is one leader per term and",
+              "pauseAfterMs": 4000
+            },
+            {
+              "text": "the followers only answer the leader and the candidates."
+            }
+          ]
+        },
+        {
+          "id": "k-p3",
+          "class": "pause",
+          "segments": [
+            {
+              "text": "A load balancer sits in front of the servers and",
+              "pauseAfterMs": 3000
+            },
+            {
+              "text": "spreads the requests, for example round robin."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "tools": [
+    {
+      "id": "x01",
+      "text": "Search Piazza for posts about the Raft homework and tell me what people are asking."
+    },
+    {
+      "id": "x02",
+      "text": "Look up what Piazza says about load testing."
+    },
+    {
+      "id": "x03",
+      "text": "Read the Canvas page about the final project and give me one sentence about it."
+    },
+    {
+      "id": "x04",
+      "text": "Open the Raft lecture slides for me."
+    },
+    {
+      "id": "x05",
+      "text": "Check my week: my GitHub commits, my Canvas deadlines and my Piazza posts."
+    },
+    {
+      "id": "x06",
+      "text": "Run a tiny Go program that prints the numbers one to five."
+    },
+    {
+      "id": "x07",
+      "text": "Search the course materials for how MapReduce handles worker failures."
+    },
+    {
+      "id": "x08",
+      "text": "Look up the Effective Go page about interfaces on the web and tell me its first sentence."
+    }
+  ]
+}

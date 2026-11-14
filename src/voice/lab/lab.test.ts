@@ -59,8 +59,8 @@ const toolCall = (name: string, args: Record<string, unknown> = {}, id = 'call_x
 });
 
 /** The call is on: ready, the greeting spoken, and a little silence for the VAD to learn from. */
-async function placeCall(h: LabHarness, start: Record<string, unknown> = { type: 'start', mode: 'chat' }): Promise<BrowserClient> {
-  const b = await h.browser(h.owner());
+async function placeCall(h: LabHarness, start: Record<string, unknown> = { type: 'start', mode: 'chat' }, path?: string): Promise<BrowserClient> {
+  const b = await h.browser(h.owner(), path);
   b.send(start);
   await b.next('ready');
   await until(() => h.ears.length > 0 && h.ears[0].connected);
@@ -305,4 +305,73 @@ describe('functions and modes on the lab (C5, C10)', () => {
     expect(lab.gw.requests).toHaveLength(0);                                          // 1 s of quiet: the talk-through is still listening
     b.close();
   }, 20_000);
+});
+
+describe('the chain of a call (A10)', () => {
+  it('?chain= on the lab route picks the chain of the call; an unknown name is the process\'s own settings; a student gets nothing either way', async () => {
+    const kinds: Array<[string, string[]]> = [
+      ['h', ['labgpu', 'flux']],
+      ['c', ['flux', 'labgpu']],
+      ['fd', ['flux', 'labgpu']],
+      ['d', ['labgpu', 'flux']],
+      ['nonsense', ['labgpu']],
+    ];
+    for (const [chain, expected] of kinds) {
+      lab = await createLabHarness();
+      const b = await lab.browser(lab.owner(), `/api/voice-lab?chain=${chain}`);
+      b.send({ type: 'start', mode: 'chat' });
+      await b.next('ready');
+      await until(() => lab!.ears.length >= expected.length);
+      expect(lab.ears.map((e) => e.name), chain).toEqual(expected);
+      b.close();
+      await lab.close();
+      lab = null;
+    }
+    lab = await createLabHarness();
+    const student = await lab.browser(lab.student(), '/api/voice-lab?chain=h').catch((e) => e);
+    expect((student as { status?: number }).status).toBe(403);
+  });
+
+  it('the stand-in\'s address for a chain is its own address with the chain, and the token still decides who may connect', async () => {
+    lab = await createLabHarness();
+    const engine = lab.engine()!;
+    expect(engine.agentUrlFor('h')).toBe(`${engine.agentUrl}?chain=h`);
+    expect(engine.agentUrlFor('fd')).toBe(`${engine.agentUrl}?chain=fd`);
+    for (const x of [undefined, null, '', 'x', 'H']) expect(engine.agentUrlFor(x)).toBe(engine.agentUrl);
+    const closed = await new Promise<number>((resolve) => {
+      const ws = new WebSocket(engine.agentUrlFor('h'), { headers: { authorization: `Token ${TEST_KEY}` } });
+      ws.on('close', (code) => resolve(code));
+      ws.on('error', () => undefined);
+    });
+    expect(closed).toBe(1008);
+  });
+
+  it('chain h through the whole hub: the eager text asks the real relay before the turn is confirmed, and the page hears the student and the answer only after', async () => {
+    lab = await createLabHarness();
+    lab.gw.respond = () => streamed('A mutex is a lock.');
+    const b = await placeCall(lab, { type: 'start', mode: 'chat' }, '/api/voice-lab?chain=h');
+    await until(() => lab!.ears.length === 2 && lab!.ears[1].connected);
+    expect(lab.ears.map((e) => e.name)).toEqual(['labgpu', 'flux']);
+    await speak(b, 400, 6000);
+    await speak(b, 100, 0);
+    const heard = b.ofType('transcript').length;
+    lab.ears[1].eager('What is a mutex?');
+    await until(() => lab!.gw.requests.length === 1);
+    const asked = lab.gw.requests[0].body as { messages: Array<{ role: string; content: string }> };
+    expect(asked.messages[asked.messages.length - 1]).toMatchObject({ role: 'user', content: 'What is a mutex?' });
+    await speak(b, 400, 0);
+    expect(b.ofType('transcript').length).toBe(heard);                                 // nothing of the held answer, and no student line yet
+    lab.ears[0].partial('What is a mutex?');
+    await b.next('transcript', (e) => e.role === 'user' && e.text === 'What is a mutex?');
+    await b.next('transcript', (e) => e.role === 'agent' && e.text === 'A mutex is a lock.');
+    expect(lab.gw.requests).toHaveLength(1);                                           // asked once
+    b.send({ type: 'end' });
+    await b.next('closed');
+    const traceFile = path.join(lab.dataDir, 'voice-lab', 'turns.jsonl');
+    await until(() => fs.existsSync(traceFile) && fs.readFileSync(traceFile, 'utf8').endsWith('\n'));
+    const rows = fs.readFileSync(traceFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    expect(rows[0]).toMatchObject({ turn: 1, chain: 'h', ears: 'labgpu', userText: 'What is a mutex?' });
+    expect(rows[0].specs[0]).toMatchObject({ outcome: 'adopted', source: 'flux-shadow' });
+    expect(rows[0].derived.headStart).toBeGreaterThan(300);
+  });
 });

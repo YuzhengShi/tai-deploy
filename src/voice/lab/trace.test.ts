@@ -79,3 +79,16 @@ describe('the lab trace', () => {
     expect(warns[0].msg).toMatch(/trace could not be written/);
   });
 });
+
+describe('finishDerived: the head start of an eager request', () => {
+  it('is how long before the commit the model was asked, and is absent when it was asked at or after the commit', () => {
+    const early = newTurnTrace({ sid: 'abc123', mode: 'chat', ears: 'labgpu', mouth: 'labgpu', turn: 1, at: '2026-11-14T12:00:00.000Z' });
+    Object.assign(early, { speechEnd: 1000, thinkSent: 1400, commit: 1900, firstAudioOut: 3100 });
+    finishDerived(early);
+    expect(early.derived).toEqual({ eotWait: 900, total: 1200, fromSpeechEnd: 2100, headStart: 500 });
+    const late = newTurnTrace({ sid: 'abc123', mode: 'chat', ears: 'labgpu', mouth: 'labgpu', turn: 2, at: '2026-11-14T12:00:10.000Z' });
+    Object.assign(late, { speechEnd: 1000, thinkSent: 1900, commit: 1900, firstAudioOut: 3100 });
+    finishDerived(late);
+    expect(late.derived.headStart).toBeUndefined();
+  });
+});

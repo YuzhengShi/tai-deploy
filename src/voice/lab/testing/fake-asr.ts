@@ -54,7 +54,7 @@ export function recordingLog(): { log: VoiceLog; lines: LogLine[]; dump(): strin
 }
 
 export interface SeenEvent {
-  kind: 'start' | 'partial' | 'final' | 'down';
+  kind: 'start' | 'partial' | 'final' | 'down' | 'eager' | 'resumed';
   text?: string;
   at?: number;
   info?: { trigger?: string; confidence?: number };
@@ -78,6 +78,8 @@ export function earsHarness(over: Partial<EarsHandlers> = {}) {
     startOfTurn: (at, text) => void events.push({ kind: 'start', at, text }),
     partial: (text, at) => void events.push({ kind: 'partial', text, at }),
     final: (text, at, info) => void events.push({ kind: 'final', text, at, info }),
+    eagerEndOfTurn: (text, at) => void events.push({ kind: 'eager', text, at }),
+    turnResumed: (at) => void events.push({ kind: 'resumed', at }),
     down: (reason) => void events.push({ kind: 'down', reason }),
     ...over,
   };

@@ -19,6 +19,24 @@ export interface BargeTrace {
   by: 'vad' | 'startOfTurn';
 }
 
+/**
+ * One request to the model made before the turn was confirmed (the eager end of turn, amendment A10): when it was asked, by which recognizer's event, and what became of it. A request
+ * that was adopted belongs to the turn it is in; one that was dropped is written with the next turn of the call (a call that ends after it loses the note).
+ */
+export interface SpecTrace {
+  /** When the request went out (ms from the start of the call). */
+  askedAt: number;
+  /** 'flux': the ears' own eager end of turn; 'flux-shadow': the second recognizer's, beside LabGPU's. */
+  source: 'flux' | 'flux-shadow';
+  outcome: 'adopted' | 'dropped';
+  /** Why a request was dropped: 'resumed' (Flux's TurnResumed), 'speech' (the engine heard the student begin again), 'different words', 'history changed', 'failed', 'stale', 'replaced', 'busy', 'closed'. */
+  why?: string;
+  /** When it ended up (ms from the start of the call): the commit that adopted it, or the moment it was dropped. */
+  endedAt: number;
+  /** The first sentence of its answer was ready at this time (ms from the start of the call), when it was before it ended up. */
+  readyAt?: number;
+}
+
 /** One request to the model within a turn (a turn with function calls has several). */
 export interface RoundTrace {
   /** When the request went out, in milliseconds from the start of the call. */
@@ -36,6 +54,8 @@ export interface TurnTrace {
   mouth: string;
   /** 1-based, in the call. 0 is the greeting. */
   turn: number;
+  /** The chain the call asked for (`?chain=`: d, h, fd or c), absent when the process's own settings ran it. */
+  chain?: string;
   /** Wall clock of the commit (ISO), for finding the turn in a journal. */
   at: string;
   speechStart?: number;
@@ -48,6 +68,8 @@ export interface TurnTrace {
   thinkSent?: number;
   firstToken?: number;
   firstSentence?: number;
+  /** An eagerly requested answer: when its first sentence was ready (the sentence itself goes out at the commit if that is later: `firstSentence`). */
+  firstSentenceReady?: number;
   ttsSent?: number;
   ttsFirstByte?: number;
   firstAudioOut?: number;
@@ -56,14 +78,16 @@ export interface TurnTrace {
   functions: Array<{ name: string; startedAt: number; answeredAt?: number }>;
   /** Every request to the model of this turn, in order (the first round's `thinkSent` and `firstToken` are also the turn's own fields above). */
   rounds: RoundTrace[];
+  /** The requests made before a turn was confirmed that this turn found (the one it adopted, and those dropped since the last turn): docs A10. */
+  specs?: SpecTrace[];
   fillers: Array<{ text: string; injectedAt: number; audioAt?: number }>;
   fallbacks: string[];
   userText?: string;
   /** What the shadow recognizer heard of the same speech (its finals that arrived since the speech began), with their times: for comparing recognizers on real calls. */
   shadow?: { ears: string; finals: Array<{ text: string; at: number }> };
   agentWords?: number;
-  /** What the report reads: the end-of-turn wait (commit - speechEnd), Deepgram's `total` (commit to first audio), and the whole wait from the end of speech. */
-  derived: { eotWait?: number; total?: number; fromSpeechEnd?: number };
+  /** What the report reads: the end-of-turn wait (commit - speechEnd), Deepgram's `total` (commit to first audio), the whole wait from the end of speech, and the head start an adopted eager request had (commit - thinkSent, when the model was asked before the commit). */
+  derived: { eotWait?: number; total?: number; fromSpeechEnd?: number; headStart?: number };
 }
 
 export function newTurnTrace(base: { sid: string; mode: string; ears: string; mouth: string; turn: number; at: string }): TurnTrace {
@@ -74,6 +98,7 @@ export function finishDerived(t: TurnTrace): void {
   if (t.commit !== undefined && t.speechEnd !== undefined) t.derived.eotWait = Math.round(t.commit - t.speechEnd);
   if (t.commit !== undefined && t.firstAudioOut !== undefined) t.derived.total = Math.round(t.firstAudioOut - t.commit);
   if (t.speechEnd !== undefined && t.firstAudioOut !== undefined) t.derived.fromSpeechEnd = Math.round(t.firstAudioOut - t.speechEnd);
+  if (t.commit !== undefined && t.thinkSent !== undefined && t.thinkSent < t.commit) t.derived.headStart = Math.round(t.commit - t.thinkSent);
 }
 
 export interface TraceSink {

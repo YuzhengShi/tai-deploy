@@ -21,7 +21,7 @@ import { clipActivity, clipSpeech } from '../portal/history.js';
 import type { ActivityType, HistoryStore } from '../portal/history.js';
 import { VOICE_ENV_KEYS, VoiceConfig, chatCompletionsUrl, loadVoiceConfig } from './config.js';
 import { LabEngine, type LabEngineDeps } from './lab/engine.js';
-import { loadLabConfig, type LabConfig } from './lab/config.js';
+import { isChainName, loadLabConfig, type ChainName, type LabConfig } from './lab/config.js';
 import type { ChatLine } from './context-builder.js';
 import { InterviewTokenInfo, verifyInterviewToken } from './interview-token.js';
 import { RelayTokens, createRelay, newSessionId } from './relay.js';
@@ -476,7 +476,7 @@ class Hub implements VoiceHub {
     }
   }
 
-  upgradeLab(req: http.IncomingMessage, socket: Duplex, head: Buffer, user: Caller, _query: URLSearchParams): void {
+  upgradeLab(req: http.IncomingMessage, socket: Duplex, head: Buffer, user: Caller, query: URLSearchParams): void {
     socket.on('error', () => undefined);
     try {
       // with the flag off there is no lab: the route does not exist; for anyone but the owner it exists and is not theirs
@@ -484,7 +484,9 @@ class Hub implements VoiceHub {
       if (req.headers.origin !== this.origin) return refuseUpgrade(socket, 403, 'Forbidden');
       if (!user || user.role !== 'owner') return refuseUpgrade(socket, 403, 'Forbidden');
       if (!FOLDER.test(user.folder) || typeof user.jid !== 'string' || !user.jid) return refuseUpgrade(socket, 403, 'Forbidden');
-      this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, user, true));
+      // `?chain=d|h|fd|c` picks the chain of this call (docs A10); anything else is the process's own settings, as in round 1
+      const chain = query.get('chain');
+      this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, user, true, isChainName(chain) ? chain : undefined));
     } catch (err) {
       this.deps.log.warn({ err: (err as Error).message }, 'voice lab: upgrade failed');
       try {
@@ -495,9 +497,9 @@ class Hub implements VoiceHub {
     }
   }
 
-  private onConnection(ws: WebSocket, user: Caller, lab = false): void {
+  private onConnection(ws: WebSocket, user: Caller, lab = false, chain?: ChainName): void {
     ws.on('error', (err) => this.deps.log.debug({ folder: user.folder, err: err.message }, 'voice: browser socket error'));
-    const conn: { session: VoiceSession | null; started: boolean; lab: boolean } = { session: null, started: false, lab };
+    const conn: { session: VoiceSession | null; started: boolean; lab: boolean; chain?: ChainName } = { session: null, started: false, lab, chain };
     const textLimit = new RateLimiter(30, 60_000, this.now);
     const frameLimit = new RateLimiter(240, 60_000, this.now);
     // the page reports the whole view at most every 0.8 s (about 75 a minute at the most); this allows for a little more than that
@@ -592,7 +594,7 @@ class Hub implements VoiceHub {
     }
   }
 
-  private start(ws: WebSocket, conn: { session: VoiceSession | null; lab?: boolean }, user: Caller, msg: Record<string, unknown>): void {
+  private start(ws: WebSocket, conn: { session: VoiceSession | null; lab?: boolean; chain?: ChainName }, user: Caller, msg: Record<string, unknown>): void {
     const resume = msg.resume === true;
     // a call on the lab's chain: its stand-in must be up (it starts with the hub, a moment after the service does)
     const engine = conn.lab ? this.labEngine : null;
@@ -653,7 +655,7 @@ class Hub implements VoiceHub {
           dataDir: this.deps.dataDir,
           templateFile: this.deps.templateFile ?? path.join(this.deps.groupsDir, 'global', 'COMPETENCY_TEMPLATE.md'),
           // a lab call connects to the stand-in with a token of its own (never the Deepgram key) and its think requests go to the loopback door of this hub's relay
-          deepgramUrl: engine ? engine.agentUrl : (this.deps.deepgramUrl ?? this.config.deepgramUrl),
+          deepgramUrl: engine ? engine.agentUrlFor(conn.chain) : (this.deps.deepgramUrl ?? this.config.deepgramUrl),
           deepgramKey: engine ? () => engine.token : () => this.deepgramKey(),
           relay: this.config.think === 'relay' ? { url: engine ? engine.relayUrl : `${this.base}/voice-llm/v1/chat/completions`, tokens: this.tokens } : null,
           // the student's own host from their last call when it is still up and bound as they are now, else a new one

@@ -168,3 +168,47 @@ describe('LabHistory', () => {
     expect(m[m.length - 1]).toEqual({ role: 'assistant', content: 'answer 299' });
   });
 });
+
+describe('LabHistory: the revision and the conversation of an eager request', () => {
+  it('the revision changes with every write to the conversation and with nothing else', () => {
+    const h = new LabHistory();
+    const seen = [h.revision];
+    const bump = (write: () => void): void => {
+      write();
+      seen.push(h.revision);
+    };
+    bump(() => h.setPrompt('You are TAi.'));
+    bump(() => h.addUser('What is a mutex?'));
+    bump(() => h.addAssistant('A lock.'));
+    bump(() => h.addSystemNote('Be brief.'));
+    bump(() => h.addToolCalls([{ id: 'c1', type: 'function', function: { name: 'a', arguments: '{}' } }]));
+    bump(() => h.addToolResult('c1', 'ok'));
+    bump(() => h.cutTail('A lock.', 'A'));
+    bump(() => h.dropUnansweredToolCalls());
+    bump(() => h.loadContext([{ role: 'user', content: 'earlier' }]));
+    expect(new Set(seen).size).toBe(seen.length);                       // every write moved it
+    const before = h.revision;
+    h.toMessages();
+    h.messagesWithUser('anything');
+    h.takeRepairs();
+    expect(h.revision).toBe(before);                                    // reading does not
+  });
+
+  it('messagesWithUser is the conversation with the student\'s words as addUser would put them in, and writes nothing', () => {
+    const h = new LabHistory();
+    h.setPrompt('You are TAi.');
+    h.addAssistant('Hi.');
+    const before = h.toMessages();
+    expect(h.messagesWithUser('What is a mutex?')).toEqual([...before, { role: 'user', content: 'What is a mutex?' }]);
+    expect(h.toMessages()).toEqual(before);
+    // an unanswered line of the student's and the new words are one message, as addUser joins them
+    h.addUser('Tell me about Raft.');
+    expect(h.messagesWithUser('And about Paxos too?').slice(-1)).toEqual([{ role: 'user', content: 'Tell me about Raft. And about Paxos too?' }]);
+    expect(h.toMessages().slice(-1)).toEqual([{ role: 'user', content: 'Tell me about Raft.' }]);
+    const joined = new LabHistory();
+    joined.addUser('Tell me about Raft.');
+    joined.addUser('And about Paxos too?');
+    expect(h.messagesWithUser('And about Paxos too?').slice(-1)).toEqual(joined.toMessages().slice(-1));
+    expect(h.messagesWithUser('   ')).toEqual(h.toMessages());
+  });
+});

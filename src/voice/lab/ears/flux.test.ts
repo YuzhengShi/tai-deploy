@@ -338,15 +338,34 @@ describe('FluxEars events', () => {
     expect(h.of('final')[1].info).toEqual({});
   });
 
-  it('ignores EagerEndOfTurn and TurnResumed, with a line at debug level', async () => {
-    const { conn, h } = await connected();
+  it('passes EagerEndOfTurn and TurnResumed on as such (the engine asks the model early on the first and drops that on the second), never as a final', async () => {
+    const { conn, h } = await connected({ eagerEotThreshold: 0.45 });
     conn.sendTurnInfo('EagerEndOfTurn', { transcript: 'what is paxos', confidence: 0.6 });
+    conn.sendTurnInfo('TurnResumed', { transcript: 'what is paxos and' });
+    conn.sendTurnInfo('EagerEndOfTurn', { transcript: 'what is paxos and raft' });
+    conn.sendTurnInfo('EndOfTurn', { transcript: 'what is paxos and raft', end_of_turn_confidence: 0.8 });
+    await until(() => h.events.length === 4);
+    expect(h.texts()).toEqual(['eager:what is paxos', 'resumed:', 'eager:what is paxos and raft', 'final:what is paxos and raft']);
+    expect(h.of('eager').map((e) => typeof e.at)).toEqual(['number', 'number']);
+  });
+
+  it('an EagerEndOfTurn without words is not an end of turn, and a handler that does not take eager events is not told (a recognizer that was not asked for them never sends any)', async () => {
+    const { conn, h } = await connected({}, { eagerEndOfTurn: undefined, turnResumed: undefined });
+    conn.sendTurnInfo('EagerEndOfTurn', { transcript: '' });
+    conn.sendTurnInfo('EagerEndOfTurn', { transcript: 'what is paxos' });
     conn.sendTurnInfo('TurnResumed', { transcript: 'what is paxos and' });
     conn.sendTurnInfo('Update', { transcript: 'sentinel' });
     await until(() => h.events.length === 1);
     expect(h.texts()).toEqual(['partial:sentinel']);
-    const lines = h.rec.at('debug').filter((l) => l.msg.includes('eager-mode'));
-    expect(lines.map((l) => l.obj.event)).toEqual(['EagerEndOfTurn', 'TurnResumed']);
+  });
+
+  it('a handler that throws on an eager event does not stop the stream', async () => {
+    const { conn, h } = await connected({}, { eagerEndOfTurn: () => { throw new Error('boom'); } });
+    conn.sendTurnInfo('EagerEndOfTurn', { transcript: 'what is paxos' });
+    conn.sendTurnInfo('Update', { transcript: 'sentinel' });
+    await until(() => h.events.length === 1);
+    expect(h.texts()).toEqual(['partial:sentinel']);
+    expect(h.rec.at('warn').some((l) => l.obj.handler === 'eagerEndOfTurn')).toBe(true);
   });
 
   it('a StartOfTurn without words is not taken for speech', async () => {

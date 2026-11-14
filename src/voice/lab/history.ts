@@ -22,13 +22,24 @@ export class LabHistory {
   private prompt = '';
   private items: ChatMessage[] = [];
   private repairs = 0;
+  private rev = 0;
+
+  /**
+   * Changes with every write to the conversation (a line, a note, a call, a reply, a cut, a new prompt): a request made on the conversation as it stood (the eager one, docs A10) is
+   * only the answer to the turn if the conversation is still as it was when the turn is confirmed.
+   */
+  get revision(): number {
+    return this.rev;
+  }
 
   setPrompt(prompt: string): void {
+    this.rev++;
     this.prompt = prompt;
   }
 
   /** The Settings' `context.messages` (Deepgram's `History` items), at the start of the call. */
   loadContext(items: ReadonlyArray<HistoryItem | Record<string, unknown>>): void {
+    this.rev++;
     for (const raw of items) {
       const item = raw as { role?: unknown; content?: unknown; function_calls?: unknown };
       if (Array.isArray(item.function_calls)) {
@@ -48,6 +59,7 @@ export class LabHistory {
 
   /** A system message at this point of the conversation (what `UpdatePrompt` does). */
   addSystemNote(text: string): void {
+    this.rev++;
     if (text.trim()) this.items.push({ role: 'system', content: text });
     this.trim();
   }
@@ -66,6 +78,7 @@ export class LabHistory {
    * cut), or on a new one with no words when it said nothing. Their replies follow with `addToolResult`.
    */
   addToolCalls(calls: ToolCall[]): void {
+    this.rev++;
     const last = this.items[this.items.length - 1];
     if (last && last.role === 'assistant' && !last.tool_calls?.length) last.tool_calls = calls;
     else this.items.push({ role: 'assistant', content: '', tool_calls: calls });
@@ -73,11 +86,13 @@ export class LabHistory {
   }
 
   addToolResult(id: string, content: string): void {
+    this.rev++;
     this.items.push({ role: 'tool', tool_call_id: id, content });
   }
 
   /** The calls that have no reply yet (the student spoke before the functions came back): taken out of the conversation with the assistant message that made them, so that the next request is a valid one. */
   dropUnansweredToolCalls(): void {
+    this.rev++;
     for (let i = this.items.length - 1; i >= 0; i--) {
       const m = this.items[i];
       if (m.role === 'assistant' && m.tool_calls?.length) {
@@ -101,6 +116,7 @@ export class LabHistory {
    * `added` is left alone, and so is one with tool calls.
    */
   cutTail(added: string, kept: string): void {
+    this.rev++;
     const tail = added.trim();
     if (!tail) return;
     for (let i = this.items.length - 1; i >= 0; i--) {
@@ -133,6 +149,20 @@ export class LabHistory {
     const out: ChatMessage[] = [];
     if (this.prompt) out.push({ role: 'system', content: this.prompt });
     for (const m of this.valid()) out.push(m.role === 'tool' ? { ...m } : { ...m, ...(m.tool_calls ? { tool_calls: m.tool_calls.map((c) => ({ ...c, function: { ...c.function } })) } : {}) });
+    return out;
+  }
+
+  /**
+   * The messages of a request for the turn the student has just finished but that has not been committed (the eager request, docs A10): the conversation as it stands and the student's
+   * words as `addUser` would put them in (joined to an unanswered line of theirs before), without writing anything.
+   */
+  messagesWithUser(text: string): ChatMessage[] {
+    const out = this.toMessages();
+    const t = text.trim();
+    if (!t) return out;
+    const last = out[out.length - 1];
+    if (last && last.role === 'user') last.content = `${last.content} ${t}`.trim();
+    else out.push({ role: 'user', content: t });
     return out;
   }
 
@@ -186,6 +216,7 @@ export class LabHistory {
   private push(role: 'user' | 'assistant', text: string): void {
     const t = text.trim();
     if (!t) return;
+    this.rev++;
     const last = this.items[this.items.length - 1];
     if (role === 'assistant' && last && last.role === 'assistant' && last.tool_calls?.length) {
       // said while the calls run (a filler: "one sec."): it goes into the words of the message that holds the calls, so that their replies still follow that message directly

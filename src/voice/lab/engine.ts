@@ -11,7 +11,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 
 import type { VoiceLog } from '../types.js';
 import { LabAgent, newToken, type LabAgentDeps } from './agent.js';
-import type { LabConfig } from './config.js';
+import { forChain, isChainName, type LabConfig } from './config.js';
 import { defaultFactories } from './factories.js';
 import { PcmCache } from './mouth/cache.js';
 import { fileSink, nullSink } from './trace.js';
@@ -35,6 +35,15 @@ export interface LabEngineDeps {
   factories?: Pick<LabAgentDeps, 'makeEars' | 'makeMouth'>;
 }
 
+/** The chain a call asked for: `?chain=h` on the stand-in's address (the hub puts it there from the owner's request); anything else is none. */
+function chainOf(url: string | undefined): string | null {
+  try {
+    return new URL(url ?? '/', 'http://stand-in.invalid').searchParams.get('chain');
+  } catch {
+    return null;
+  }
+}
+
 const eq = (a: string, b: string): boolean => {
   const x = Buffer.from(a);
   const y = Buffer.from(b);
@@ -44,6 +53,10 @@ const eq = (a: string, b: string): boolean => {
 export class LabEngine {
   /** ws://127.0.0.1:<port>/v1/agent/converse: what a lab session's `deepgramUrl` is. */
   readonly agentUrl: string;
+  /** The same for a call that asked for a chain (`?chain=d|h|fd|c`, docs A10); any other value is the plain address. */
+  agentUrlFor(chain: string | null | undefined): string {
+    return isChainName(chain) ? `${this.agentUrl}?chain=${chain}` : this.agentUrl;
+  }
   /** http://127.0.0.1:<port>/voice-llm/v1/chat/completions: what a lab session's relay URL is (the Settings carry it, and the stand-in refuses any other). */
   readonly relayUrl: string;
   /** What the session sends as its "Deepgram key" (`Authorization: Token <token>`): per process, random, never the real key. */
@@ -105,7 +118,7 @@ export class LabEngine {
       }
       const agent = new LabAgent({
         ws,
-        config: deps.config,
+        config: forChain(deps.config, chainOf(req.url)),
         clock: deps.clock ?? (() => performance.now()),
         wallNow: deps.wallNow,
         log: deps.log,

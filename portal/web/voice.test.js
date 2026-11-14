@@ -186,5 +186,11 @@ describe('the call\'s socket path', () => {
     expect(voiceSocketPath('?voice=labs')).toBe('api/voice');
     expect(voiceSocketPath('?voice=')).toBe('api/voice');
     expect(voiceSocketPath(undefined)).toBe('api/voice');
+    // the lab's chains (A10): only the four names, and only on the lab
+    expect(voiceSocketPath('?voice=lab&chain=h')).toBe('api/voice-lab?chain=h');
+    expect(voiceSocketPath('?chain=fd&voice=lab')).toBe('api/voice-lab?chain=fd');
+    expect(voiceSocketPath('?voice=lab&chain=x')).toBe('api/voice-lab');
+    expect(voiceSocketPath('?voice=lab&chain=h%26voice%3Dx')).toBe('api/voice-lab');
+    expect(voiceSocketPath('?chain=h')).toBe('api/voice');
   });
 });

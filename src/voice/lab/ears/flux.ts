@@ -24,7 +24,7 @@ export interface FluxOptions {
   keyterms: string[];
   /** The confidence at which a turn ends (Deepgram takes 0.5 to 1.0). */
   eotThreshold: number;
-  /** Optional: EagerEndOfTurn / TurnResumed events (0.3 to 0.9; never above `eotThreshold`). The ears ignore those events; keep this at or below every mode's `eotThreshold`. */
+  /** Optional: EagerEndOfTurn / TurnResumed events (0.3 to 0.9; never above `eotThreshold`), passed on to the handlers as `eagerEndOfTurn` / `turnResumed` (the engine asks the model early on them and keeps the answer back). Keep it at or below every mode's `eotThreshold`. */
   eagerEotThreshold?: number;
   /** The silence after which a turn ends whatever the confidence (Deepgram takes 500 to 60000). */
   eotTimeoutMs: number;
@@ -207,9 +207,11 @@ export class FluxEars extends WsEars {
         return;
       }
       case 'EagerEndOfTurn':
+        // only a stream opened with an eager threshold gets these; the turn is still committed at EndOfTurn: this is the engine's cue to ask the model early (a guess, never acted on)
+        if (text) this.safely('eagerEndOfTurn', () => this.handlers.eagerEndOfTurn?.(text, at));
+        return;
       case 'TurnResumed':
-        // the eager mode is not used: the turn is committed at EndOfTurn
-        this.log.debug({ ears: this.name, event: msg.event }, 'ears: an eager-mode event was ignored');
+        this.safely('turnResumed', () => this.handlers.turnResumed?.(at));
         return;
       default:
         this.log.debug({ ears: this.name, event: typeof msg.event === 'string' ? msg.event.slice(0, 40) : undefined }, 'ears: an unknown TurnInfo event was ignored');

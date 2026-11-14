@@ -8,8 +8,26 @@ import type { TurnParams } from './turn.js';
 export type EarsKind = 'labgpu' | 'flux' | 'nova';
 export type MouthKind = 'labgpu' | 'aura';
 
+/**
+ * The chains a lab call can be asked for with `?chain=` (the owner's route only; docs/VOICE_SELFBUILT.md 9.1 and amendment A10). Without the parameter a call runs on the settings of the process, as in round 1.
+ *   d  : LabGPU's ears and mouth (round 1's lab), nothing asked early
+ *   h  : LabGPU's ears and mouth, and Flux listening beside them whose eager end of turn only starts the model early (its answer is kept back until LabGPU's text of the turn has the same words)
+ *   fd : Flux's ears (eager end of turn) and LabGPU's mouth: everything but the recognizer self-built
+ *   c  : Flux's ears (eager end of turn) and Aura's mouth: the control, our orchestration over Deepgram's models
+ */
+export type ChainName = 'd' | 'h' | 'fd' | 'c';
+export const CHAIN_NAMES: readonly ChainName[] = ['d', 'h', 'fd', 'c'];
+export const isChainName = (value: unknown): value is ChainName => typeof value === 'string' && (CHAIN_NAMES as readonly string[]).includes(value);
+
+/** The eager threshold a chain that uses the eager end of turn takes when `TAI_VOICE_LAB_EAGER_EOT` names none (A10: the live call's request left 0.44 s after the end of speech, p50, and this threshold's eager event came at 0.40 s). */
+export const DEFAULT_EAGER_EOT = 0.45;
+
 export interface LabConfig {
   enabled: boolean;
+  /** The chain this configuration is for ('' = the process's own settings, no `?chain=`): written into every turn's trace. */
+  chain: ChainName | '';
+  /** Flux's eager end-of-turn threshold (0.3 to 0.9), 0 = off: the model is asked on the eager event and the answer is kept back until the turn is confirmed with the same words (src/voice/lab/agent.ts). */
+  eagerEot: number;
   ears: EarsKind;
   /** The recognizer to use when `ears` cannot be reached or goes silent ('none': the call fails instead). */
   earsFallback: EarsKind | 'none';
@@ -46,9 +64,11 @@ export interface LabConfig {
   /** The end-of-turn rule for a recognizer that does not decide turns, per mode (docs 5.2). `timeoutMs` comes from the Settings (eot_timeout_ms) at call time. */
   hold: Record<TurnProfile, { completeMs: number; incompleteMs: number }>;
   coverAfterMs: number;
-  /** Barge-in: how long the student's speech must go on, at what factor over the normal threshold, before the agent is stopped. */
+  /** Barge-in: how much of the student's speech (loud frames at `bargeRmsFactor` over the normal threshold) must have been heard, within a window of `bargeWindowMs`, before the agent is stopped. */
   bargeMinVoicedMs: number;
   bargeRmsFactor: number;
+  /** The window `bargeMinVoicedMs` of loud frames must fall in (A11): 300 ms lets a stop consonant or a short gap between syllables go by; at most `bargeMinVoicedMs` is the round-1 rule (all of them in a row). */
+  bargeWindowMs: number;
   /** How far ahead of real time the audio is sent. */
   leadMs: number;
   /** One line per turn goes here ('' = off). Defaults to <data dir>/voice-lab/turns.jsonl, set by the hub. */
@@ -76,6 +96,8 @@ export const LAB_ENV_KEYS = [
   'TAI_VOICE_LAB_COVER_MS',
   'TAI_VOICE_LAB_BARGE_MS',
   'TAI_VOICE_LAB_BARGE_FACTOR',
+  'TAI_VOICE_LAB_BARGE_WINDOW_MS',
+  'TAI_VOICE_LAB_EAGER_EOT',
   'TAI_VOICE_LAB_LEAD_MS',
   'TAI_VOICE_LAB_TRACE',
 ];
@@ -145,8 +167,18 @@ export function loadLabConfig(lookup: (key: string) => string | undefined, warn:
   const shadowText = choice<EarsKind | 'none' | 'auto'>('TAI_VOICE_LAB_SHADOW_EARS', ['labgpu', 'flux', 'nova', 'none', 'auto'], 'auto');
   const shadow: EarsKind | 'none' = shadowText === 'auto' ? (ears === 'labgpu' ? 'flux' : ears === 'flux' ? 'labgpu' : 'none') : shadowText === ears ? 'none' : shadowText;
   const trace = raw('TAI_VOICE_LAB_TRACE');
+  // 0 = off; otherwise Flux's own range (a value outside it would fail the stream's handshake)
+  const eagerText = raw('TAI_VOICE_LAB_EAGER_EOT');
+  let eagerEot = 0;
+  if (eagerText) {
+    const value = Number(eagerText);
+    if (!Number.isFinite(value) || value < 0 || value > 0.9) warn(`TAI_VOICE_LAB_EAGER_EOT=${JSON.stringify(eagerText)} is not 0 or a number in 0.3..0.9: the eager end of turn stays off`);
+    else eagerEot = value === 0 ? 0 : Math.max(0.3, value);
+  }
   return {
     enabled: raw('TAI_VOICE_LAB') === '1',
+    chain: '',
+    eagerEot,
     ears,
     earsFallback: fallbackEars === ears ? 'none' : fallbackEars,
     shadowEars: shadow,
@@ -172,11 +204,31 @@ export function loadLabConfig(lookup: (key: string) => string | undefined, warn:
       talk: hold('TAI_VOICE_LAB_HOLD_TALK', { completeMs: 2000, incompleteMs: 6000 }),
     },
     coverAfterMs: num('TAI_VOICE_LAB_COVER_MS', 350, 100, 2000),
-    bargeMinVoicedMs: num('TAI_VOICE_LAB_BARGE_MS', 240, 60, 1500),
+    bargeMinVoicedMs: num('TAI_VOICE_LAB_BARGE_MS', 200, 60, 1500),
     bargeRmsFactor: num('TAI_VOICE_LAB_BARGE_FACTOR', 1.5, 1, 4),
+    bargeWindowMs: num('TAI_VOICE_LAB_BARGE_WINDOW_MS', 300, 20, 3000),
     leadMs: num('TAI_VOICE_LAB_LEAD_MS', 500, 100, 2000),
     traceFile: /^\/[A-Za-z0-9._/-]{1,200}$/.test(trace) && !trace.includes('..') ? trace : '',
   };
+}
+
+/**
+ * The configuration of one call that asked for a chain (`?chain=`): the process's settings with the parts the chain names replaced. A name that is not one of the four leaves the settings as they
+ * are (a typo must not turn a call into something else). The recognizer that fails over is the other kind's, as in round 1.
+ */
+export function forChain(base: LabConfig, chain: string | null | undefined): LabConfig {
+  if (!isChainName(chain)) return base;
+  const eager = base.eagerEot > 0 ? base.eagerEot : DEFAULT_EAGER_EOT;
+  switch (chain) {
+    case 'd':
+      return { ...base, chain, ears: 'labgpu', earsFallback: 'flux', shadowEars: 'flux', mouth: 'labgpu', mouthFallback: 'aura', eagerEot: 0 };
+    case 'h':
+      return { ...base, chain, ears: 'labgpu', earsFallback: 'flux', shadowEars: 'flux', mouth: 'labgpu', mouthFallback: 'aura', eagerEot: eager };
+    case 'fd':
+      return { ...base, chain, ears: 'flux', earsFallback: 'labgpu', shadowEars: 'labgpu', mouth: 'labgpu', mouthFallback: 'aura', eagerEot: eager };
+    case 'c':
+      return { ...base, chain, ears: 'flux', earsFallback: 'labgpu', shadowEars: 'labgpu', mouth: 'aura', mouthFallback: 'labgpu', eagerEot: eager };
+  }
 }
 
 /** `DrBerg` is on LabGPU's list of voices and its authorisation is open: never used (the mouth refuses it too, at the first sentence; this stops it at the start). */

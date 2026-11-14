@@ -332,11 +332,15 @@ export function resample(rs, input, step) {
  */
 /**
  * The path of the call's socket under the page's base: `api/voice`, or `api/voice-lab` when the page's address has `?voice=lab` (the owner's hidden way to a call on the self-built
- * chain: docs/VOICE_SELFBUILT.md; the server answers 404 where there is no lab and 403 to anyone but the owner, so the parameter does nothing for a student).
+ * chain: docs/VOICE_SELFBUILT.md; the server answers 404 where there is no lab and 403 to anyone but the owner, so the parameter does nothing for a student). `&chain=d|h|fd|c` asks the lab
+ * for one of its chains (docs amendment A10); any other value is left out, and the server ignores what it does not know.
  */
 export function voiceSocketPath(search = '') {
   try {
-    return new URLSearchParams(search).get('voice') === 'lab' ? 'api/voice-lab' : 'api/voice';
+    const params = new URLSearchParams(search);
+    if (params.get('voice') !== 'lab') return 'api/voice';
+    const chain = params.get('chain');
+    return chain === 'd' || chain === 'h' || chain === 'fd' || chain === 'c' ? `api/voice-lab?chain=${chain}` : 'api/voice-lab';
   } catch {
     return 'api/voice';
   }

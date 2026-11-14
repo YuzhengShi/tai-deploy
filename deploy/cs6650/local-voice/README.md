@@ -16,9 +16,20 @@ TAI_VOICE_LAB_EARS_URL=ws://127.0.0.1:18800/v1/listen?encoding=linear16&sample_r
 TAI_VOICE_LAB_TTS_URL=http://127.0.0.1:18800
 ```
 
-That is all with the default (Supertonic) mouth: the voice speaks at LabGPU's pace (same length for the same sentences), so the engine's tempo stretch (`TAI_VOICE_LAB_TEMPO`, calibrated on LabGPU's 2.69 words a second) stays as it is.
-With `LOCAL_VOICE_TTS_BACKEND=piper` the voice speaks 3.7 words a second and the stretch would make it 4.7: set `TAI_VOICE_LAB_TEMPO=0` as well. The ears URL may carry `keyterm=` values (merged with
-the service's own list) and nothing else that matters; `encoding` must be `linear16` and `sample_rate` 16000 if given (anything else is refused with HTTP 400 before the upgrade).
+With those two the lab uses the service wherever it used LabGPU's services. They do NOT by themselves keep the audio and the text inside: the lab's defaults still stream every call's audio to Deepgram's Flux as
+a second ("shadow") recognizer, fall back to Flux when the ears fail and to Aura when the mouth fails, and a call that asks for `?chain=d|h|fd|c` (the owner's measurement route) gets those parts back whatever the
+settings say. For calls that send nothing to a third party also set
+
+```
+TAI_VOICE_LAB_SHADOW_EARS=none
+TAI_VOICE_LAB_EARS_FALLBACK=none
+TAI_VOICE_LAB_MOUTH_FALLBACK=none
+```
+
+and do not use `?chain=` (a failure of the service is then a failed call, not a silent switch to Deepgram). The language model is a separate matter (the relay). Pace: since amendment A6 the lab runs with
+`TAI_VOICE_LAB_TEMPO=0` (the voice at its natural pace; the owner did not want the 1.2x stretch), and this voice at its natural pace is LabGPU's pace (same length for the same sentences), so leave it at 0. Piper
+speaks 3.7 words a second at its natural pace, faster than LabGPU's. The ears URL may carry `keyterm=` values (merged with the service's own list) and nothing else that matters; `encoding` must be `linear16` and
+`sample_rate` 16000 if given (anything else is refused with HTTP 400 before the upgrade).
 
 ## Run it
 

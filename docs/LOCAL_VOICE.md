@@ -1,13 +1,20 @@
 # The local voice service (design, parameters, measurements)
 
 The service is in `deploy/cs6650/local-voice/` (its `README.md` lists every setting and how to run it). It is the answer to amendment A13 of `docs/VOICE_SELFBUILT.md` ("can what the lab needs from LabGPU be
-replaced by models on our own CPU?") in the form the lab can use: **one Python process that imitates both of LabGPU's interfaces on one loopback port**, so that the lab engine switches to it by changing
+replaced by models on our own CPU?") in the form the lab can use: **one Python process that imitates both of LabGPU's interfaces on one loopback port**, so that the lab engine uses it by changing
 two settings and no code:
 
 ```
 TAI_VOICE_LAB_EARS_URL=ws://127.0.0.1:18800/v1/listen?encoding=linear16&sample_rate=16000&language=en&label=tai-lab
 TAI_VOICE_LAB_TTS_URL=http://127.0.0.1:18800
 ```
+
+**Those two settings make the lab LOCAL IN FUNCTION, not in data.** The lab's own defaults still send each call's audio to Deepgram (a Flux "shadow" recognizer on the same audio, `TAI_VOICE_LAB_SHADOW_EARS`
+`auto` = Flux when the ears are LabGPU's), switch to Flux when the ears fail and to Aura when the mouth fails (`TAI_VOICE_LAB_EARS_FALLBACK`, `TAI_VOICE_LAB_MOUTH_FALLBACK`), and a call that asks for `?chain=d|h|fd|c`
+(the owner's measurement route, `forChain` in `src/voice/lab/config.ts`) gets those parts back whatever the environment says. A call that sends nothing to a third party (the language model aside) needs
+`TAI_VOICE_LAB_SHADOW_EARS=none`, `TAI_VOICE_LAB_EARS_FALLBACK=none` and `TAI_VOICE_LAB_MOUTH_FALLBACK=none` as well, and no `?chain=`; then a failure of the service is a failed call and not a silent switch
+to Deepgram. The lab uses one LabGPU voice name for every mode (`af_bella`), which the service accepts. No code guard or local-only chain has been added: the lab is owner-only today, and the choice is
+the owner's.
 
 The ears are NVIDIA Parakeet-TDT-0.6B-v2 (int8, sherpa-onnx 1.13.8), the engine stage 1 of A13 measured (10.11). The mouth is **Supertonic** (`supertonic` 1.0.0, English model, ONNX Runtime), the engine behind LabGPU's
 adapter, with the voice style F1 at the package defaults: of the ten styles it is the closest to LabGPU's own recordings of two sentences by length (3.73 s against 3.74 s) and pitch (198 Hz against 203 Hz)
@@ -27,7 +34,7 @@ Nothing in the service calls out to a network, and nothing in it ever writes a t
 | a recognizer that sends no partial or final for `silentEarsMs` (8 s) after the onset of speech is given up, and the call falls back to Flux | `agent.ts` `waitingForEarsSince` | a partial at least every few seconds of continuous speech (interims, 3.3) |
 | the mouth's body is raw PCM s16le 24 kHz, a `content-type` that is not JSON or text, and no `X-TTS-Fallback` header; a body that starts with `RIFF` is taken for a WAV | `mouth/labgpu.ts` `streamPcm`, `LabGPUMouth` | exactly that, chunked in about ten pieces; the first four bytes are never `RIFF` (guarded) |
 | a voice name matches `[A-Za-z0-9_.-]{1,64}` and is never `DrBerg`; the lab asks for `af_bella` and never sends `speed` | `checkLabGPUVoice`, `config.ts` | `default`, `af_bella`, `af_heart` and the styles `F1`..`F5`, `M1`..`M5` are accepted, anything else is a 400 |
-| the 'labgpu' mouth is time-stretched by 3.45 / 2.69 (LabGPU's pace) when `TAI_VOICE_LAB_TEMPO` is on | `agent.ts` `tempoFactor` | Supertonic F1 at the package defaults speaks at LabGPU's pace (same length for the same sentences), so TEMPO stays on; Piper (3.7 words a second) needs `TAI_VOICE_LAB_TEMPO=0` |
+| the 'labgpu' mouth is time-stretched by 3.45 / 2.69 when `TAI_VOICE_LAB_TEMPO` is on (to the live voices' pace); since amendment A6 the lab runs with `TAI_VOICE_LAB_TEMPO=0`, the natural pace the owner asked for | `agent.ts` `tempoFactor` | Supertonic F1 at the package defaults speaks at LabGPU's natural pace (same length for the same sentences): leave TEMPO at 0, as it is. Piper speaks 3.7 words a second at its natural pace (faster than LabGPU's) |
 
 ## 2. Shape
 

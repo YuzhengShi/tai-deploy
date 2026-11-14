@@ -280,3 +280,20 @@ The question he answered named these changes: a new container on an internal net
   failed call). The voice is style F1 (`af_bella`); another style is one setting, `TAI_VOICE_LAB_LABGPU_VOICE` (F1 to F5, M1 to M5, then `restart`).
 - **Still to come:** one synthetic call through the lab route with the measuring client, made after 00:01 UTC because the test identity has used 229 of today's minutes and the cap stays 45
   (`~/voice-local/lv-verify.sh`, results in `~/voice-local/verify/<time>/`: the client's log, and what the container logged for the call).
+
+### 9.7 The owner's first calls on it (22:58 and 23:46 UTC) and what he said
+
+**His words after the calls (2026-11-14 about 23:50 UTC):** shadow listening off but the fallbacks NOT off; "the lab's voice sounds unnatural and not fluent; it has not the smooth, human-like conversation feel that Deepgram's has; the reaction is slow too". Applied at once as he said: `TAI_VOICE_LAB_EARS_FALLBACK=flux` and `TAI_VOICE_LAB_MOUTH_FALLBACK=aura` (the lab's own defaults, written out because `tai_live.sh set` cannot unset a key), `TAI_VOICE_LAB_SHADOW_EARS=none` unchanged, one restart at 23:55:21 UTC with no call on. With the fallbacks on, a failure of the local service no longer fails the call: the sentence or the recognizer is taken over by Aura or Flux, and the audio or the text of that part goes to Deepgram. Nothing was used so far: the calls below had no fallback in the trace.
+
+**What the trace says about those two calls** (12 turns; the lab's own `turns.jsonl`, numbers only; the container's log of the same minutes):
+
+| | this call, plain turns (no tool) | the earlier lab turns, all chains (n = 464) |
+|---|---|---|
+| end of speech to the committed turn | p50 535 ms | 893 ms (the local ears finish earlier than LabGPU's and Flux's) |
+| the model's first token after the request | p50 1179 ms | 1172 ms (the same model, the same relay) |
+| a sentence sent to the mouth to its first audio | p50 308 ms, 145 to 2455 ms | LabGPU's GPU 132 ms, Aura 213 ms |
+| end of speech to first audio | p50 1995 ms (n = 9; 1424 to 5494) | 2090 ms (live call L, window of 10.10: 2069 ms) |
+
+So in the steady state the reaction is the same as today's call, about 2 s, and the mouth is 0.2 s slower than LabGPU's or Aura's at the median. What he felt as slow is the first two turns of the first call (3574 and 5494 ms): the mouth took 1206 and 2455 ms for their first sentences. The container's log shows why: at the start of a call the lab renders its whole set of filler phrases through the mouth (`warmFillers`, about 40 short sentences one after another: 22:58:01 to 22:58:21, 0.2 to 1.5 s each), in the same container and on the same 4 CPUs as the recognizer and the real sentences, and the tool host of the call starts at the same time. On LabGPU's GPU that cost nothing; on this CPU the first replies wait behind it. It happens once per process (the phrases stay in the cache: the second and third call had no burst), so every restart of `tai-live` brings it back for the first call after it. The other things he felt are not in the numbers: Supertonic is not Aura (prosody and naturalness are the voice's, and no setting changes them), the pace is LabGPU's natural 2.7 words a second since A6 (the live voices speak 3.45), and the answers were four and five sentences long (he interrupted three times: the barge-in lines of the trace).
+
+**Reading:** by his ears the local mouth does not reproduce today's call, which was the condition of this whole experiment (2026-11-05) and C7's judgement. The local ears did what was asked of them (better than LabGPU's, a little below Flux's on key terms, earlier than both). What would still need a code change if the local mouth were kept: warm the phrase cache at start-up or give it a low priority, and one voice per mode.

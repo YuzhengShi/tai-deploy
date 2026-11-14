@@ -343,7 +343,7 @@ describe('FluxEars events', () => {
     conn.sendTurnInfo('EagerEndOfTurn', { transcript: 'what is paxos', confidence: 0.6 });
     conn.sendTurnInfo('TurnResumed', { transcript: 'what is paxos and' });
     conn.sendTurnInfo('EagerEndOfTurn', { transcript: 'what is paxos and raft' });
-    conn.sendTurnInfo('EndOfTurn', { transcript: 'what is paxos and raft', end_of_turn_confidence: 0.8 });
+    conn.sendTurnInfo('EndOfTurn', { transcript: 'what is paxos and raft', confidence: 0.8 });
     await until(() => h.events.length === 4);
     expect(h.texts()).toEqual(['eager:what is paxos', 'resumed:', 'eager:what is paxos and raft', 'final:what is paxos and raft']);
     expect(h.of('eager').map((e) => typeof e.at)).toEqual(['number', 'number']);

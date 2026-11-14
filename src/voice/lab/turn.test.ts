@@ -27,8 +27,14 @@ describe('judgeTurnText', () => {
     }
   });
 
+  it('complete: "I think so." and its kind (the second tuning call held it 1.8 s)', () => {
+    for (const t of ['I think so.', 'I don\'t think so.', 'I guess so.', 'I hope not.', 'I believe so', 'I suppose so.', 'I do not think so.']) {
+      expect(judgeTurnText(t), t).toBe('complete');
+    }
+  });
+
   it('still incomplete: the same endings without a yes or no, a long sentence, a conjunction, or a trailing comma', () => {
-    for (const t of ['A mutex is.', 'It is not.', 'The leader is.', 'Paxos is.', 'Yes, because', 'Yes, and', 'No, it is not,', 'Yes, I think that when a node fails and the client can.', 'I think it is not.']) {
+    for (const t of ['A mutex is.', 'It is not.', 'The leader is.', 'Paxos is.', 'Yes, because', 'Yes, and', 'No, it is not,', 'Yes, I think that when a node fails and the client can.', 'I think it is not.', 'Ah, so.', 'So.', 'It is so.', 'I think so,']) {
       expect(judgeTurnText(t), t).toBe('incomplete');
     }
   });

@@ -48,6 +48,9 @@ const SUBORDINATORS = new Set(['if', 'when', 'because', 'although', 'though', 'w
 const ANSWER_OPENERS = new Set(['yes', 'yeah', 'yep', 'yup', 'no', 'nope', 'nah', 'sure', 'right', 'exactly', 'correct', 'absolutely', 'definitely']);
 const ANSWER_ENDS = new Set(['is', 'are', 'was', 'were', 'will', 'would', 'should', 'could', 'can', 'must', 'might', 'may', 'does', 'did', 'has', 'had', 'be', 'been', 'not']);
 
+/** "I think so.", "I don't think so.", "I hope not.": "so" and "not" after these verbs end a finished answer, not a clause that goes on. (The second tuning call held "I think so." 1.8 s.) */
+const ANSWER_VERBS = new Set(['think', 'guess', 'hope', 'believe', 'suppose', 'expect', 'imagine', 'say', 'do', 'did']);
+
 const wordsOf = (text: string): string[] => text.toLowerCase().match(/[a-z0-9']+/g) ?? [];
 
 /** Is this text a finished turn, a half-said one, only a filler, or nothing? Pure, tested on real texts (the adapter's own output is in the tests). */
@@ -64,6 +67,7 @@ export function judgeTurnText(text: string): TurnVerdict {
   // "Can you explain what a mutex is?" is a question that ends on "is"
   const questionEnd = asksQuestion && words.length >= 4 && last !== 'a' && last !== 'an' && last !== 'the';
   if (ANSWER_OPENERS.has(words[0]) && ANSWER_ENDS.has(last) && words.length >= 2 && words.length <= 5) return 'complete';
+  if ((last === 'so' || last === 'not') && words.length >= 2 && words.length <= 6 && ANSWER_VERBS.has(words[words.length - 2])) return 'complete';
   if (STRONG_DANGLING.has(last) && !questionEnd) return 'incomplete';
   if (WEAK_DANGLING.has(last) && words.length >= 4 && !asksQuestion) return 'incomplete';
   if (SUBORDINATORS.has(words[0]) && !t.includes(',') && !asksQuestion && words.length >= 3) return 'incomplete';

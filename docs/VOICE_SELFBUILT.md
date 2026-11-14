@@ -163,9 +163,9 @@ With `flux` ears, `StartOfTurn` during agent speech is the trigger (closest to l
 
 ## 6. Per-turn trace
 
-`<data dir>/voice-lab/turns.jsonl` (host: `~/tai-live/tai/data/voice-lab/turns.jsonl`; `tai_live.sh voice-lab` prints the last turns or one call): one JSON line per turn, monotonic milliseconds from the call's start:
+`<data dir>/voice-lab/turns.jsonl` (host: `~/tai-live/tai/data/voice-lab/turns.jsonl`; `tai_live.sh voice lab [N]` prints the last N turns with the waits and their p50/p90): one JSON line per turn, monotonic milliseconds from the call's start:
 `sid, mode, ears, mouth, turn, speechStart, speechEnd (VAD), earsPartialFirst, earsFinal, commit (end of turn), thinkSent, firstToken, firstSentence, ttsSent, ttsFirstByte, firstAudioOut, audioDone,`
-`bargeIn {onset, confirmed, audioStopped, spokenSentences}, functions [{name, startedAt, answeredAt}], fillers [{kind, injectedAt, audioAt}], fallbacks [..], userText (first 80 characters), agentWords, derived {eotWait, total (Deepgram-style), fromSpeechEnd}`.
+`bargeIn {onset, confirmed, audioStopped, spokenSentences}, functions [{name, startedAt, answeredAt}], rounds [{thinkSent, firstToken, afterAnswerMs}] (every request to the model of the turn; `afterAnswerMs` is the engine's part of a function round trip, amendment A3), fillers [{kind, injectedAt, audioAt}], fallbacks [..], userText (first 80 characters), agentWords, derived {eotWait, total (Deepgram-style), fromSpeechEnd}`.
 It holds the owner's own words only (the endpoint is owner-only) and no secret. The per-turn "voice turn latency" journal line is also written by the session from the stand-in's `LatencyReport`.
 
 ## 7. Settings (all optional; the lab is off unless `TAI_VOICE_LAB=1`)

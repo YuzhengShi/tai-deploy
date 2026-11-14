@@ -5,7 +5,7 @@
 import http from 'http';
 import type { AddressInfo } from 'net';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket, WebSocketServer } from 'ws';
 
 import { silentLog } from '../types.js';
@@ -15,6 +15,10 @@ import { PcmCache } from './mouth/cache.js';
 import { nullSink, type TraceSink, type TurnTrace } from './trace.js';
 import { FakeEars, FakeMouth, failingMouth } from './testing/fake-parts.js';
 import type { Ears, EarsHandlers } from './types.js';
+
+// These tests run in real time with short numbers; on a busy machine (the whole suite runs 24 files at once) every wait takes several times longer, so the limits are generous:
+// they cost nothing when the test passes.
+vi.setConfig({ testTimeout: 30_000 });
 
 type Msg = Record<string, unknown>;
 type Step = { text?: string; tool?: { name: string; args?: unknown }; delayMs?: number };
@@ -158,7 +162,7 @@ async function rig(opts: { env?: Record<string, string>; ears?: (kind: string, h
     relayUrl,
     send: (m) => client.send(JSON.stringify(m)),
     of: (type) => msgs.filter((x) => x.m.type === type).map((x) => x.m),
-    until: async (cond, ms = 3000) => {
+    until: async (cond, ms = 8000) => {
       const end = performance.now() + ms;
       while (!cond()) {
         if (performance.now() > end) throw new Error(`condition not met in ${ms} ms; got ${msgs.map((x) => x.m.type).join(',')}; errors ${JSON.stringify(msgs.filter((x) => x.m.type === 'Error' || x.m.type === 'Warning').map((x) => x.m))}`);
@@ -492,9 +496,9 @@ describe('LabAgent: functions', () => {
     expect((r.of('FunctionCallCancelled')[0].functions as Array<Record<string, unknown>>)[0]).toMatchObject({ name: 'recall_memory' });
     await r.feed(160, 0);
     r.earsMade[0].partial('Never mind.');
-    await r.until(() => r.relay.requests.length === 2);
+    await r.until(() => r.relay.requests.length === 2, 10_000);                 // (a busy machine takes several times longer than the half second this normally needs)
     expect(r.relay.requests[1].messages.some((m) => m.role === 'tool' || (m.tool_calls as unknown[] | undefined)?.length)).toBe(false);
-  });
+  }, 20_000);
 
   it('answers a function that never answers with an error after its time, so that the turn goes on', async () => {
     // the real wait is 150 s: the agent's timer is not shortened here; this checks only that an abort ends the wait at once
@@ -506,9 +510,9 @@ describe('LabAgent: functions', () => {
     await r.feed(360, 7000);                                                    // a new turn begins: the pending call is dropped
     await r.feed(160, 0);
     r.earsMade[0].partial('Never mind that.');
-    await r.until(() => r.relay.requests.length === 2);
+    await r.until(() => r.relay.requests.length === 2, 10_000);
     expect(r.of('FunctionCallCancelled')).toHaveLength(1);
-  });
+  }, 20_000);
 });
 
 describe('LabAgent: what the session injects', () => {

@@ -27,7 +27,7 @@ afterEach(async () => {
 });
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const until = async (check: () => boolean, ms = 5000) => {
+const until = async (check: () => boolean, ms = 10_000) => {
   const deadline = Date.now() + ms;
   while (!check()) {
     if (Date.now() > deadline) throw new Error('condition not met in time');

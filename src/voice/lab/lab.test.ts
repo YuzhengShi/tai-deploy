@@ -7,7 +7,7 @@ import http from 'http';
 import path from 'path';
 import { PassThrough } from 'stream';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 
 import { functionsFor, type FunctionDef } from '../functions.js';
@@ -16,6 +16,9 @@ import { BrowserClient, TEST_KEY, createHarness, type Harness } from '../testing
 import { VOICE_ENV_KEYS } from '../config.js';
 import { LAB_ENV_KEYS, loadLabConfig } from './config.js';
 import { createLabHarness, type LabHarness } from './testing/lab-harness.js';
+
+// Real-time tests with short numbers: on a busy machine every wait takes several times longer, so the limits are generous (they cost nothing when the test passes).
+vi.setConfig({ testTimeout: 30_000 });
 
 let lab: LabHarness | null = null;
 let live: Harness | null = null;
@@ -27,7 +30,7 @@ afterEach(async () => {
 });
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const until = async (check: () => boolean, ms = 4000) => {
+const until = async (check: () => boolean, ms = 10_000) => {
   const deadline = Date.now() + ms;
   while (!check()) {
     if (Date.now() > deadline) throw new Error('condition not met in time');

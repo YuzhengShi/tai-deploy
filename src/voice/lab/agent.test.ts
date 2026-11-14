@@ -26,7 +26,7 @@ interface Rig {
   client: WebSocket;
   msgs: Array<{ at: number; m: Msg }>;
   audio: Array<{ at: number; bytes: number }>;
-  relay: { requests: Array<{ messages: Array<Record<string, unknown>>; tools?: unknown[] }>; script: (n: number, body: { messages: Array<Record<string, unknown>> }) => Step[] };
+  relay: { requests: Array<{ messages: Array<Record<string, unknown>>; tools?: unknown[]; at: number }>; script: (n: number, body: { messages: Array<Record<string, unknown>> }) => Step[] };
   earsMade: FakeEars[];
   mouths: Record<string, FakeMouth>;
   traces: TurnTrace[];
@@ -78,7 +78,7 @@ async function rig(opts: { env?: Record<string, string>; ears?: (kind: string, h
     req.on('data', (c) => parts.push(c));
     req.on('end', () => {
       const body = JSON.parse(Buffer.concat(parts).toString()) as { messages: Array<Record<string, unknown>>; tools?: unknown[] };
-      relay.requests.push(body);
+      relay.requests.push({ ...body, at: performance.now() });
       let steps: Step[];
       try {
         steps = relay.script(relay.requests.length, body);
@@ -455,11 +455,14 @@ describe('LabAgent: functions', () => {
     const answeredAt = performance.now();
     r.send({ type: 'FunctionCallResponse', id: call.id, name: 'recall_memory', content: '{"found":"Raft"}' });
     await r.until(() => r.relay.requests.length === 2);
-    const secondRequestAt = performance.now();
+    const secondRequestAt = r.relay.requests[1].at;                              // when the request arrived at the relay, not when the poll noticed it
     const m = r.relay.requests[1].messages;
     expect(m[m.length - 2]).toMatchObject({ role: 'assistant', content: 'Let me check.', tool_calls: [{ id: call.id, function: { name: 'recall_memory' } }] });
     expect(m[m.length - 1]).toEqual({ role: 'tool', tool_call_id: call.id, content: '{"found":"Raft"}' });
-    expect(secondRequestAt - answeredAt).toBeLessThan(100);                      // C5: the engine's part of the round trip, from FunctionCallResponse to the next request
+    // C5: the engine's part of the round trip, from FunctionCallResponse to the next request. Idle it is a few milliseconds; this bound only guards against a gross
+    // regression and does not flake when the machine is busy (the full suite runs 24 files at once). The criterion's 100 ms is read from the trace of the host runs
+    // (the next `thinkSent` minus the function's `answeredAt`), where nothing else is running (amendment A3).
+    expect(secondRequestAt - answeredAt).toBeLessThan(300);
     await r.until(() => r.of('AgentAudioDone').length === 2);
     const lat = r.of('LatencyReport');
     expect(lat).toHaveLength(1);                                                // one report, at the first audio of the answer ("Let me check." is the first sentence)

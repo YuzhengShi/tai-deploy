@@ -21,6 +21,7 @@ const MAX_MESSAGES = 400;
 export class LabHistory {
   private prompt = '';
   private items: ChatMessage[] = [];
+  private repairs = 0;
 
   setPrompt(prompt: string): void {
     this.prompt = prompt;
@@ -127,11 +128,53 @@ export class LabHistory {
     return this.items[this.items.length - 1]?.role === 'user';
   }
 
-  /** The messages for a request: the prompt first (when there is one), then the conversation. */
+  /** The messages for a request: the prompt first (when there is one), then the conversation as a model accepts it (see `valid`). */
   toMessages(): ChatMessage[] {
     const out: ChatMessage[] = [];
     if (this.prompt) out.push({ role: 'system', content: this.prompt });
-    for (const m of this.items) out.push(m.role === 'tool' ? { ...m } : { ...m, ...(m.tool_calls ? { tool_calls: m.tool_calls.map((c) => ({ ...c, function: { ...c.function } })) } : {}) });
+    for (const m of this.valid()) out.push(m.role === 'tool' ? { ...m } : { ...m, ...(m.tool_calls ? { tool_calls: m.tool_calls.map((c) => ({ ...c, function: { ...c.function } })) } : {}) });
+    return out;
+  }
+
+  /** How many times a request had to be repaired since the last call of this (zero: the conversation was always valid). The agent warns when it is not. */
+  takeRepairs(): number {
+    const n = this.repairs;
+    this.repairs = 0;
+    return n;
+  }
+
+  /**
+   * The conversation as a model takes it: an assistant message with calls is followed at once by the replies to ALL of them, and no reply stands without its call (DeepSeek, like OpenAI,
+   * answers 400 to anything else, and a conversation that is refused once is refused for the rest of the call: the first call on the lab was lost that way, 2026-11-14, when a filler was
+   * said between a call and its reply). The sequence should never be wrong; if it is, the request is repaired here (the words of a message whose calls are not all answered stay, the calls
+   * and the replies that did come go) and the repair is counted.
+   */
+  private valid(): ChatMessage[] {
+    const out: ChatMessage[] = [];
+    for (let i = 0; i < this.items.length; i++) {
+      const m = this.items[i];
+      if (m.role === 'tool') {
+        this.repairs++; // a reply that no call before it asked for
+        continue;
+      }
+      if (m.role === 'assistant' && m.tool_calls?.length) {
+        const replies: ChatMessage[] = [];
+        let j = i + 1;
+        while (j < this.items.length && this.items[j].role === 'tool') replies.push(this.items[j++]);
+        const answered = new Set(replies.map((r) => (r as { tool_call_id: string }).tool_call_id));
+        if (m.tool_calls.every((c) => answered.has(c.id))) {
+          const asked = new Set(m.tool_calls.map((c) => c.id));
+          out.push(m, ...replies.filter((r) => asked.has((r as { tool_call_id: string }).tool_call_id)));
+          if (replies.some((r) => !asked.has((r as { tool_call_id: string }).tool_call_id))) this.repairs++;
+        } else {
+          this.repairs++;
+          if (m.content.trim()) out.push({ role: 'assistant', content: m.content });
+        }
+        i = j - 1;
+        continue;
+      }
+      out.push(m);
+    }
     return out;
   }
 
@@ -144,6 +187,11 @@ export class LabHistory {
     const t = text.trim();
     if (!t) return;
     const last = this.items[this.items.length - 1];
+    if (role === 'assistant' && last && last.role === 'assistant' && last.tool_calls?.length) {
+      // said while the calls run (a filler: "one sec."): it goes into the words of the message that holds the calls, so that their replies still follow that message directly
+      last.content = `${last.content} ${t}`.trim();
+      return;
+    }
     if (last && last.role === role && !('tool_calls' in last && last.tool_calls?.length)) last.content = `${last.content} ${t}`.trim();
     else this.items.push({ role, content: t });
     this.trim();

@@ -622,7 +622,8 @@ export class LabAgent {
   /** A line the session has the agent say (the greeting, a filler, an opener): spoken as it is, and remembered as the agent's. */
   private sayAsAgent(text: string): void {
     const tag = this.nextTag(false);
-    this.tail.push({ tag, text });
+    // said while a function runs (a filler): the history puts it into the message that holds the calls, so it belongs to the words before the calls, not to the answer after them
+    (this.pending.size > 0 ? this.callTail : this.tail).push({ tag, text });
     this.history.addAssistant(text);
     this.speaker.say(text, tag);
   }
@@ -714,13 +715,16 @@ export class LabAgent {
     if (round > 0 && run.lastAnswerRel !== null) roundRec.afterAnswerMs = roundRec.thinkSent - run.lastAnswerRel;
     run.trace.rounds.push(roundRec);
     run.thinking = true;
+    const messages = this.history.toMessages();
+    const repaired = this.history.takeRepairs();
+    if (repaired) this.log.warn({ repaired }, 'voice lab: the conversation held a function call without its reply (or a reply without its call); the request was repaired');
     const result = await think({
       url: cfg.url,
       headers: cfg.headers,
       model: cfg.model,
       temperature: cfg.temperature,
       tools: cfg.tools,
-      messages: this.history.toMessages(),
+      messages,
       signal: run.controller.signal,
       clock: this.clock,
       fetchImpl: this.deps.fetchImpl,

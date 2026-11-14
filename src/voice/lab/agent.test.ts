@@ -49,6 +49,22 @@ afterEach(async () => {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** What DeepSeek and OpenAI answer 400 to: a message with calls not directly followed by a reply to each of them, or a reply with no call before it (the first lab call was lost to it). */
+function sequenceProblem(messages: Array<Record<string, unknown>>): string | null {
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    const calls = (m.tool_calls as Array<{ id: string }> | undefined) ?? [];
+    if (m.role === 'assistant' && calls.length) {
+      const open = new Set(calls.map((c) => c.id));
+      let j = i + 1;
+      while (j < messages.length && messages[j].role === 'tool') open.delete(String(messages[j++].tool_call_id));
+      if (open.size) return `message ${i} has calls with no reply directly after it`;
+      i = j - 1;
+    } else if (m.role === 'tool') return `message ${i} is a reply with no call before it`;
+  }
+  return null;
+}
+
 function sse(steps: Step[], res: http.ServerResponse): void {
   const chunk = (delta: Record<string, unknown>, finish: string | null = null) => `data: ${JSON.stringify({ id: 'x', object: 'chat.completion.chunk', choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
   res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -83,6 +99,12 @@ async function rig(opts: { env?: Record<string, string>; ears?: (kind: string, h
     req.on('end', () => {
       const body = JSON.parse(Buffer.concat(parts).toString()) as { messages: Array<Record<string, unknown>>; tools?: unknown[] };
       relay.requests.push({ ...body, at: performance.now() });
+      const problem = sequenceProblem(body.messages);
+      if (problem) {
+        res.writeHead(400, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: `An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id' (${problem})` } }));
+        return;
+      }
       let steps: Step[];
       try {
         steps = relay.script(relay.requests.length, body);
@@ -499,6 +521,47 @@ describe('LabAgent: functions', () => {
     await r.until(() => r.relay.requests.length === 2, 10_000);                 // (a busy machine takes several times longer than the half second this normally needs)
     expect(r.relay.requests[1].messages.some((m) => m.role === 'tool' || (m.tool_calls as unknown[] | undefined)?.length)).toBe(false);
   }, 20_000);
+
+  it('a filler said while a function runs does not come between the call and its reply: the next request is a valid conversation, and the filler is among the words of the call', async () => {
+    const r = await rig();
+    await started(r);
+    r.relay.script = (n) => (n === 1 ? [{ text: 'Let me check. ' }, { tool: { name: 'recall_memory' } }] : [{ text: 'You asked about Raft.' }]);
+    await say(r, 'What did I ask before?');
+    await r.until(() => r.of('FunctionCallRequest').length === 1);
+    await r.until(() => r.of('AgentAudioDone').length === 2);                  // "Let me check." has been played out: the session may inject its filler now
+    r.send({ type: 'InjectAgentMessage', message: 'one sec.', behavior: 'queue' });
+    await r.until(() => r.of('ConversationText').some((m) => m.content === 'one sec.'));
+    await r.until(() => r.of('AgentAudioDone').length === 3);
+    const call = (r.of('FunctionCallRequest')[0].functions as Array<Record<string, unknown>>)[0];
+    r.send({ type: 'FunctionCallResponse', id: call.id, name: 'recall_memory', content: '{"found":"Raft"}' });
+    await r.until(() => r.relay.requests.length === 2);
+    await r.until(() => r.of('ConversationText').some((m) => m.content === 'You asked about Raft.'));
+    expect(r.of('Error')).toEqual([]);
+    const m = r.relay.requests[1].messages;
+    expect(m[m.length - 2]).toMatchObject({ role: 'assistant', tool_calls: [{ id: call.id }] });
+    expect(m[m.length - 2].content).toContain('Let me check.');
+    expect(m[m.length - 2].content).toContain('one sec.');
+    expect(m[m.length - 1]).toMatchObject({ role: 'tool', tool_call_id: call.id });
+  });
+
+  it('a student who talks over the filler while a function runs: the call is cancelled and the next request is a valid conversation', async () => {
+    const r = await rig({ mouths: { labgpu: new FakeMouth({ name: 'labgpu', ms: 2500 }), aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 500 }) } });
+    await started(r, { greeting: null });
+    r.relay.script = (n) => (n === 1 ? [{ text: 'Let me check that for you now. ' }, { tool: { name: 'recall_memory' } }] : [{ text: 'Okay.' }]);
+    await say(r, 'What did I ask before?');
+    await r.until(() => r.of('FunctionCallRequest').length === 1);
+    await r.until(() => r.of('AgentAudioDone').length === 1, 12_000);          // the sentence before the call has been played out
+    r.send({ type: 'InjectAgentMessage', message: 'one sec.', behavior: 'queue' });
+    await r.until(() => r.of('ConversationText').some((m) => m.content === 'one sec.'));
+    await r.feed(360, 7000);                                                    // talks over the filler while the function still runs
+    await r.until(() => r.of('FunctionCallCancelled').length === 1);
+    await r.feed(160, 0);
+    r.earsMade[0].partial('Never mind.');
+    await r.until(() => r.relay.requests.length === 2, 10_000);
+    await r.until(() => r.of('ConversationText').some((m) => m.content === 'Okay.'), 10_000);
+    expect(r.of('Error')).toEqual([]);
+    expect(r.relay.requests[1].messages.some((m) => m.role === 'tool' || (m.tool_calls as unknown[] | undefined)?.length)).toBe(false);
+  }, 30_000);
 
   it('answers a function that never answers with an error after its time, so that the turn goes on', async () => {
     // the real wait is 150 s: the agent's timer is not shortened here; this checks only that an abort ends the wait at once

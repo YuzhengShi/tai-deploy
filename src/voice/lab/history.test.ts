@@ -59,7 +59,9 @@ describe('LabHistory', () => {
     const h = new LabHistory();
     h.addUser('hi');
     h.addToolCalls([{ id: 'c1', type: 'function', function: { name: 'recall_memory', arguments: '{}' } }]);
+    h.addToolResult('c1', '{}');                                     // (a request is only made with the reply in: a call with no reply is repaired away, see below)
     expect(h.toMessages()[1]).toMatchObject({ role: 'assistant', content: '', tool_calls: [{ id: 'c1' }] });
+    expect(h.toMessages()[2]).toMatchObject({ role: 'tool', tool_call_id: 'c1' });
   });
 
   it('calls without replies are taken out, and what was said before them stays', () => {
@@ -99,6 +101,59 @@ describe('LabHistory', () => {
     h.addUser('wait');
     h.cutTail('Raft elects a leader.', '');
     expect(h.toMessages()).toEqual([{ role: 'user', content: 'explain Raft' }, { role: 'assistant', content: 'Raft elects a leader.' }, { role: 'user', content: 'wait' }]);
+  });
+
+  it('a line said while the calls run (a filler) goes into the words of the message that holds them, and the replies still follow it directly', () => {
+    const h = new LabHistory();
+    h.addUser('What did I ask before?');
+    h.addAssistant('Let me check.');
+    h.addToolCalls([{ id: 'c1', type: 'function', function: { name: 'recall_memory', arguments: '{}' } }]);
+    h.addAssistant('One sec.');                       // the filler, while the function runs
+    h.addToolResult('c1', '{"found":"Raft"}');
+    h.addAssistant('You asked about Raft.');
+    expect(h.toMessages()).toEqual([
+      { role: 'user', content: 'What did I ask before?' },
+      { role: 'assistant', content: 'Let me check. One sec.', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'recall_memory', arguments: '{}' } }] },
+      { role: 'tool', tool_call_id: 'c1', content: '{"found":"Raft"}' },
+      { role: 'assistant', content: 'You asked about Raft.' },
+    ]);
+    expect(h.takeRepairs()).toBe(0);
+  });
+
+  it('a filler between a call with no words and its reply makes the words of the call message', () => {
+    const h = new LabHistory();
+    h.addUser('Check my memory.');
+    h.addToolCalls([{ id: 'c1', type: 'function', function: { name: 'recall_memory', arguments: '{}' } }]);
+    h.addAssistant('One sec.');
+    h.addToolResult('c1', 'ok');
+    const m = h.toMessages();
+    expect(m[1]).toMatchObject({ role: 'assistant', content: 'One sec.' });
+    expect(m[2]).toEqual({ role: 'tool', tool_call_id: 'c1', content: 'ok' });
+    expect(h.takeRepairs()).toBe(0);
+  });
+
+  it('repairs a request whose calls have no replies, or whose replies have no calls (a model refuses such a conversation for the rest of the call), and counts it', () => {
+    const h = new LabHistory();
+    h.addUser('q');
+    h.addAssistant('Let me look.');
+    h.addToolCalls([{ id: 'c1', type: 'function', function: { name: 'a', arguments: '{}' } }, { id: 'c2', type: 'function', function: { name: 'b', arguments: '{}' } }]);
+    h.addToolResult('c1', 'only the first answered');
+    h.addUser('and then');                            // the student spoke before the second came back, and nothing dropped the calls
+    h.addToolResult('orphan', 'a reply nobody asked for');
+    expect(h.toMessages()).toEqual([
+      { role: 'user', content: 'q' },
+      { role: 'assistant', content: 'Let me look.' },
+      { role: 'user', content: 'and then' },
+    ]);
+    expect(h.takeRepairs()).toBeGreaterThanOrEqual(2);
+    expect(h.takeRepairs()).toBe(0);
+    // a call with no words and no reply goes altogether
+    const g = new LabHistory();
+    g.addUser('q');
+    g.addToolCalls([{ id: 'c1', type: 'function', function: { name: 'a', arguments: '{}' } }]);
+    g.addUser('again');
+    expect(g.toMessages()).toEqual([{ role: 'user', content: 'q' }, { role: 'user', content: 'again' }]);
+    expect(g.takeRepairs()).toBe(1);
   });
 
   it('keeps a bounded conversation and starts it at a student turn', () => {

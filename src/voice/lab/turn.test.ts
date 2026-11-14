@@ -21,6 +21,18 @@ describe('judgeTurnText', () => {
     }
   });
 
+  it('complete: a short yes or no answer may end on an auxiliary or "not" (the owner\'s first call was held 1.8 s on "No, it\'s not.")', () => {
+    for (const t of ['No, it\'s not.', 'Yes, it is.', 'Yes, I can.', 'No, it does not.', 'Yeah, it was.', 'Nope, it is not.', 'Sure, I would.', 'Yes, it should be.', 'No it is not']) {
+      expect(judgeTurnText(t), t).toBe('complete');
+    }
+  });
+
+  it('still incomplete: the same endings without a yes or no, a long sentence, a conjunction, or a trailing comma', () => {
+    for (const t of ['A mutex is.', 'It is not.', 'The leader is.', 'Paxos is.', 'Yes, because', 'Yes, and', 'No, it is not,', 'Yes, I think that when a node fails and the client can.', 'I think it is not.']) {
+      expect(judgeTurnText(t), t).toBe('incomplete');
+    }
+  });
+
   it('incomplete: the adapter punctuates a sentence the student has not finished', () => {
     for (const t of [
       'The thing I do not get about Paxos is.',          // the adapter's own text for a 1.5 s pause

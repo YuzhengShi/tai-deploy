@@ -41,6 +41,13 @@ const WEAK_DANGLING = new Set(['that', 'like', 'also', 'just', 'very', 'really',
 /** An opening clause that needs a main clause after it: "If I put the lock around the whole function" is not finished without the "then ..." that follows. */
 const SUBORDINATORS = new Set(['if', 'when', 'because', 'although', 'though', 'while', 'since', 'unless', 'once', 'whenever', 'whereas', 'after', 'before', 'as', 'until']);
 
+/**
+ * A short answer that opens with yes or no ends on an auxiliary or "not" and is finished ("Yes, it is.", "No, it's not.", "Yes, I can."). The owner's first call on the lab was held
+ * 1.8 s on "No, it's not." because "not" is a dangling word. Only auxiliaries, modals and "not" count here: "Yes, because" and "Yes, and" still have more to come.
+ */
+const ANSWER_OPENERS = new Set(['yes', 'yeah', 'yep', 'yup', 'no', 'nope', 'nah', 'sure', 'right', 'exactly', 'correct', 'absolutely', 'definitely']);
+const ANSWER_ENDS = new Set(['is', 'are', 'was', 'were', 'will', 'would', 'should', 'could', 'can', 'must', 'might', 'may', 'does', 'did', 'has', 'had', 'be', 'been', 'not']);
+
 const wordsOf = (text: string): string[] => text.toLowerCase().match(/[a-z0-9']+/g) ?? [];
 
 /** Is this text a finished turn, a half-said one, only a filler, or nothing? Pure, tested on real texts (the adapter's own output is in the tests). */
@@ -56,6 +63,7 @@ export function judgeTurnText(text: string): TurnVerdict {
   const asksQuestion = /\?\s*$/.test(t);
   // "Can you explain what a mutex is?" is a question that ends on "is"
   const questionEnd = asksQuestion && words.length >= 4 && last !== 'a' && last !== 'an' && last !== 'the';
+  if (ANSWER_OPENERS.has(words[0]) && ANSWER_ENDS.has(last) && words.length >= 2 && words.length <= 5) return 'complete';
   if (STRONG_DANGLING.has(last) && !questionEnd) return 'incomplete';
   if (WEAK_DANGLING.has(last) && words.length >= 4 && !asksQuestion) return 'incomplete';
   if (SUBORDINATORS.has(words[0]) && !t.includes(',') && !asksQuestion && words.length >= 3) return 'incomplete';

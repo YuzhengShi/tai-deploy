@@ -463,6 +463,11 @@ function buildContainerArgs(mounts: VolumeMount[], containerName: string, isMain
   // Which harness runs the conversation in the container (entrypoint.sh picks the runner by it)
   args.push('-e', `TAI_HARNESS=${agentHarness()}`);
 
+  // The image has ONNX Runtime in it (PyMuPDF 2.0, which reads every PDF and Office file here, imports it), and the pip builds report to Microsoft's collector from the moment they are imported unless
+  // told not to (measured for 1.32.0 on 2026-11-14, docs/LOCAL_VOICE.md, the opening section; the agent image holds 1.31.1, not measured, and carries the same collector strings). Off for every container this function starts: the text agent,
+  // the scheduled tasks and the voice tool host, whatever image tag is run, with no rebuild.
+  args.push('-e', 'ORT_DISABLE_TELEMETRY=1');
+
   // Resource limits — prevent runaway containers from exhausting host
   args.push('--memory', CONTAINER_MEMORY_LIMIT);
   args.push('--cpus', CONTAINER_CPU_LIMIT);

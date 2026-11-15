@@ -224,7 +224,7 @@ describe('container-runner harness choice', () => {
     delete process.env.TAI_HARNESS;
   });
 
-  async function harnessOfSpawn(): Promise<string | undefined> {
+  async function argsOfSpawn(): Promise<string[]> {
     const resultPromise = runContainerAgent(testGroup, testInput, () => {}, vi.fn(async () => {}));
     await vi.advanceTimersByTimeAsync(10);
     const calls = vi.mocked(spawn).mock.calls;
@@ -232,8 +232,19 @@ describe('container-runner harness choice', () => {
     fakeProc.emit('close', 0);
     await vi.advanceTimersByTimeAsync(10);
     await resultPromise;
-    return args.find((a) => a.startsWith('TAI_HARNESS='));
+    return args;
   }
+
+  async function harnessOfSpawn(): Promise<string | undefined> {
+    return (await argsOfSpawn()).find((a) => a.startsWith('TAI_HARNESS='));
+  }
+
+  it('starts the container with ONNX Runtime\'s telemetry switched off (PyMuPDF loads it in the image, and it reports at import unless told not to)', async () => {
+    const args = await argsOfSpawn();
+    const at = args.indexOf('ORT_DISABLE_TELEMETRY=1');
+    expect(at).toBeGreaterThan(0);
+    expect(args[at - 1]).toBe('-e');
+  });
 
   it('runs pi unless the orchestrator is told to run Claude Code', async () => {
     expect(agentHarness()).toBe('pi');

@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice listening test</title>
+<style>
+  :root { --bg: #fafafa; --fg: #1a1a1a; --muted: #666; --card: #ffffff; --line: #d8d8d8; --accent: #1f5fbf; --accent-fg: #ffffff; --ok: #1a7f37; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #16181c; --fg: #e8e8e8; --muted: #9aa0a6; --card: #1f2227; --line: #3a3f46; --accent: #6ea8fe; --accent-fg: #0b1a33; --ok: #56d364; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px 18px 14px; margin: 14px 0; }
+  .zh { color: var(--muted); }
+  label.name { display: block; margin: 14px 0 6px; font-weight: 600; }
+  input[type=text] { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); width: 14rem; }
+  button { font: inherit; padding: 9px 18px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-fg); cursor: pointer; }
+  button[disabled] { opacity: .45; cursor: default; }
+  button.ghost { background: transparent; color: var(--accent); }
+  .row { margin: 18px 0 6px; }
+  .q { font-weight: 600; }
+  .scale { display: flex; gap: 8px; margin: 8px 0 2px; flex-wrap: wrap; }
+  .scale label { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 56px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+  .scale input { margin: 0; }
+  .ends { display: flex; justify-content: space-between; color: var(--muted); font-size: .88rem; max-width: 440px; }
+  .progress { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 6px 0 14px; }
+  .progress > div { height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+  .status { color: var(--muted); margin-left: 10px; }
+  .ok { color: var(--ok); font-weight: 600; }
+  pre { white-space: pre-wrap; word-break: break-all; font-size: .8rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Voice listening test</h1>
+  <p class="sub" id="sub">About 6 minutes. Nothing leaves this computer. / 约 6 分钟，数据不会离开这台电脑。</p>
+
+  <section id="intro" class="card">
+    <p>You will hear <b id="n">N</b> short clips of a tutor explaining a computer-science idea, about 16 seconds each. For every clip, give two ratings from 1 to 5:</p>
+    <ul>
+      <li><b>Naturalness</b>: does it sound like a real person talking?</li>
+      <li><b>Continuity</b>: does it sound like one continuous speech, or like separate sentences put one after another?</li>
+    </ul>
+    <p>Use headphones. Set a comfortable volume once and leave it. You can replay a clip twice. There are no right answers, and some clips are much worse than others, so use the whole scale.</p>
+    <p class="zh">你会听到 <b class="nn">N</b> 段助教讲解计算机概念的短录音，每段约 16 秒。每段请打两个 1 到 5 的分：<b>自然度</b>（像不像真人在说话）和<b>连贯度</b>（是一整段连续的话，还是一句一句拼起来的）。戴耳机，音量调一次就不要再动。每段可以再听两遍。没有标准答案，有些录音会明显更差，请用满整个量表。</p>
+    <label class="name" for="who">Name or label / 名字或标签</label>
+    <input id="who" type="text" value="owner" maxlength="40" autocomplete="off">
+    <p><button id="start">Start / 开始</button></p>
+  </section>
+
+  <section id="trial" class="card" hidden>
+    <div class="progress"><div id="bar"></div></div>
+    <div><b id="pos"></b></div>
+    <p>
+      <button id="play">Play / 播放</button>
+      <span class="status" id="pstat"></span>
+    </p>
+    <audio id="audio" preload="auto"></audio>
+
+    <div class="row">
+      <div class="q">Naturalness / 自然度: does it sound like a real person talking?</div>
+      <div class="scale" id="s-nat"></div>
+      <div class="ends"><span>1 very unnatural / 很不自然</span><span>5 completely natural / 完全自然</span></div>
+    </div>
+    <div class="row">
+      <div class="q">Continuity / 连贯度: one continuous speech, or separate sentences?</div>
+      <div class="scale" id="s-con"></div>
+      <div class="ends"><span>1 separate sentences / 一句一句拼起来</span><span>5 one continuous speech / 一整段连续</span></div>
+    </div>
+    <p style="margin-top:18px"><button id="next" disabled>Next / 下一段</button></p>
+  </section>
+
+  <section id="done" class="card" hidden>
+    <p class="ok" id="saved">Saving...</p>
+    <p id="where"></p>
+    <p><button class="ghost" id="dl" hidden>Download a copy / 下载一份</button></p>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var ids = [], order = [], i = 0, plays = 0, playedFully = false, listenMs = 0, lastPlayAt = 0;
+  var ratings = {}, cur = { nat: 0, con: 0 }, started = '', result = null;
+
+  function shuffle(a) {
+    var b = a.slice(), r = new Uint32Array(b.length);
+    (window.crypto || window.msCrypto).getRandomValues(r);
+    for (var k = b.length - 1; k > 0; k--) { var j = r[k] % (k + 1); var t = b[k]; b[k] = b[j]; b[j] = t; }
+    return b;
+  }
+  function scale(el, key) {
+    el.innerHTML = '';
+    for (var v = 1; v <= 5; v++) {
+      var l = document.createElement('label');
+      l.innerHTML = '<input type="radio" name="' + key + '" value="' + v + '"><span>' + v + '</span>';
+      l.firstChild.addEventListener('change', function (e) { cur[key] = +e.target.value; check(); });
+      el.appendChild(l);
+    }
+  }
+  function check() { $('next').disabled = !(cur.nat && cur.con && playedFully); }
+
+  function show(n) {
+    ['intro', 'trial', 'done'].forEach(function (k) { $(k).hidden = k !== n; });
+  }
+  function load(k) {
+    cur = { nat: 0, con: 0 }; plays = 0; playedFully = false; listenMs = 0;
+    scale($('s-nat'), 'nat'); scale($('s-con'), 'con');
+    $('pos').textContent = 'Clip ' + (k + 1) + ' of ' + order.length;
+    $('bar').style.width = (100 * k / order.length) + '%';
+    $('pstat').textContent = 'Listen to the whole clip first / 请先完整听一遍';
+    $('play').disabled = false;
+    var a = $('audio');
+    a.src = 'clips/' + order[k] + '.wav';
+    a.load();
+    check();
+  }
+
+  $('audio').addEventListener('play', function () { plays++; lastPlayAt = Date.now(); $('play').disabled = true; $('pstat').textContent = 'Playing / 播放中 (' + plays + ')'; });
+  $('audio').addEventListener('pause', function () { if (lastPlayAt) { listenMs += Date.now() - lastPlayAt; lastPlayAt = 0; } });
+  $('audio').addEventListener('ended', function () {
+    if (lastPlayAt) { listenMs += Date.now() - lastPlayAt; lastPlayAt = 0; }
+    playedFully = true;
+    $('play').disabled = plays >= 3;
+    $('pstat').textContent = plays >= 3 ? 'No more replays / 不能再重听' : 'Done. You can replay it ' + (3 - plays) + ' more time(s). / 还可重听 ' + (3 - plays) + ' 次';
+    check();
+  });
+  $('play').addEventListener('click', function () { var a = $('audio'); a.currentTime = 0; a.play(); });
+
+  $('start').addEventListener('click', function () {
+    started = new Date().toISOString();
+    order = shuffle(ids);
+    i = 0; show('trial'); load(0);
+  });
+  $('next').addEventListener('click', function () {
+    ratings[order[i]] = { naturalness: cur.nat, continuity: cur.con, plays: plays, listen_ms: listenMs };
+    i++;
+    if (i < order.length) { load(i); return; }
+    finish();
+  });
+
+  function finish() {
+    show('done');
+    result = { version: 1, participant: $('who').value.trim() || 'anonymous', started: started, finished: new Date().toISOString(), order: order, ratings: ratings, userAgent: navigator.userAgent };
+    try { localStorage.setItem('voice-listening-test-last', JSON.stringify(result)); } catch (e) {}
+    fetch('/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(result) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { $('saved').textContent = 'Saved. Thank you! / 已保存，谢谢！'; $('where').textContent = j.file || ''; })
+      .catch(function () { $('saved').textContent = 'Could not reach the local server: please download the copy. / 没连上本地服务，请下载一份。'; $('dl').hidden = false; });
+    $('dl').addEventListener('click', function () {
+      var b = new Blob([JSON.stringify(result, null, 1)], { type: 'application/json' });
+      var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'listening-' + result.participant + '.json'; a.click();
+    });
+  }
+
+  fetch('manifest.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (m) {
+    ids = m.ids;
+    $('n').textContent = ids.length;
+    Array.prototype.forEach.call(document.getElementsByClassName('nn'), function (e) { e.textContent = ids.length; });
+  }).catch(function () { $('sub').textContent = 'manifest.json not found: start the page through serve.py'; $('start').disabled = true; });
+})();
+</script>
+</body>
+</html>

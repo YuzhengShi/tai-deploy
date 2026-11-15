@@ -20,8 +20,8 @@ the numbers cannot choose the rule. The results are in `docs/LOCAL_VOICE.md` 9.2
 | `aura-mars` | the live interviewer's voice | Aura-2 `aura-2-mars-en`, `speed=1.2`, one request per sentence |
 | `local-F1` | the deployed local voice | the running container's `/tts`, `voice=F1`, `speed=1.2` (engine speed 1.05 x 1.2), 5 steps; per-sentence clips are played back to back as the lab plays them; also one request for the whole passage; the lab's fixed +9 dB gain with its soft limiter is applied afterwards (the arithmetic of `src/voice/lab/mouth/level.ts`) |
 
-Sensitivity rows for the local voice: no gain; 16 and 24 steps (rendered on the PC by the same `localvoice.tts` code, after checking that it reproduces the container byte for byte at 5 steps); style F2;
-the engine's natural speed (1.0).
+Sensitivity rows for the local voice: no gain; 16 and 24 steps (rendered on the PC by the same `localvoice.tts` code, after checking that it gives the container's clip lengths exactly and its speech level at
+5 steps: `render_local_pc.py`); style F2; the engine's natural speed (1.0).
 
 ## Texts
 
@@ -33,7 +33,9 @@ the engine's natural speed (1.0).
 2. Level. Every clip is set to the same speech level (RMS of the voiced frames, -16.0 dBFS, the live voice's level of 9.13) with the lab's soft limiter before it is scored: the headline numbers. The as-heard levels
    (Flux and Aura as rendered, the local voice with +9 dB and with no gain) are scored too, as sensitivity rows, so that the predictor's response to level is itself reported.
 3. One resampler to 16 kHz (`localvoice.tts.resample`) and leading/trailing silence trimmed to 100 ms for every clip.
-4. Flux and Aura vary from run to run: two runs of each, the sentence's score is the mean of its runs. The local voice is deterministic: one run, and one re-render of one passage to confirm it.
+4. Every voice varies from run to run: Flux and Aura in pace and prosody (about 2 s per passage, 9.12), the local voice in its waveform (found while rendering: its clip lengths repeat exactly, but the vocoder
+   starts from fresh noise, and two renders of one sentence are uncorrelated). So two runs of each, and a sentence's score is the mean of its runs. The local voice's two runs are both the container's; the PC's
+   5-step render is a third, used only to check that the PC makes the container's voice.
 5. The unit of analysis is the passage (n = 10), not the sentence: sentences of one passage are not independent.
 
 ## Measures
@@ -43,8 +45,9 @@ the engine's natural speed (1.0).
 * **B. Checks of the predictor, read BEFORE any voice's score:**
   B1. Degradations of Flux clips: a copy band-limited to 8 kHz and a copy with white noise at 20 dB SNR must both score below the clean clip; and a level sweep (-20, -10, 0 dB, +9 dB with the limiter) is
   reported (a flat line means the predictor is blind to level, a slope means a 10 dB handicap would have been counted against the quiet voices).
-  B2. The owner's earlier verdicts: the samples `*-s3.wav` and `*-s6.wav` (two sentences in many voices; he rejected Piper and Kokoro and liked LabGPU's voice and Supertonic's F1 to F5 and M1 to M5). The predictor "tracks
-  his ear" if the area under the ROC curve (liked clip scored above rejected clip, pairs formed within one sentence) is at least 0.90; "weakly" from 0.70 to 0.90; "does not" below 0.70.
+  B2. The owner's earlier verdicts: the samples `*-s3.wav` and `*-s6.wav` (two sentences in many voices; he rejected Piper and Kokoro and liked LabGPU's voice and Supertonic's F1 to F4 and M1 to M5; F5 he did not
+  name, so it is in neither group). The predictor "tracks his ear" if the area under the ROC curve (liked clip scored above rejected clip, pairs formed within one sentence) is at least 0.90; "weakly" from
+  0.70 to 0.90; "does not" below 0.70. (Amended before any score existed: the first version of this line said F1 to F5.)
   If B1 fails or B2 gives "does not", the voice scores are still reported but labelled "not credible for this question".
 * **C. Intelligibility**: word error rate of the local recognizer (Parakeet-TDT-0.6B-v2 int8, no key-term layer) on the per-sentence clips against the text, numbers and a few compound terms normalized
   (`waitgroup`, `mapreduce`, `dockerfile`). Corpus WER per voice with a bootstrap interval over passages. It also shows which course terms a voice mispronounces. Descriptive; no margin.
@@ -79,3 +82,8 @@ the engine's natural speed (1.0).
 
 No audio leaves the PC: scoring, recognition and the listening test all run locally. What goes to Deepgram is the 40 generic sentences as text, to make the live voices, as the live call does anyway
 (`mip_opt_out=true`). The cost of the renders is reported from list prices and the characters sent.
+
+## Amendments made before any score existed
+
+1. B2's "liked" group is F1 to F4 and M1 to M5 (the first version said F1 to F5; he did not name F5).
+2. The local voice is not deterministic in its waveform (control 4 above), found when the first renders were compared; the first version said "deterministic: one run".

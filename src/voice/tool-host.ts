@@ -23,7 +23,7 @@ export interface ToolResult {
 }
 
 export interface ToolHost {
-  /** Resolves when the container says ready; rejects when it says failed, exits, or is not ready in 30 s. */
+  /** Resolves when the container says ready; rejects when it says failed, exits, or is not ready in time (TOOL_HOST_READY_TIMEOUT_MS). */
   start(): Promise<void>;
   call(tool: string, args: Record<string, unknown>, opts?: { server?: string; timeoutMs?: number }): Promise<ToolResult>;
   builtin(name: 'web_fetch' | 'read_file', args: Record<string, unknown>): Promise<ToolResult>;
@@ -46,6 +46,7 @@ export interface SpawnedToolHost {
 export interface DockerToolHostOptions {
   /** Starts the container (src/container-runner.ts spawnToolHost for this student's group). */
   spawn: () => Promise<SpawnedToolHost>;
+  /** How long the container gets to say ready (default TOOL_HOST_READY_TIMEOUT_MS, 60 s; the setting is TAI_VOICE_TOOLHOST_READY_SEC). */
   readyTimeoutMs?: number;
   /** How long the host waits for one answer; the container gives up on a tool at 60 s and says so. */
   callTimeoutMs?: number;
@@ -59,6 +60,44 @@ const READY = '@@TOOLHOST ready@@';
 const FAILED = '@@TOOLHOST failed@@';
 const ANSWER = '@@TOOLHOST@@';
 const MAX_LINE = 4 * 1024 * 1024;
+
+/**
+ * How long a container gets to say READY, counted from the moment the host starts it. It has to hold two things. The container's own start on this
+ * machine: `docker run` took 4.7 to 17.7 s to reach the network join in 21 tool hosts (3.7 to 16 s for the text agents'), the disk being slow. And the
+ * container's wait for its MCP servers: it says READY only when EVERY server has connected or given up, gives a server 20 s (`connectTimeoutMs` in
+ * container/agent-runner/src/tool-host.ts) and up to 3.5 s more to close one that did not answer. The Python server of the course knowledge (leanrag)
+ * does not answer in 20 s while its libraries are out of the page cache (1128 files, 35 MB to import; docs/VOICE.md, "A tool host that is slow to
+ * come up"). 30 s was less than 18 + 20 + 3.5: six calls of the voice lab between 2026-11-14 and 2026-11-15 closed a container that was seconds from ready
+ * and went on without tools, and a seventh that had its join early got its READY at 26.9 s.
+ */
+export const TOOL_HOST_READY_TIMEOUT_MS = 60_000;
+
+/** TAI_VOICE_TOOLHOST_READY_SEC: 10 to 300 s, anything else is the default. */
+export function toolHostReadyTimeoutMs(env: Record<string, string | undefined>): number {
+  const raw = env['TAI_VOICE_TOOLHOST_READY_SEC'];
+  if (raw === undefined || raw.trim() === '') return TOOL_HOST_READY_TIMEOUT_MS;
+  const sec = Number(raw);
+  return Number.isFinite(sec) && sec >= 10 && sec <= 300 ? Math.round(sec * 1000) : TOOL_HOST_READY_TIMEOUT_MS;
+}
+
+/** The last lines a container printed that are not part of the protocol: what a ready timeout or an early exit says about its start. */
+const TAIL_LINES = 14;
+const TAIL_LINE_CHARS = 200;
+const TAIL_CHARS = 900;
+/** How long after READY the host looks at what the container printed before it (stdout and stderr are two pipes: their order of arrival is not the order they were written in). */
+const READY_REPORT_DELAY_MS = 300;
+
+/**
+ * A container's start-up text is plain operational text (which server came up, which did not), but it goes into a log line, so whatever looks like a
+ * credential (a long run of token characters) is blanked all the same, and a line is cut short.
+ */
+export function scrubOutput(text: string): string {
+  return text
+    .replace(/[A-Za-z0-9_\-+/=]{32,}/g, '<redacted>')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, TAIL_LINE_CHARS);
+}
 
 function dockerRemove(containerName: string): Promise<void> {
   return new Promise((resolve) => {
@@ -90,9 +129,47 @@ export class DockerToolHost implements ToolHost {
   private tearingDown: Promise<void> | null = null;
   private refreshCaches: (() => void) | undefined;
   private readonly log: VoiceLog;
+  /** When start() began (the container is being started from here on), and the last lines the container printed that are not protocol. */
+  private launchedAt = 0;
+  private recent: string[] = [];
+  /** Set when READY has been looked at: what a container prints after that belongs to its calls, and is not kept. */
+  private reported = false;
 
   constructor(private readonly opts: DockerToolHostOptions) {
     this.log = opts.log ?? silentLog;
+  }
+
+  /** Keeps what the container printed (a few lines, scrubbed): the ready timeout and an early exit say what it had said. */
+  private remember(text: string): void {
+    if (this.reported) return;
+    for (const raw of text.split(/\r?\n/)) {
+      const line = scrubOutput(raw);
+      if (line) this.recent.push(line);
+    }
+    if (this.recent.length > TAIL_LINES) this.recent.splice(0, this.recent.length - TAIL_LINES);
+  }
+
+  /** " (the container's last output: ...)" for an error that says a start did not work out; what it printed is the only thing that names a server that stalled. */
+  private tailNote(): string {
+    if (this.recent.length === 0) return ' (the container printed nothing)';
+    const joined = this.recent.join(' | ');
+    return ` (the container's last output: ${joined.length > TAIL_CHARS ? '...' + joined.slice(-TAIL_CHARS) : joined})`;
+  }
+
+  /**
+   * The container has said READY. One line for how long it took from the start (the time a call's own "voice tool host ready" cannot say: a host started ahead
+   * of the call, or kept, is ready sooner for the call than it took), or a warning when it says READY with a server that did not come up (it waits 20 s for a
+   * server and then goes on without it: the call has tools, but not the course knowledge, and nothing else says so).
+   */
+  private reportReady(): void {
+    const ms = Date.now() - this.launchedAt;
+    const timer = setTimeout(() => {
+      this.reported = true;
+      const missed = this.recent.filter((line) => /MCP server \S+ did not start/.test(line));
+      if (missed.length > 0) this.log.warn({ container: this.containerName, ms, output: missed }, 'voice tool host: ready, but a server of its did not start');
+      else this.log.info({ container: this.containerName, ms }, 'voice tool host: container ready');
+    }, READY_REPORT_DELAY_MS);
+    timer.unref?.();
   }
 
   get alive(): boolean {
@@ -133,6 +210,7 @@ export class DockerToolHost implements ToolHost {
 
   private async launch(): Promise<void> {
     if (this.closing) throw new Error('closed');
+    this.launchedAt = Date.now();
     const spawned = await this.opts.spawn();
     this.proc = spawned.process;
     this.containerName = spawned.containerName;
@@ -144,7 +222,7 @@ export class DockerToolHost implements ToolHost {
     const onExit = (code: number | null) => {
       if (this.exited) return;
       this.exited = true;
-      settle(new Error(`the tool host exited (${code ?? 'signal'}) before it was ready`));
+      settle(new Error(`the tool host exited (${code ?? 'signal'}) before it was ready${this.tailNote()}`));
       this.failAll(this.closing ? 'closed' : 'the tool host stopped');
       for (const wake of this.exitWaiters.splice(0)) wake();
       if (!this.closing) this.log.warn({ container: this.containerName, code }, 'voice tool host exited');
@@ -159,7 +237,9 @@ export class DockerToolHost implements ToolHost {
     proc.stderr?.on('error', () => undefined);
     proc.stderr?.on('data', (chunk: Buffer) => {
       const text = chunk.toString('utf-8').trim();
-      if (text) this.log.debug({ container: this.containerName, stderr: text.slice(0, 500) }, 'voice tool host');
+      if (!text) return;
+      this.log.debug({ container: this.containerName, stderr: text.slice(0, 500) }, 'voice tool host');
+      this.remember(text);
     });
     proc.stdout?.on('data', (chunk: Buffer) => {
       this.buffer += chunk.toString('utf-8');
@@ -184,10 +264,11 @@ export class DockerToolHost implements ToolHost {
     }
     return new Promise<void>((resolve, reject) => {
       let settled = false;
+      const budget = this.opts.readyTimeoutMs ?? TOOL_HOST_READY_TIMEOUT_MS;
       const timer = setTimeout(() => {
-        settle(new Error('the tool host was not ready in time'));
+        settle(new Error(`the tool host was not ready in time (${Math.round((Date.now() - this.launchedAt) / 1000)} s)${this.tailNote()}`));
         void this.close();
-      }, this.opts.readyTimeoutMs ?? 30_000);
+      }, budget);
       settle = (err?: Error) => {
         if (settled) return;
         settled = true;
@@ -205,6 +286,7 @@ export class DockerToolHost implements ToolHost {
     if (line === READY || line.startsWith(READY)) {
       this.ready = true;
       settle();
+      this.reportReady();
       return;
     }
     if (line.startsWith(FAILED)) {
@@ -215,7 +297,10 @@ export class DockerToolHost implements ToolHost {
       return;
     }
     if (!line.startsWith(ANSWER)) {
-      if (line.trim()) this.log.debug({ container: this.containerName, line: line.slice(0, 300) }, 'voice tool host output');
+      if (line.trim()) {
+        this.log.debug({ container: this.containerName, line: line.slice(0, 300) }, 'voice tool host output');
+        this.remember(line);
+      }
       return;
     }
     let answer: { id?: unknown; ok?: unknown; text?: unknown; error?: unknown };

@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "note": "Ten passages of four sentences each: generic tutoring talk about course topics, written for this test. Nothing here comes from a student. p0 is the passage of every earlier sample (docs/LOCAL_VOICE.md 9.12). Numbers are written as words and there are no colons, hyphens or acronyms, so that every engine reads the same text the same way.",
+  "passages": [
+    {
+      "id": "p0",
+      "topic": "raft",
+      "sentences": [
+        "Good question, and it's the payoff of the whole design.",
+        "In Raft, the leader sends heartbeats to the followers, and if a follower stops hearing them, it starts a new election after a random timeout.",
+        "That randomness is what keeps two candidates from splitting the vote again and again.",
+        "Want to try explaining it back to me in your own words?"
+      ]
+    },
+    {
+      "id": "p1",
+      "topic": "consistent hashing",
+      "sentences": [
+        "Nice, you're close, so let's tighten it up.",
+        "With consistent hashing, both the servers and the keys are placed on the same ring, and each key belongs to the first server you meet going clockwise.",
+        "When a server joins or leaves, only the keys next to it move, instead of nearly everything being reshuffled.",
+        "What do you think happens to the load if one server gets only a single spot on the ring?"
+      ]
+    },
+    {
+      "id": "p2",
+      "topic": "CAP and partitions",
+      "sentences": [
+        "That's a fair way to put it, but there's a subtle catch.",
+        "During a network partition, a system has to choose between answering every request and keeping all the replicas in agreement.",
+        "Neither choice is wrong, because it depends on whether a stale answer or no answer costs you more.",
+        "Which would you pick for a shopping cart, and why?"
+      ]
+    },
+    {
+      "id": "p3",
+      "topic": "MapReduce failures",
+      "sentences": [
+        "Let's think about what happens when a worker dies halfway through a job.",
+        "The master notices that the worker stopped answering its pings, so it marks the worker's tasks as idle and hands them to someone else.",
+        "That works because map and reduce tasks are deterministic, so running one twice gives the same output.",
+        "Can you see why a task that gave different answers each time would break this?"
+      ]
+    },
+    {
+      "id": "p4",
+      "topic": "Docker layers",
+      "sentences": [
+        "Good, that's the right instinct.",
+        "Each instruction in a Dockerfile creates a layer, and Docker reuses a layer from its cache as long as nothing above it has changed.",
+        "So if you copy your source code before installing the dependencies, every small edit forces a full reinstall.",
+        "How would you reorder those two lines to keep your builds fast?"
+      ]
+    },
+    {
+      "id": "p5",
+      "topic": "Kafka partitions",
+      "sentences": [
+        "Right, and that's exactly where Kafka gets its throughput.",
+        "A topic is split into partitions, and within a consumer group each partition is read by only one consumer at a time.",
+        "Adding more consumers than partitions doesn't help, because the extra ones just sit idle.",
+        "So what limits the parallelism of your service here?"
+      ]
+    },
+    {
+      "id": "p6",
+      "topic": "load testing",
+      "sentences": [
+        "Hold on, the average can hide a lot here.",
+        "If ninety nine requests take ten milliseconds and one takes two seconds, the mean still looks healthy, while one user in a hundred is waiting far too long.",
+        "That's why we look at the slowest one percent of requests, and why queues can build up long before the servers look busy.",
+        "What would you measure next in your load test?"
+      ]
+    },
+    {
+      "id": "p7",
+      "topic": "Go concurrency",
+      "sentences": [
+        "Let's walk through your goroutines one at a time.",
+        "A WaitGroup is just a counter, so you add one before launching each goroutine, call Done when it finishes, and Wait blocks until the counter hits zero.",
+        "If you call Add inside the goroutine itself, the main function might reach Wait before any goroutine has registered.",
+        "Where would you move that call?"
+      ]
+    },
+    {
+      "id": "p8",
+      "topic": "Terraform state",
+      "sentences": [
+        "That's a common surprise with Terraform.",
+        "Terraform keeps a state file that maps the resources in your configuration to the real ones in the cloud, and it plans changes by comparing the two.",
+        "If two people apply at the same time without locking, the state can get corrupted or silently overwritten.",
+        "How would you store that file so a whole team can share it safely?"
+      ]
+    },
+    {
+      "id": "p9",
+      "topic": "idempotent retries",
+      "sentences": [
+        "Good catch, retries are where this gets interesting.",
+        "A request is idempotent if sending it twice has the same effect as sending it once, which is why updating a record is safe to retry but creating one might produce duplicates.",
+        "Clients usually fix that by sending a unique key, so the server can recognize a repeat and return the first result.",
+        "What would your service do if it saw the same key twice?"
+      ]
+    }
+  ]
+}

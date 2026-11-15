@@ -50,12 +50,18 @@ Docker (built and run on the cs6650 host in a scratch folder on 2026-11-14; see 
 docker build -t tai-local-voice:latest deploy/cs6650/local-voice
 docker network create --internal --subnet 172.29.88.0/24 tai-voice-net          # once: a network with NO route out
 docker run -d --name tai-local-voice --restart unless-stopped --network tai-voice-net --ip 172.29.88.2 \
-    --cpu-shares 128 --cpus 4 --memory 4g --memory-swap 4g --pids-limit 256 \
+    --cpu-shares 128 --cpus 8 --memory 4g --memory-swap 4g --pids-limit 256 \
     --read-only --tmpfs /tmp:rw,size=64m -e HOME=/tmp --cap-drop ALL --security-opt no-new-privileges \
     -v /srv/tai-voice/models/parakeet-tdt-0.6b-v2-int8:/models/parakeet-tdt-0.6b-v2-int8:ro \
     -v /srv/tai-voice/models/supertonic/v1:/models/supertonic/v1:ro tai-local-voice:latest
 curl http://172.29.88.2:18800/health         # from the host: the container's address on the bridge; no port is published
 ```
+
+**Why `--cpus 8` (the host's eight vCPUs) and not 4.** The recognizer's four ONNX threads, the decode pool's other threads and the speech engine's own exceed a quota of four CPUs in a burst, and the kernel then throttles the whole
+container for the rest of each 100 ms period; measured on the host, a decode that starts within about a second of a burst runs at a fraction of its speed (the kernel's exact mechanism was not taken further). Measured on the host on 2026-11-15 (a stream of synthetic speech, the first text after
+the end of speech, 2 runs each): with `--cpus 4` speech of 2.9 s to 5.9 s was answered 0.8 to 1.5 s after its end (the container's `cpu.stat` read 35 % of the periods throttled); with `--cpus 8` it was 0.56 to 0.69 s at every length
+(throttled periods: 1 %); two ONNX threads under `--cpus 4` (`LOCAL_VOICE_ASR_THREADS=2`) are as even but slower on long speech (1.09 s at 8.7 s of speech, against 0.85 s). `--cpu-shares 128` stays: it is what keeps the
+container behind the rest of the host when the CPU is contended; the quota is not what protects the others (docs/LOCAL_VOICE.md section 9.18).
 
 **Why an internal network.** The pip `onnxruntime` 1.32.0 that the speech engine uses contains a Microsoft OneCollector telemetry client that is on by default: measured on 2026-11-14 (a DNS sinkhole on an internal
 network), `import onnxruntime` alone asks for `mobile.events.data.microsoft.com`, twice, and `onnxruntime.disable_telemetry_events()` after the import does not stop the first attempt. What the events carry was not

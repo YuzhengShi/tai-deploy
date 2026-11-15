@@ -1294,7 +1294,8 @@ describe('LabAgent: the Flux TTS mouth says an answer as ONE continuous speech (
     await r.feed(300, 0);
     await say(r, 'Third answer.');
     await r.until(() => r.of('AgentAudioDone').length === 3, 20_000);
-    expect(r.mouths.aura.requests.map((x) => x.speed)).toEqual([0.9, 1.08, 1.08]);
+    // (the fixed lines the mouth renders ahead of time are in its requests too: only the three answers are looked at)
+    expect(r.mouths.aura.requests.filter((x) => /^The interviewer asks the (first|second|third) thing\.$/.test(x.text)).map((x) => x.speed)).toEqual([0.9, 1.08, 1.08]);
   }, 60_000);
 
   it('a student who talks over the answer: the speech is interrupted with the offset of what had played, and the history keeps the words the service says were heard', async () => {

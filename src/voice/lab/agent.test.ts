@@ -12,7 +12,9 @@ import { silentLog } from '../types.js';
 import { LabAgent } from './agent.js';
 import { forChain, loadLabConfig, type LabConfig } from './config.js';
 import { PcmCache } from './mouth/cache.js';
+import { FluxTtsMouth, wholeWords } from './mouth/flux.js';
 import { nullSink, type TraceSink, type TurnTrace } from './trace.js';
+import { FakeFluxTts, type FakeFluxTtsOptions } from './testing/fake-flux-tts.js';
 import { FakeEars, FakeMouth, failingMouth } from './testing/fake-parts.js';
 import type { Ears, EarsHandlers } from './types.js';
 
@@ -685,6 +687,28 @@ describe('LabAgent: when something is missing', () => {
     await r.until(() => r.of('Error').some((m) => m.code === 'LAB_EARS_SWITCHED'));
   });
 
+  it('does not give the recognizer up for a short stretch of speech followed by a pause in the audio (it is the speech that is counted, not the time since the first sound)', async () => {
+    const r = await rig();
+    await started(r);
+    await r.feed(360, 7000);                                                    // less speech than the (shortened) 600 ms
+    await sleep(350);                                                           // the page's audio stops for a moment (a throttled tab): the VAD still says "speaking"
+    await r.feed(160, 0);
+    await sleep(400);
+    expect(r.earsMade.map((e) => e.name)).toEqual(['labgpu']);
+    expect(r.of('Error').filter((m) => m.code === 'LAB_EARS_SWITCHED')).toHaveLength(0);
+  });
+
+  it('does not give the recognizer up for blips of noise spread over seconds, which it rightly ignores', async () => {
+    const r = await rig();
+    await started(r);
+    for (let i = 0; i < 10; i++) {
+      await r.feed(80, 7000);                                                   // a click or a cough: loud enough for an onset, and no words
+      await r.feed(320, 0);
+    }
+    expect(r.earsMade.map((e) => e.name)).toEqual(['labgpu']);
+    expect(r.of('Error').filter((m) => m.code === 'LAB_EARS_SWITCHED')).toHaveLength(0);
+  });
+
   it('speaks a sentence through the fallback mouth when the first one answers with a substituted voice, and warns', async () => {
     const r = await rig({ mouths: { labgpu: failingMouth('fallback', 'labgpu'), aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 400 }) } });
     await started(r, { greeting: null });
@@ -1063,5 +1087,181 @@ describe('LabAgent: barge-in does not depend on the recognizer (A10) and reads a
       await r.feed(120, 0);
     }
     expect(r.of('UserStartedSpeaking').length).toBe(n);
+  }, 60_000);
+});
+
+describe('LabAgent: the Flux TTS mouth says an answer as ONE continuous speech (amendment A15)', () => {
+  const SENTENCES = ['Raft elects a leader first.', 'Then the leader sends heartbeats to everyone.', 'That keeps the followers calm.'];
+  const THREE = [{ text: 'Raft elects a leader first. ' }, { text: 'Then the leader sends heartbeats to everyone. ' }, { text: 'That keeps the followers calm.' }];
+  const assistantLines = (r: Rig): string[] => r.of('ConversationText').filter((m) => m.role === 'assistant').map((m) => String(m.content));
+  const sentencesAskedOfAura = (r: Rig, among: string[]): string[] => r.mouths.aura.requests.map((x) => x.text).filter((t) => among.includes(t));
+
+  async function fluxRig(behavior: FakeFluxTtsOptions = {}, over: { env?: Record<string, string>; chain?: string } = {}): Promise<{ r: Rig; fake: FakeFluxTts; mouth: FluxTtsMouth }> {
+    const fake = await FakeFluxTts.start({ msPerChar: 25, frameAudioMs: 40, frameWallMs: 10, startDelayMs: 5, ...behavior });
+    const mouth = new FluxTtsMouth({ apiKey: () => 'dg-test-key-abcdef', baseUrl: fake.url });
+    const r = await rig({
+      env: { TAI_VOICE_LAB_MOUTH: 'flux', ...(over.env ?? {}) },
+      ...(over.chain ? { chain: over.chain } : {}),
+      mouths: { flux: mouth as unknown as FakeMouth, labgpu: new FakeMouth({ name: 'labgpu', ms: 300 }), aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 300 }) },
+    });
+    // (the rig's own cleanup, which closes the agent and so the mouth, was queued first)
+    cleanups.push(async () => {
+      mouth.close();
+      await fake.close();
+    });
+    return { r, fake, mouth };
+  }
+
+  it('three sentences are one speech: a Speak for each, one Flush, the Settings\' voice and pace in the address, and a transcript line for each in order', async () => {
+    const { r, fake } = await fluxRig();
+    await started(r, { greeting: null });
+    r.relay.script = () => THREE;
+    await say(r, 'Explain Raft.');
+    await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
+    expect(fake.connections).toHaveLength(1);
+    const c = fake.last;
+    expect(c.query.get('model')).toBe('flux-hannah-en');
+    expect(c.query.get('speed')).toBe('1.2');
+    expect(c.authorization).toBe('Token dg-test-key-abcdef');
+    expect(c.turns).toHaveLength(1);
+    expect(c.speaks()).toEqual(SENTENCES.map((s) => `${s} `));
+    expect(c.clientTypes()).toEqual(['Speak', 'Speak', 'Speak', 'Flush']);
+    expect(assistantLines(r)).toEqual(SENTENCES);
+    expect(r.audio.reduce((a, x) => a + x.bytes, 0)).toBeGreaterThan(48 * 2400);
+    expect(r.traces[0]?.mouth).toBe('flux');
+    expect(fake.violations).toEqual([]);
+  }, 60_000);
+
+  it('the greeting is a speech of its own, and the fixed lines are not rendered ahead of time: nothing is spoken that nobody asked for', async () => {
+    const { r, fake } = await fluxRig();
+    await started(r, { greeting: 'Hi, I am TAi.' });
+    await sleep(300);
+    expect(fake.connections).toHaveLength(1);
+    expect(fake.last.turnTexts()).toEqual(['Hi, I am TAi. ']);
+    expect(fake.last.clientTypes()).toEqual(['Speak', 'Flush']);
+  }, 60_000);
+
+  it('opens the socket when the call starts, before the first sentence, and says nothing on it', async () => {
+    const { r, fake } = await fluxRig();
+    r.send(settings(r, { greeting: null }));
+    await r.until(() => r.of('SettingsApplied').length > 0);
+    await r.until(() => fake.connections.length === 1);
+    await sleep(200);
+    expect(fake.connections).toHaveLength(1);
+    expect(fake.last.clientTypes()).toEqual([]);
+  }, 60_000);
+
+  it('the words before a function call and the answer after it are two speeches, in order', async () => {
+    const { r, fake } = await fluxRig();
+    await started(r, { greeting: null });
+    r.relay.script = (n) => (n === 1 ? [{ text: 'Let me check. ' }, { tool: { name: 'recall_memory', args: { query: 'raft' } } }] : [{ text: 'You asked about Raft before.' }]);
+    await say(r, 'What did I ask before?');
+    await r.until(() => r.of('FunctionCallRequest').length === 1);
+    await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
+    const call = (r.of('FunctionCallRequest')[0].functions as Array<Record<string, unknown>>)[0];
+    r.send({ type: 'FunctionCallResponse', id: call.id, name: 'recall_memory', content: '{"found":"Raft"}' });
+    await r.until(() => r.of('AgentAudioDone').length === 2, 20_000);
+    expect(fake.connections.flatMap((c) => c.turnTexts())).toEqual(['Let me check. ', 'You asked about Raft before. ']);
+    expect(assistantLines(r)).toEqual(['Let me check.', 'You asked about Raft before.']);
+  }, 60_000);
+
+  it('a call whose voice is an Aura one (the interviewer, as in the live call) is spoken sentence by sentence through Aura, and the Flux socket is not used', async () => {
+    const { r, fake } = await fluxRig();
+    await started(r, { greeting: null, speak: { model: 'aura-2-mars-en', speed: 1.08, version: undefined } });
+    r.relay.script = () => THREE;
+    await say(r, 'Explain Raft.');
+    await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
+    expect(sentencesAskedOfAura(r, SENTENCES)).toEqual(SENTENCES);
+    expect(fake.connections).toHaveLength(0);
+    expect(r.traces[0]?.mouth).toBe('aura');
+  }, 60_000);
+
+  it('UpdateSpeak moves a call between the two voices: Flux (one speech), Aura (sentences), Flux again', async () => {
+    const { r, fake } = await fluxRig();
+    await started(r, { greeting: null });
+    r.relay.script = (n) => (n === 1 ? [{ text: 'Flux says this first. ' }, { text: 'And this second.' }] : n === 2 ? [{ text: 'The interviewer asks one thing. ' }, { text: 'Then another.' }] : [{ text: 'Back to the first voice.' }]);
+    await say(r, 'First question.');
+    await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
+    r.send({ type: 'UpdateSpeak', speak: { provider: { type: 'deepgram', model: 'aura-2-mars-en', speed: 1.08 } } });
+    await r.until(() => r.of('SpeakUpdated').length === 1);
+    await r.feed(300, 0);
+    await say(r, 'Second question.');
+    await r.until(() => r.of('AgentAudioDone').length === 2, 20_000);
+    expect(sentencesAskedOfAura(r, ['The interviewer asks one thing.', 'Then another.'])).toEqual(['The interviewer asks one thing.', 'Then another.']);
+    expect(fake.connections.flatMap((c) => c.turnTexts())).toEqual(['Flux says this first. And this second. ']);
+    r.send({ type: 'UpdateSpeak', speak: { provider: { type: 'deepgram', version: 'v2', model: 'flux-hannah-en', speed: 1.2 } } });
+    await r.until(() => r.of('SpeakUpdated').length === 2);
+    await r.feed(300, 0);
+    await say(r, 'Third question.');
+    await r.until(() => r.of('AgentAudioDone').length === 3, 20_000);
+    expect(fake.connections.flatMap((c) => c.turnTexts())).toEqual(['Flux says this first. And this second. ', 'Back to the first voice. ']);
+    expect(fake.violations).toEqual([]);
+  }, 60_000);
+
+  it('a student who talks over the answer: the speech is interrupted with the offset of what had played, and the history keeps the words the service says were heard', async () => {
+    const { r, fake } = await fluxRig({ msPerChar: 60, frameWallMs: 25 });
+    await started(r, { greeting: null });
+    r.relay.script = (n) => (n === 1 ? THREE : [{ text: 'Okay, stopping.' }]);
+    await say(r, 'Explain Raft.');
+    await r.until(() => r.audio.length > 0 && assistantLines(r).length >= 1, 20_000);
+    await sleep(400);
+    const interrupted = r.of('UserStartedSpeaking').length;
+    await r.feed(360, 7000);                                                    // the student talks over it
+    await r.until(() => r.of('UserStartedSpeaking').length > interrupted);
+    await r.until(() => fake.last.interruptReplies.length === 1, 10_000);
+    const settled = r.audio.reduce((a, x) => a + x.bytes, 0);
+    await sleep(300);
+    expect(r.audio.reduce((a, x) => a + x.bytes, 0)).toBe(settled);              // nothing more is played after the cut
+    expect(r.of('AgentAudioDone')).toHaveLength(0);
+    await r.feed(160, 0);
+    r.earsMade[0].partial('Wait, stop.');
+    await r.until(() => r.relay.requests.length === 2, 20_000);
+    const reply = fake.last.interruptReplies[0];
+    const heard = wholeWords(reply.spoken, reply.remaining).spoken;
+    expect(heard.length).toBeGreaterThan(0);
+    expect(heard.length).toBeLessThan(SENTENCES.join(' ').length);
+    // the model's memory of what it said ends where the service says the audio did, not where the clock guessed
+    const assistant = r.relay.requests[1].messages.filter((m) => m.role === 'assistant').map((m) => String(m.content));
+    expect(assistant).toEqual([heard]);
+    expect(fake.last.interruptCount).toBe(1);
+    expect(fake.connections).toHaveLength(1);                                    // the socket is kept for the next speech
+    expect(fake.violations).toEqual([]);
+    // and the answer to the interruption is a speech like any other, on the same socket
+    await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
+    expect(fake.last.turnTexts()[fake.last.turnTexts().length - 1]).toBe('Okay, stopping. ');
+  }, 60_000);
+
+  it('chain cf: Flux ears, the Flux mouth in one speech, and the trace says so', async () => {
+    const { r, fake } = await fluxRig({}, { chain: 'cf' });
+    await started(r, { greeting: null });
+    const flux = r.earsMade[0];
+    expect(flux.name).toBe('flux');
+    r.relay.script = () => THREE;
+    flux.startOfTurn('explain');
+    await r.until(() => r.of('UserStartedSpeaking').length >= 1);
+    flux.final('Explain Raft.', { trigger: 'model', confidence: 0.9 });
+    await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
+    expect(fake.last.turns).toHaveLength(1);
+    expect(fake.last.speaks()).toHaveLength(3);
+    expect(r.traces[0]).toMatchObject({ chain: 'cf', ears: 'flux', mouth: 'flux' });
+    expect(r.earsAsked.map((a) => a.kind)).toEqual(['flux', 'labgpu']);
+  }, 60_000);
+
+  it('when the speech fails before any audio the answer is not lost: the same sentences are made one by one through Aura, and the next answer goes straight to Aura', async () => {
+    const { r, fake } = await fluxRig({ errorOnSpeak: true });
+    await started(r, { greeting: null });
+    r.relay.script = (n) => (n === 1 ? THREE : [{ text: 'Second answer.' }]);
+    await say(r, 'Explain Raft.');
+    await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
+    expect(sentencesAskedOfAura(r, SENTENCES)).toEqual(SENTENCES);
+    expect(assistantLines(r)).toEqual(SENTENCES);
+    expect(r.of('Warning').filter((m) => m.code === 'LAB_SPEECH_FAILED')).toHaveLength(1);
+    const connections = fake.connections.length;
+    await r.feed(300, 0);
+    await say(r, 'And the second question?');
+    await r.until(() => r.of('AgentAudioDone').length === 2, 20_000);
+    expect(sentencesAskedOfAura(r, ['Second answer.'])).toEqual(['Second answer.']);
+    expect(fake.connections).toHaveLength(connections);                          // the mouth is marked down: the second answer did not try it
+    expect(assistantLines(r)).toEqual([...SENTENCES, 'Second answer.']);
   }, 60_000);
 });

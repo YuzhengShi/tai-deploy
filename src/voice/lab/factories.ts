@@ -9,6 +9,7 @@ import { FluxEars } from './ears/flux.js';
 import { V1Ears } from './ears/v1.js';
 import { AuraMouth } from './mouth/aura.js';
 import { LabGPUMouth } from './mouth/labgpu.js';
+import { FluxTtsMouth } from './mouth/flux.js';
 import type { LabClock } from './types.js';
 
 /** What LabGPU's adapter takes (20 ms) and what Deepgram wants (80 ms). */
@@ -45,6 +46,10 @@ export function defaultFactories(cfg: LabConfig, deepgramKey: () => string, log:
         c,
       );
     },
-    makeMouth: (kind) => (kind === 'labgpu' ? new LabGPUMouth({ baseUrl: cfg.ttsUrl, voices: [cfg.labgpuVoice] }) : new AuraMouth({ apiKey: deepgramKey, baseUrl: cfg.auraUrl })),
+    makeMouth: (kind) => {
+      if (kind === 'labgpu') return new LabGPUMouth({ baseUrl: cfg.ttsUrl, voices: [cfg.labgpuVoice] });
+      if (kind === 'flux') return new FluxTtsMouth({ apiKey: deepgramKey, baseUrl: cfg.fluxTtsUrl, log });
+      return new AuraMouth({ apiKey: deepgramKey, baseUrl: cfg.auraUrl });
+    },
   };
 }

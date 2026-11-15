@@ -6,17 +6,19 @@ import type { TurnProfile } from './types.js';
 import type { TurnParams } from './turn.js';
 
 export type EarsKind = 'labgpu' | 'flux' | 'nova';
-export type MouthKind = 'labgpu' | 'aura';
+/** 'flux' is Deepgram's Flux TTS (the live call's conversation voice, one continuous speech per answer); 'aura' is Aura-2's REST endpoint (one request per sentence). */
+export type MouthKind = 'labgpu' | 'aura' | 'flux';
 
 /**
  * The chains a lab call can be asked for with `?chain=` (the owner's route only; docs/VOICE_SELFBUILT.md 9.1 and amendment A10). Without the parameter a call runs on the settings of the process, as in round 1.
  *   d  : LabGPU's ears and mouth (round 1's lab), nothing asked early
  *   h  : LabGPU's ears and mouth, and Flux listening beside them whose eager end of turn only starts the model early (its answer is kept back until LabGPU's text of the turn has the same words)
  *   fd : Flux's ears (eager end of turn) and LabGPU's mouth: everything but the recognizer self-built
- *   c  : Flux's ears (eager end of turn) and Aura's mouth: the control, our orchestration over Deepgram's models
+ *   c  : Flux's ears (eager end of turn) and Aura's mouth: the control, our orchestration over Deepgram's models. NOT the live voice: Aura-2 over REST, one request per sentence (amendment A15)
+ *   cf : Flux's ears (eager end of turn) and Flux TTS's mouth, the voice of today's call spoken as one continuous speech per answer: the control that is like for like with the live call (A15)
  */
-export type ChainName = 'd' | 'h' | 'fd' | 'c';
-export const CHAIN_NAMES: readonly ChainName[] = ['d', 'h', 'fd', 'c'];
+export type ChainName = 'd' | 'h' | 'fd' | 'c' | 'cf';
+export const CHAIN_NAMES: readonly ChainName[] = ['d', 'h', 'fd', 'c', 'cf'];
 export const isChainName = (value: unknown): value is ChainName => typeof value === 'string' && (CHAIN_NAMES as readonly string[]).includes(value);
 
 /** The eager threshold a chain that uses the eager end of turn takes when `TAI_VOICE_LAB_EAGER_EOT` names none (A10: the live call's request left 0.44 s after the end of speech, p50, and this threshold's eager event came at 0.40 s). */
@@ -58,6 +60,10 @@ export interface LabConfig {
    * by this before it goes to REST. 1 until the live pace has been measured through a call and the lab's Aura control compared with it.
    */
   auraSpeedScale: number;
+  /** Flux TTS's own address (ws or wss; the path /v2/speak is added), the voice it speaks when the Settings name none, and the scale of the Settings' speed (Flux's `speed` is the Voice Agent's own scale: 1). */
+  fluxTtsUrl: string;
+  fluxVoiceChat: string;
+  fluxSpeedScale: number;
   /** Aura voices for the control chain, per mode, when the Settings name a Flux voice (which the REST API does not have). */
   auraVoiceChat: string;
   auraVoiceInterview: string;
@@ -84,6 +90,8 @@ export const LAB_ENV_KEYS = [
   'TAI_VOICE_LAB_FLUX_URL',
   'TAI_VOICE_LAB_NOVA_URL',
   'TAI_VOICE_LAB_AURA_URL',
+  'TAI_VOICE_LAB_FLUX_TTS_URL',
+  'TAI_VOICE_LAB_FLUX_SPEED_SCALE',
   'TAI_VOICE_LAB_MOUTH',
   'TAI_VOICE_LAB_MOUTH_FALLBACK',
   'TAI_VOICE_LAB_TTS_URL',
@@ -107,6 +115,7 @@ export const DEFAULT_LABGPU_TTS = 'http://192.0.2.29:8805';
 export const DEFAULT_FLUX_URL = 'wss://api.deepgram.com/v2/listen';
 export const DEFAULT_NOVA_URL = 'wss://api.deepgram.com/v1/listen';
 export const DEFAULT_AURA_URL = 'https://api.deepgram.com';
+export const DEFAULT_FLUX_TTS_URL = 'wss://api.deepgram.com';
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
@@ -163,7 +172,7 @@ export function loadLabConfig(lookup: (key: string) => string | undefined, warn:
   };
   const ears = choice<EarsKind>('TAI_VOICE_LAB_EARS', ['labgpu', 'flux', 'nova'], 'labgpu');
   const fallbackEars = choice<EarsKind | 'none'>('TAI_VOICE_LAB_EARS_FALLBACK', ['labgpu', 'flux', 'nova', 'none'], ears === 'flux' ? 'none' : 'flux');
-  const mouth = choice<MouthKind>('TAI_VOICE_LAB_MOUTH', ['labgpu', 'aura'], 'labgpu');
+  const mouth = choice<MouthKind>('TAI_VOICE_LAB_MOUTH', ['labgpu', 'aura', 'flux'], 'labgpu');
   const shadowText = choice<EarsKind | 'none' | 'auto'>('TAI_VOICE_LAB_SHADOW_EARS', ['labgpu', 'flux', 'nova', 'none', 'auto'], 'auto');
   const shadow: EarsKind | 'none' = shadowText === 'auto' ? (ears === 'labgpu' ? 'flux' : ears === 'flux' ? 'labgpu' : 'none') : shadowText === ears ? 'none' : shadowText;
   const trace = raw('TAI_VOICE_LAB_TRACE');
@@ -189,13 +198,16 @@ export function loadLabConfig(lookup: (key: string) => string | undefined, warn:
     earsConnectTimeoutMs: 2500,
     silentEarsMs: 8000,
     mouth,
-    mouthFallback: choice<MouthKind | 'none'>('TAI_VOICE_LAB_MOUTH_FALLBACK', ['labgpu', 'aura', 'none'], mouth === 'aura' ? 'none' : 'aura'),
+    mouthFallback: choice<MouthKind | 'none'>('TAI_VOICE_LAB_MOUTH_FALLBACK', ['labgpu', 'aura', 'flux', 'none'], mouth === 'aura' ? 'none' : 'aura'),
     ttsUrl: url('TAI_VOICE_LAB_TTS_URL', DEFAULT_LABGPU_TTS, ['http:', 'https:']),
     labgpuVoice: safeLabGPUVoice(name('TAI_VOICE_LAB_LABGPU_VOICE', 'af_bella'), warn),
     tempo: raw('TAI_VOICE_LAB_TEMPO') !== '0',
     livePace: 3.45,
     labgpuPace: 2.69,
     auraSpeedScale: num('TAI_VOICE_LAB_AURA_SPEED_SCALE', 1, 0.5, 2),
+    fluxTtsUrl: url('TAI_VOICE_LAB_FLUX_TTS_URL', DEFAULT_FLUX_TTS_URL, ['ws:', 'wss:']),
+    fluxVoiceChat: 'flux-hannah-en',
+    fluxSpeedScale: num('TAI_VOICE_LAB_FLUX_SPEED_SCALE', 1, 0.5, 2),
     auraVoiceChat: 'aura-2-thalia-en',
     auraVoiceInterview: 'aura-2-mars-en',
     hold: {
@@ -228,6 +240,8 @@ export function forChain(base: LabConfig, chain: string | null | undefined): Lab
       return { ...base, chain, ears: 'flux', earsFallback: 'labgpu', shadowEars: 'labgpu', mouth: 'labgpu', mouthFallback: 'aura', eagerEot: eager };
     case 'c':
       return { ...base, chain, ears: 'flux', earsFallback: 'labgpu', shadowEars: 'labgpu', mouth: 'aura', mouthFallback: 'labgpu', eagerEot: eager };
+    case 'cf':
+      return { ...base, chain, ears: 'flux', earsFallback: 'labgpu', shadowEars: 'labgpu', mouth: 'flux', mouthFallback: 'aura', eagerEot: eager };
   }
 }
 

@@ -101,7 +101,7 @@ export interface SynthOptions {
 }
 
 export interface Mouth {
-  /** 'labgpu' or 'aura': for the trace and the logs. */
+  /** 'labgpu', 'aura' or 'flux': for the trace and the logs. */
   readonly name: string;
   readonly takesSpeed: boolean;
   /**
@@ -109,6 +109,54 @@ export interface Mouth {
    * Rejects (from the first `next()`) with a MouthError. An abort ends the iterator quietly (no error). The text must already be cleaned for speech (`spokenText`).
    */
   synthesize(text: string, opts: SynthOptions): AsyncIterable<Buffer>;
+  /**
+   * False: the engine does not render its fixed lines (the fillers) ahead of time through this mouth. A streaming mouth serves one speech after the other and charges by the character, so a warm-up
+   * would hold the first answer back and cost money on every call. Default true.
+   */
+  readonly prewarm?: boolean;
+  /**
+   * A mouth that can say a whole answer as ONE continuous speech (Flux TTS): the text is handed over as the model writes it and the audio comes back as one stream, so that the intonation runs
+   * through the sentences the way a person's does. A mouth without it is used a sentence at a time with `synthesize`.
+   */
+  openTurn?(opts: TurnOptions): SpeechTurn;
+  /** Starts what a first `openTurn` would have to wait for (the socket), so that the first sentence is not held back by it. */
+  prepare?(opts: TurnOptions): void;
+  /** The call is over: the service's connection is closed. */
+  close?(): void;
+}
+
+export interface TurnOptions {
+  /** The voice of the service (Flux: flux-hannah-en ...). */
+  voice: string;
+  /** The pace the voice itself takes (Flux: 0.5 to 1.5 in steps of 0.05), undefined for its own. */
+  speed?: number;
+}
+
+/** What the service says about a speech that was cut short: the text that was heard and the text that was not (cut at a word). */
+export interface TurnSplit {
+  spoken: string;
+  remaining: string;
+}
+
+/**
+ * One continuous speech of a streaming mouth: `speak` as often as the model writes something, `end` when it has finished, `audio` for the PCM16 24 kHz as it is made. The audio ends when the speech is
+ * complete; it throws a MouthError (after what had arrived) when the service fails, and ends quietly when the speech was cut by `interrupt` or `abandon`.
+ */
+export interface SpeechTurn {
+  /** Adds text to the speech (it is cleaned for speech by the caller). Returns what was sent, so that the caller can count characters. */
+  speak(text: string): string;
+  /** No more text is coming. */
+  end(): void;
+  readonly audio: AsyncIterable<Buffer>;
+  /**
+   * The student spoke: the speech is cut now. `playedMs` is how much of THIS speech's audio had played. Resolves with what the service says was spoken and what was not, or null when it could not
+   * tell (nothing had been made yet, or no answer came). Never rejects.
+   */
+  interrupt(playedMs: number): Promise<TurnSplit | null>;
+  /** Nobody will read the audio any more (the call is over); it is dropped as it arrives. */
+  abandon(): void;
+  /** How long the whole speech lasts, according to the service, once it is complete. */
+  readonly durationMs: number | undefined;
 }
 
 /** The sample rate of everything the stand-in sends the session (Settings `audio.output`), and the bytes of one millisecond of it. */

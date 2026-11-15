@@ -53,7 +53,7 @@ const eq = (a: string, b: string): boolean => {
 export class LabEngine {
   /** ws://127.0.0.1:<port>/v1/agent/converse: what a lab session's `deepgramUrl` is. */
   readonly agentUrl: string;
-  /** The same for a call that asked for a chain (`?chain=d|h|fd|c`, docs A10); any other value is the plain address. */
+  /** The same for a call that asked for a chain (`?chain=d|h|fd|c|cf`, docs A10); any other value is the plain address. */
   agentUrlFor(chain: string | null | undefined): string {
     return isChainName(chain) ? `${this.agentUrl}?chain=${chain}` : this.agentUrl;
   }

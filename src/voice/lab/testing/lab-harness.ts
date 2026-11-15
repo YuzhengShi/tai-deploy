@@ -35,7 +35,7 @@ export interface LabHarness {
   hub: VoiceHub;
   gw: FakeGateway;
   ears: FakeEars[];
-  mouths: { labgpu: FakeMouth; aura: FakeMouth };
+  mouths: { labgpu: FakeMouth; aura: FakeMouth; flux: FakeMouth };
   toolHosts: FakeToolHost[];
   chat: Array<{ folder: string; role: string; text: string; kind?: string }>;
   logs: Array<{ level: string; msg: string; obj: Record<string, unknown> }>;
@@ -73,7 +73,11 @@ export async function createLabHarness(opts: LabHarnessOptions = {}): Promise<La
   };
   const users = new Map<string, Caller>();
   const ears: FakeEars[] = [];
-  const mouths = { labgpu: new FakeMouth({ name: 'labgpu', ms: opts.mouthMs ?? 400 }), aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: opts.mouthMs ?? 400 }) };
+  const mouths = {
+    labgpu: new FakeMouth({ name: 'labgpu', ms: opts.mouthMs ?? 400 }),
+    aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: opts.mouthMs ?? 400 }),
+    flux: new FakeMouth({ name: 'flux', takesSpeed: true, ms: opts.mouthMs ?? 400 }),     // (a sentence-at-a-time stand-in: the streaming mouth has its own tests)
+  };
   const hubRef: { hub: VoiceHub | null } = { hub: null };
   const doubles: NonNullable<VoiceDeps['labFactories']> = {
     makeEars: (kind, handlers) => {

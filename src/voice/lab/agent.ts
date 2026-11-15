@@ -25,7 +25,7 @@ import { Speaker, wordsPlayed, type SpokenReport } from './speaker.js';
 import { think, ThinkError, type ToolDef } from './think.js';
 import { newTurnTrace, finishDerived, type RoundTrace, type SpecTrace, type TraceSink, type TurnTrace } from './trace.js';
 import { TurnTracker, judgeTurnText, wordKey, type TurnParams } from './turn.js';
-import { MouthError, OUT_RATE, type Ears, type EarsHandlers, type EarsRequest, type LabClock, type Mouth, type TurnFields, type TurnProfile } from './types.js';
+import { MouthError, OUT_RATE, type Ears, type EarsHandlers, type EarsRequest, type LabClock, type Mouth, type SpeechTurn, type TurnFields, type TurnProfile, type TurnSplit } from './types.js';
 import { Vad } from './vad.js';
 
 export interface LabAgentDeps {
@@ -94,6 +94,8 @@ interface Run {
   settleAdoption: ((adopted: boolean) => void) | null;
   /** Set by the first round of a held run: puts the held sentences into the speech, in order, and ends the holding. */
   flushHeld: (() => void) | null;
+  /** The model has finished the text of the round that is going: a streamed speech may be ended once nothing of it is held back any more. */
+  roundTextDone: boolean;
   /** The request of a held run failed (the gateway, the relay's limits): it cannot be adopted, the turn asks again. */
   failed: boolean;
 }
@@ -172,6 +174,8 @@ export class LabAgent {
   /** When audio last came in from the page: a recognizer is judged silent only while the microphone is being heard (a stalled page is not a silent recognizer). */
   private lastAudioAt = 0;
   private waitingForEarsSince = 0;
+  /** The VAD's voiced time (`voicedTotalMs`) when that wait began: the recognizer is given up on after this much SPEECH without a word from it, not after this much time since a sound. */
+  private voicedAtWait = 0;
   private lastCommitText = '';
   private turnTrace: TurnTrace | null = null;
   /** The eager request that is waiting for its turn to be confirmed, and the notes of those that were dropped since the last turn (docs A10). */
@@ -224,7 +228,16 @@ export class LabAgent {
       leadMs: this.cfg.leadMs,
       estimateWordsPerSecond: this.cfg.livePace,
       synthesize: (text, signal) => this.synth(text, signal),
+      openTurn: () => this.openSpeechTurn(),
+      estimateMsPerChar: () => 60 / Math.min(1.5, Math.max(0.5, (this.speed ?? 1) * this.cfg.fluxSpeedScale)),
       hooks: {
+        streamFailed: (err) => {
+          const why = err instanceof MouthError ? err.kind : 'error';
+          this.mouthDownUntil.set('flux', this.clock() + MOUTH_DOWN_MS);
+          this.turnTrace?.fallbacks.push(`flux:${why}`);
+          this.log.warn({ why }, 'voice lab: the Flux TTS speech failed');
+          this.send({ type: 'Warning', code: 'LAB_SPEECH_FAILED', description: 'The synthesizer failed while speaking.' });
+        },
         audio: (chunk) => {
           if (this.ws.readyState === WebSocket.OPEN && this.ws.bufferedAmount < 4 * 1024 * 1024) this.ws.send(chunk, { binary: true }, () => undefined);
         },
@@ -389,6 +402,7 @@ export class LabAgent {
       this.tickTimer = setInterval(() => this.tick(), TICK_MS);
       this.tickTimer.unref?.();
       void this.connectShadow();
+      this.prepareMouth();
       if (greeting) this.sayAsAgent(greeting);
       void this.warmFillers();
     } catch (err) {
@@ -552,7 +566,13 @@ export class LabAgent {
     this.speechStartAt = this.speechStartAt ?? at;
     // the student begins again: an eager request made for the turn that seemed to be over is not the answer to what is being said now
     this.dropSpec('speech');
-    if (!this.waitingForEarsSince) this.waitingForEarsSince = this.clock();
+    // the wait for the recognizer's first word begins with the first onset, and starts again at an onset when the old one is stale: a click or a cough that the recognizer rightly ignored must not
+    // stay on the books for minutes and make the next real utterance look like a silent recognizer
+    const waitedFor = this.clock();
+    if (!this.waitingForEarsSince || waitedFor - this.waitingForEarsSince > 3 * this.cfg.silentEarsMs) {
+      this.waitingForEarsSince = waitedFor;
+      this.voicedAtWait = this.vad.voicedTotalMs;
+    }
     // the agent is not speaking: the student's onset is Deepgram's UserStartedSpeaking (when it IS speaking, the barge-in rule decides, in the tick)
     if (!this.ears?.decidesTurn && !this.speaker.speaking && !this.userStartedSent) {
       this.userStartedSent = true;
@@ -589,8 +609,10 @@ export class LabAgent {
         this.userStartedSent = false;
       }
     }
-    // the recognizer says nothing while the student speaks: after a while it is given up (docs 9.4 C8)
-    if (this.waitingForEarsSince && this.vad.voiced && now - this.lastAudioAt < 250 && now - this.waitingForEarsSince >= this.cfg.silentEarsMs) {
+    // the recognizer says nothing while the student speaks: after `silentEarsMs` of speech it is given up (docs 9.4 C8). It is the speech that is counted, not the time since the first sound: a
+    // pause in the audio, or a few blips of noise spread over seconds, is not a recognizer that has gone deaf (it gave a false alarm in the owner's call of 2026-11-14, and a test of 2026-11-15 hit it:
+    // 360 ms of speech, a pause of 350 ms in the audio, and the recognizers were switched: docs/LOCAL_VOICE.md 9.10)
+    if (this.waitingForEarsSince && this.vad.voiced && now - this.lastAudioAt < 250 && this.vad.voicedTotalMs - this.voicedAtWait >= this.cfg.silentEarsMs) {
       this.waitingForEarsSince = 0;
       void this.onEarsDown('silent while the student was speaking', true);
     }
@@ -612,7 +634,7 @@ export class LabAgent {
     this.lastCommitText = clean;
     this.userStartedSent = false;
     const stamp = new Date((this.deps.wallNow ?? Date.now)()).toISOString();
-    const trace = spec ? spec.run.trace : newTurnTrace({ sid: this.sid, mode: this.profile, ears: this.earsKind ?? '', mouth: this.mouthKind, turn: this.turnNo, at: stamp });
+    const trace = spec ? spec.run.trace : newTurnTrace({ sid: this.sid, mode: this.profile, ears: this.earsKind ?? '', mouth: this.primaryKind(), turn: this.turnNo, at: stamp });
     trace.turn = this.turnNo;
     trace.at = stamp;
     if (this.cfg.chain) trace.chain = this.cfg.chain;
@@ -648,7 +670,7 @@ export class LabAgent {
     this.turnNo++;
     const now = this.clock();
     this.finishTrace('superseded');
-    const trace = newTurnTrace({ sid: this.sid, mode: this.profile, ears: this.earsKind ?? '', mouth: this.mouthKind, turn: this.turnNo, at: new Date((this.deps.wallNow ?? Date.now)()).toISOString() });
+    const trace = newTurnTrace({ sid: this.sid, mode: this.profile, ears: this.earsKind ?? '', mouth: this.primaryKind(), turn: this.turnNo, at: new Date((this.deps.wallNow ?? Date.now)()).toISOString() });
     trace.commit = this.rel(now);
     trace.commitReason = 'injected';
     trace.userText = text.slice(0, 80);
@@ -681,6 +703,7 @@ export class LabAgent {
     (this.pending.size > 0 ? this.callTail : this.tail).push({ tag, text });
     this.history.addAssistant(text);
     this.speaker.say(text, tag);
+    this.speaker.endText();                          // a line of its own is a speech of its own (a streaming mouth is told that no more text follows)
   }
 
   private nextTag(rec: boolean, text = ''): number {
@@ -712,6 +735,7 @@ export class LabAgent {
       adoption: null,
       settleAdoption: null,
       flushHeld: null,
+      roundTextDone: false,
       failed: false,
     };
     if (held) {
@@ -799,7 +823,7 @@ export class LabAgent {
       this.dropSpec('replaced');
     }
     const now = this.clock();
-    const trace = newTurnTrace({ sid: this.sid, mode: this.profile, ears: this.earsKind ?? '', mouth: this.mouthKind, turn: 0, at: new Date((this.deps.wallNow ?? Date.now)()).toISOString() });
+    const trace = newTurnTrace({ sid: this.sid, mode: this.profile, ears: this.earsKind ?? '', mouth: this.primaryKind(), turn: 0, at: new Date((this.deps.wallNow ?? Date.now)()).toISOString() });
     const run = this.newRun(trace, 0, undefined, true);
     this.spec = { text: clean, key, rev: this.history.revision, askedAt: now, source, run };
     void this.loop(run, clean);
@@ -886,8 +910,10 @@ export class LabAgent {
       run.flushHeld = () => {
         run.held = false;
         for (const held of run.heldSentences.splice(0)) speakNow(held);
+        if (run.roundTextDone) this.speaker.endText();            // (the round had finished while its sentences were held back)
       };
     }
+    run.roundTextDone = false;
     run.thinkSentAt = this.clock();
     run.firstTokenAt = null;
     if (round === 0) run.trace.thinkSent = this.rel(run.thinkSentAt);
@@ -919,6 +945,8 @@ export class LabAgent {
     });
     if (result.firstTokenAt !== null && run.firstTokenAt === null) run.firstTokenAt = result.firstTokenAt;
     for (const s of cutter.end()) speak(s);
+    run.roundTextDone = true;
+    if (!run.held) this.speaker.endText();                         // the text of this round is complete: a streaming mouth ends its speech (the next round, after its functions, is another speech)
     if (run.trace.firstToken === undefined && result.firstTokenAt !== null) run.trace.firstToken = this.rel(result.firstTokenAt);
     if (roundRec.firstToken === undefined && result.firstTokenAt !== null) roundRec.firstToken = this.rel(result.firstTokenAt);
     return result.toolCalls;
@@ -1023,7 +1051,10 @@ export class LabAgent {
     this.history.dropUnansweredToolCalls();
     // the message that is last now (the one the calls were on, when the student spoke while they ran) keeps only what was spoken of its end
     const items = hadCalls ? this.callTail : this.tail;
-    this.history.cutTail(items.map((i) => i.text).join(' '), this.keptOf(items, report));
+    const keptEstimate = this.keptOf(items, report);
+    this.history.cutTail(items.map((i) => i.text).join(' '), keptEstimate);
+    // a speech the service was still making is cut with the offset of what had played, and its answer, a moment later, says exactly what was heard: the estimate above is replaced by it
+    if (report.exact) void report.exact.then((exact) => this.refineSpoken(items, report, exact, keptEstimate)).catch(() => undefined);
     const trace = run?.trace ?? this.turnTrace;
     if (trace) {
       // the first loud frame of what was heard (the window rule's own start: a dip splits the normal view's run)
@@ -1049,9 +1080,16 @@ export class LabAgent {
    * What of these lines was spoken when the student spoke over the agent: a line of this speech by what the speaker says (the one that was playing, cut by what played; one not yet begun,
    * nothing); a sentence of an earlier speech (the model went on after a pause in the audio) in full if it was played out, nothing if it was never sent; a filler of an earlier speech in full.
    */
-  private keptOf(items: TailItem[], report: SpokenReport): string {
+  private keptOf(items: TailItem[], report: SpokenReport, exact?: { tags: number[]; split: TurnSplit } | null): string {
     const parts: string[] = [];
+    let exactUsed = false;
     for (const item of items) {
+      if (exact?.tags.includes(item.tag)) {
+        // the sentences of a streamed speech the service has cut: what it says was heard stands for all of them, once
+        if (!exactUsed && exact.split.spoken) parts.push(exact.split.spoken);
+        exactUsed = true;
+        continue;
+      }
       const r = report.sentences.find((x) => x.tag === item.tag);
       let kept: string;
       if (r) kept = r.started ? wordsPlayed(item.text, r.playedFraction) : '';
@@ -1060,6 +1098,13 @@ export class LabAgent {
       if (kept) parts.push(kept);
     }
     return parts.join(' ');
+  }
+
+  /** The service's exact words replace the estimate in the history, as long as the history still ends with the estimate (a later message makes `cutTail` leave it alone). */
+  private refineSpoken(items: TailItem[], report: SpokenReport, exact: { tags: number[]; split: TurnSplit } | null, keptEstimate: string): void {
+    if (!exact || !keptEstimate || this.closed) return;
+    const keptExact = this.keptOf(items, report, exact);
+    if (keptExact && keptExact !== keptEstimate) this.history.cutTail(keptEstimate, keptExact);
   }
 
   /** The student went on before the answer had begun: the request is dropped, and the words go with the next turn. */
@@ -1091,11 +1136,11 @@ export class LabAgent {
   private async *synth(text: string, signal: AbortSignal): AsyncGenerator<Buffer> {
     const clean = spokenText(text);
     if (!clean) return;
-    const primary = this.mouthKind;
+    const primary = this.primaryKind();
     const order: MouthKind[] = [primary, ...(this.cfg.mouthFallback !== 'none' && this.cfg.mouthFallback !== primary ? [this.cfg.mouthFallback] : [])];
     let last: Error | null = null;
     for (const kind of order) {
-      if (kind === 'aura' && !this.deps.haveDeepgramKey()) continue;
+      if ((kind === 'aura' || kind === 'flux') && !this.deps.haveDeepgramKey()) continue;
       if ((this.mouthDownUntil.get(kind) ?? 0) > this.clock() && kind === primary && order.length > 1) continue;
       let yielded = false;
       try {
@@ -1120,8 +1165,64 @@ export class LabAgent {
 
   private voiceFor(kind: MouthKind): string {
     if (kind === 'labgpu') return this.cfg.labgpuVoice;
+    if (kind === 'flux') return this.fluxVoice() ?? this.cfg.fluxVoiceChat;
     if (/^aura-2-[a-z]+-[a-z]{2}$/.test(this.voice)) return this.voice;
     return this.profile === 'interview' ? this.cfg.auraVoiceInterview : this.cfg.auraVoiceChat;
+  }
+
+  /**
+   * The Flux voice a speech is made in: the Settings' own when it is one (the live call's `flux-hannah-en`), else the lab's default for a conversation; null when this call's voice is not a Flux one
+   * (the interviewer's is an Aura voice in the live call too, `aura-2-mars-en`): then the lab speaks as the live call does, a sentence at a time through Aura.
+   */
+  private fluxVoice(): string | null {
+    if (/^flux-[a-z]+-[a-z]{2}$/.test(this.voice)) return this.voice;
+    if (/^aura-2-[a-z]+-[a-z]{2}$/.test(this.voice) || this.profile === 'interview') return null;
+    return this.cfg.fluxVoiceChat;
+  }
+
+  /** The mouth this call speaks with: the configured one, except that a Flux mouth speaks only in a Flux voice. */
+  private primaryKind(): MouthKind {
+    return this.mouthKind === 'flux' && this.fluxVoice() === null ? 'aura' : this.mouthKind;
+  }
+
+  private fluxSpeed(): number | undefined {
+    return this.speed !== undefined ? this.speed * this.cfg.fluxSpeedScale : undefined;
+  }
+
+  /**
+   * One whole answer as one continuous speech of the Flux mouth (the speaker asks for it when the first sentence of an answer is said), or null when the sentences are to be made one by one: another
+   * mouth, no key, the Flux mouth failed a moment ago (`mouthDownUntil`), or a voice that is not a Flux one. The model's sentences are cleaned for speech here, as `synth` cleans each of them.
+   */
+  private openSpeechTurn(): SpeechTurn | null {
+    if (this.mouthKind !== 'flux' || this.primaryKind() !== 'flux') return null;
+    if (!this.deps.haveDeepgramKey() || (this.mouthDownUntil.get('flux') ?? 0) > this.clock()) return null;
+    const voice = this.fluxVoice();
+    const mouth = this.mouthOf('flux');
+    if (!voice || !mouth.openTurn) return null;
+    const turn = mouth.openTurn({ voice, speed: this.fluxSpeed() });
+    return {
+      speak: (text) => {
+        const clean = spokenText(text);
+        return clean ? turn.speak(clean) : '';
+      },
+      end: () => turn.end(),
+      get audio() {
+        return turn.audio;
+      },
+      interrupt: (playedMs) => turn.interrupt(playedMs),
+      abandon: () => turn.abandon(),
+      get durationMs() {
+        return turn.durationMs;
+      },
+    };
+  }
+
+  /** The streaming mouth's socket is opened ahead of the first sentence, so that the answer does not wait for the handshake. */
+  private prepareMouth(): void {
+    if (this.primaryKind() !== 'flux' || !this.deps.haveDeepgramKey()) return;
+    const voice = this.fluxVoice();
+    const mouth = this.mouthOf('flux');
+    if (voice && mouth.prepare) mouth.prepare({ voice, speed: this.fluxSpeed() });
   }
 
   /** The tempo factor that brings LabGPU's voice (which has no speed control) to the pace the live voices have at the Settings' speed. */
@@ -1143,7 +1244,7 @@ export class LabAgent {
   private async *mouthStream(kind: MouthKind, clean: string, signal: AbortSignal): AsyncGenerator<Buffer> {
     const voice = this.voiceFor(kind);
     const mouth = this.mouthOf(kind);
-    const speed = mouth.takesSpeed && this.speed !== undefined ? this.speed * this.cfg.auraSpeedScale : undefined;
+    const speed = mouth.takesSpeed && this.speed !== undefined ? this.speed * (kind === 'flux' ? this.cfg.fluxSpeedScale : this.cfg.auraSpeedScale) : undefined;
     const factor = !mouth.takesSpeed && this.cfg.tempo ? this.tempoFactor() : 1;
     const key = PcmCache.key(kind, voice, factor !== 1 ? factor : speed, clean);
     const cached = this.deps.cache.get(key);
@@ -1172,6 +1273,8 @@ export class LabAgent {
 
   /** The fixed lines of prompts.ts (the fillers) once, in the background, so that a filler starts without a synthesis wait. */
   private async warmFillers(): Promise<void> {
+    // a streaming mouth serves one speech after the other and charges by the character: a warm-up of forty lines would hold the first answer back and cost money on every call
+    if (this.mouthOf(this.primaryKind()).prewarm === false) return;
     const texts = Object.values(lines.fillers).flat();
     const signal = new AbortController().signal;
     for (const text of texts) {
@@ -1179,7 +1282,7 @@ export class LabAgent {
       const clean = spokenText(text);
       if (!clean) continue;
       try {
-        for await (const _ of this.mouthStream(this.mouthKind, clean, signal)) void _;
+        for await (const _ of this.mouthStream(this.primaryKind(), clean, signal)) void _;
       } catch {
         return;
       }
@@ -1219,6 +1322,13 @@ export class LabAgent {
     }
     this.cancelFunctions();
     this.speaker.close();
+    for (const mouth of this.mouths.values()) {
+      try {
+        mouth.close?.();
+      } catch {
+        /* closed */
+      }
+    }
     try {
       this.ears?.close();
       this.shadow?.close();

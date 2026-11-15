@@ -72,8 +72,8 @@ describe('the barge-in and the eager end of turn (round 2, A10 and A11)', () => 
 describe('forChain', () => {
   const base = cfg({ TAI_VOICE_LAB: '1' });
 
-  it('knows exactly four chains', () => {
-    expect(['d', 'h', 'fd', 'c'].every(isChainName)).toBe(true);
+  it('knows exactly five chains', () => {
+    expect(['d', 'h', 'fd', 'c', 'cf'].every(isChainName)).toBe(true);
     for (const x of ['', 'D', 'labgpu', 'h ', 'hh', undefined, null, 4]) expect(isChainName(x)).toBe(false);
   });
 
@@ -85,6 +85,17 @@ describe('forChain', () => {
   it('fd: Flux ears and LabGPU mouth; c: Flux ears and Aura mouth, both with the eager end of turn, LabGPU ears as the shadow and as the fallback', () => {
     expect(forChain(base, 'fd')).toMatchObject({ chain: 'fd', ears: 'flux', earsFallback: 'labgpu', shadowEars: 'labgpu', mouth: 'labgpu', eagerEot: DEFAULT_EAGER_EOT });
     expect(forChain(base, 'c')).toMatchObject({ chain: 'c', ears: 'flux', earsFallback: 'labgpu', shadowEars: 'labgpu', mouth: 'aura', mouthFallback: 'labgpu', eagerEot: DEFAULT_EAGER_EOT });
+  });
+
+  it('cf: Flux ears and the Flux TTS mouth (the live call\'s voice, one speech per answer), Aura as the mouth that takes over, LabGPU ears as the shadow and the fallback', () => {
+    expect(forChain(base, 'cf')).toMatchObject({ chain: 'cf', ears: 'flux', earsFallback: 'labgpu', shadowEars: 'labgpu', mouth: 'flux', mouthFallback: 'aura', eagerEot: DEFAULT_EAGER_EOT });
+  });
+
+  it('the Flux TTS settings: the address, the voice, the scale of the Settings\' speed; the mouth can be chosen for the process', () => {
+    expect(base).toMatchObject({ fluxTtsUrl: 'wss://api.deepgram.com', fluxVoiceChat: 'flux-hannah-en', fluxSpeedScale: 1 });
+    const own = cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_MOUTH: 'flux', TAI_VOICE_LAB_FLUX_TTS_URL: 'ws://127.0.0.1:9/', TAI_VOICE_LAB_FLUX_SPEED_SCALE: '0.9' });
+    expect(own).toMatchObject({ mouth: 'flux', mouthFallback: 'aura', fluxTtsUrl: 'ws://127.0.0.1:9', fluxSpeedScale: 0.9 });
+    expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_FLUX_TTS_URL: 'https://x.test' }).fluxTtsUrl).toBe('wss://api.deepgram.com');   // not a ws address: the default, said once
   });
 
   it('the threshold of TAI_VOICE_LAB_EAGER_EOT is the one the chains that use the eager end of turn take', () => {

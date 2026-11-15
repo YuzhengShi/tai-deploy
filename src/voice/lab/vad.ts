@@ -123,6 +123,11 @@ export class Vad {
     return this._runStartedAt;
   }
 
+  /** All the voiced time seen so far (ms): the frames that passed the speech bar, in a run or not, never reset. The difference of two readings is the speech in between, whatever the pauses. */
+  get voicedTotalMs(): number {
+    return this._voicedFrames * this.opts.frameMs;
+  }
+
   /** Frames seen and voiced, and the latest frame's level, for the trace. */
   get stats(): { frames: number; voicedFrames: number; lastRms: number } {
     return { frames: this._frames, voicedFrames: this._voicedFrames, lastRms: Math.round(this.lastRms) };

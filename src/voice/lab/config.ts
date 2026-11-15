@@ -64,6 +64,11 @@ export interface LabConfig {
   ttsSpeedField: boolean;
   /** A multiple of the Settings' pace for that field (default 1: the local voice at 1.2 speaks about 3.5 words a second, the live Flux voice at 1.2 about 3.6). */
   ttsSpeedScale: number;
+  /**
+   * A fixed gain on the speech of the TTS service, in dB (default 0: none). The local voice speaks about 10 dB below the live voice (-26 dBFS RMS against -16) and Flux TTS's own level is the live one;
+   * 9 brings the local voice to within a dB of it (mouth/level.ts: a soft limiter keeps the peaks under -1 dBFS).
+   */
+  ttsGainDb: number;
   /** The voice of LabGPU's TTS (one English voice there: af_bella and default are the same). */
   labgpuVoice: string;
   /** Time-stretch LabGPU's voice, which has no speed control, to the pace the live voices have (src/voice/lab/mouth/tempo.ts). */
@@ -113,6 +118,7 @@ export const LAB_ENV_KEYS = [
   'TAI_VOICE_LAB_TTS_URL',
   'TAI_VOICE_LAB_TTS_SPEED_FIELD',
   'TAI_VOICE_LAB_TTS_SPEED_SCALE',
+  'TAI_VOICE_LAB_TTS_GAIN_DB',
   'TAI_VOICE_LAB_LABGPU_VOICE',
   'TAI_VOICE_LAB_TEMPO',
   'TAI_VOICE_LAB_AURA_SPEED_SCALE',
@@ -221,6 +227,7 @@ export function loadLabConfig(lookup: (key: string) => string | undefined, warn:
     ttsUrl: url('TAI_VOICE_LAB_TTS_URL', DEFAULT_LABGPU_TTS, ['http:', 'https:']),
     ttsSpeedField: raw('TAI_VOICE_LAB_TTS_SPEED_FIELD') === '1',
     ttsSpeedScale: num('TAI_VOICE_LAB_TTS_SPEED_SCALE', 1, 0.5, 2),
+    ttsGainDb: num('TAI_VOICE_LAB_TTS_GAIN_DB', 0, -12, 18),
     labgpuVoice: safeLabGPUVoice(name('TAI_VOICE_LAB_LABGPU_VOICE', 'af_bella'), warn),
     tempo: raw('TAI_VOICE_LAB_TEMPO') !== '0',
     livePace: 3.45,

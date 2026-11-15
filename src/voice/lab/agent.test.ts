@@ -31,7 +31,7 @@ interface Rig {
   agent: LabAgent;
   client: WebSocket;
   msgs: Array<{ at: number; m: Msg }>;
-  audio: Array<{ at: number; bytes: number }>;
+  audio: Array<{ at: number; bytes: number; pcm: Buffer }>;
   relay: { requests: Array<{ messages: Array<Record<string, unknown>>; tools?: unknown[]; at: number; aborted: boolean }>; script: (n: number, body: { messages: Array<Record<string, unknown>> }) => Step[] };
   earsMade: FakeEars[];
   /** What the agent asked the factory for, in order: the kind, and the eager threshold it passed. */
@@ -156,7 +156,7 @@ async function rig(opts: { env?: Record<string, string>; chain?: string; ears?: 
   const t0 = performance.now();
   client.on('message', (data, isBinary) => {
     const at = performance.now() - t0;
-    if (isBinary) audio.push({ at, bytes: (data as Buffer).length });
+    if (isBinary) audio.push({ at, bytes: (data as Buffer).length, pcm: Buffer.from(data as Buffer) });
     else msgs.push({ at, m: JSON.parse(data.toString()) });
   });
   await new Promise<void>((r) => client.once('open', () => r()));
@@ -1340,5 +1340,34 @@ describe('LabAgent: the fixed lines rendered ahead of time', () => {
     await started(b, { greeting: null });
     await sleep(300);
     expect(cold.requests).toHaveLength(0);
+  }, 60_000);
+});
+
+describe('LabAgent: the level of the TTS service\'s voice', () => {
+  const peakOf = (r: Rig): number => Math.max(...r.audio.flatMap((a) => Array.from({ length: a.pcm.length >> 1 }, (_, i) => Math.abs(a.pcm.readInt16LE(i * 2)))));
+
+  it('raises the speech of a labgpu-kind mouth by TAI_VOICE_LAB_TTS_GAIN_DB (the fake\'s tone peaks at 3000), and leaves it as it was with no gain', async () => {
+    const quiet = await rig({ mouths: { labgpu: new FakeMouth({ name: 'labgpu', ms: 400 }), aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 400 }) } });
+    await started(quiet, { greeting: null });
+    quiet.relay.script = () => [{ text: 'A mutex is a lock.' }];
+    await say(quiet, 'What is a mutex?');
+    await quiet.until(() => quiet.of('AgentAudioDone').length === 1, 20_000);
+    expect(peakOf(quiet)).toBe(3000);
+    const loud = await rig({ env: { TAI_VOICE_LAB_TTS_GAIN_DB: '6.0206' }, mouths: { labgpu: new FakeMouth({ name: 'labgpu', ms: 400 }), aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 400 }) } });
+    await started(loud, { greeting: null });
+    loud.relay.script = () => [{ text: 'A mutex is a lock.' }];
+    await say(loud, 'What is a mutex?');
+    await loud.until(() => loud.of('AgentAudioDone').length === 1, 20_000);
+    expect(peakOf(loud)).toBe(6000);
+    expect(loud.audio.reduce((a, x) => a + x.bytes, 0)).toBe(quiet.audio.reduce((a, x) => a + x.bytes, 0));      // the same audio, only louder
+  }, 60_000);
+
+  it('does not touch the audio of the other mouths (Aura here; Flux TTS has the live level already)', async () => {
+    const r = await rig({ env: { TAI_VOICE_LAB_MOUTH: 'aura', TAI_VOICE_LAB_MOUTH_FALLBACK: 'none', TAI_VOICE_LAB_TTS_GAIN_DB: '12' }, mouths: { labgpu: new FakeMouth({ name: 'labgpu', ms: 400 }), aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 400 }) } });
+    await started(r, { greeting: null });
+    r.relay.script = () => [{ text: 'A mutex is a lock.' }];
+    await say(r, 'What is a mutex?');
+    await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
+    expect(peakOf(r)).toBe(3000);
   }, 60_000);
 });

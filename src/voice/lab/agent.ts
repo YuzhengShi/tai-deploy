@@ -18,6 +18,7 @@ import type { LabConfig, MouthKind, EarsKind } from './config.js';
 import { turnParamsFor } from './config.js';
 import { LabHistory, type ToolCall } from './history.js';
 import { PcmCache } from './mouth/cache.js';
+import { applyGain } from './mouth/level.js';
 import { spokenText } from './mouth/spoken.js';
 import { stretch } from './mouth/tempo.js';
 import { SentenceCutter } from './sentences.js';
@@ -1254,6 +1255,8 @@ export class LabAgent {
     const scale = kind === 'flux' ? this.cfg.fluxSpeedScale : kind === 'labgpu' ? this.cfg.ttsSpeedScale : this.cfg.auraSpeedScale;
     const speed = mouth.takesSpeed && this.speed !== undefined ? this.speed * scale : undefined;
     const factor = !mouth.takesSpeed && this.cfg.tempo ? this.tempoFactor() : 1;
+    // the level of the live voice is what the others are brought to (mouth/level.ts); what is cached is what is spoken, and the gain is the same for the life of the process
+    const gainDb = kind === 'labgpu' ? this.cfg.ttsGainDb : 0;
     const key = PcmCache.key(kind, voice, factor !== 1 ? factor : speed, clean);
     const cached = this.deps.cache.get(key);
     if (cached) {
@@ -1266,13 +1269,14 @@ export class LabAgent {
       if (signal.aborted) return;
       const pcm = Buffer.concat(parts);
       if (!pcm.length) return;
-      const out = stretch(pcm, OUT_RATE, factor);
+      const out = applyGain(stretch(pcm, OUT_RATE, factor), gainDb);
       if (clean.length <= 80) this.deps.cache.put(key, out);
       yield out;
       return;
     }
     const kept: Buffer[] = [];
-    for await (const piece of mouth.synthesize(clean, { voice, speed, signal })) {
+    for await (const raw of mouth.synthesize(clean, { voice, speed, signal })) {
+      const piece = applyGain(raw, gainDb);
       kept.push(piece);
       yield piece;
     }

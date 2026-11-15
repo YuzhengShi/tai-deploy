@@ -51,6 +51,16 @@ describe('loadLabConfig', () => {
     expect(warnings).toHaveLength(1);
   });
 
+  it('takes a gain in dB for the TTS service, none unless asked, and refuses what is out of -12 to 18', () => {
+    expect(cfg({ TAI_VOICE_LAB: '1' }).ttsGainDb).toBe(0);
+    expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_TTS_GAIN_DB: '9' }).ttsGainDb).toBe(9);
+    expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_TTS_GAIN_DB: '-3.5' }).ttsGainDb).toBe(-3.5);
+    const warnings: string[] = [];
+    expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_TTS_GAIN_DB: '40' }, warnings).ttsGainDb).toBe(0);
+    expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_TTS_GAIN_DB: 'loud' }, warnings).ttsGainDb).toBe(0);
+    expect(warnings).toHaveLength(2);
+  });
+
   it('never takes DrBerg for LabGPU\'s voice', () => {
     const warnings: string[] = [];
     expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_LABGPU_VOICE: 'DrBerg' }, warnings).labgpuVoice).toBe('af_bella');

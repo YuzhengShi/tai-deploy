@@ -140,6 +140,7 @@ async function rig(opts: { env?: Record<string, string>; chain?: string; ears?: 
   const config: LabConfig = forChain(loadLabConfig((k) => env[k]), opts.chain);
   config.earsConnectTimeoutMs = 300;
   config.silentEarsMs = 600;
+  config.silentEarsVoicedMs = 450;
 
   const earsMade: FakeEars[] = [];
   const earsAsked: Rig['earsAsked'] = [];
@@ -687,27 +688,52 @@ describe('LabAgent: when something is missing', () => {
     await r.until(() => r.of('Error').some((m) => m.code === 'LAB_EARS_SWITCHED'));
   });
 
-  it('does not give the recognizer up for a short stretch of speech followed by a pause in the audio (it is the speech that is counted, not the time since the first sound)', async () => {
+  // The rig's limits are shortened: 600 ms since the wait began and 450 ms of speech in it (production: 8 s and 5 s).
+  const switched = (r: Rig): boolean => r.of('Error').some((m) => m.code === 'LAB_EARS_SWITCHED');
+
+  it('does not give the recognizer up for a short stretch of speech followed by a pause in the audio (less speech than a healthy recognizer always answers)', async () => {
     const r = await rig();
     await started(r);
-    await r.feed(360, 7000);                                                    // less speech than the (shortened) 600 ms
+    await r.feed(360, 7000);                                                    // 300 ms of speech once the onset has opened: under the 450 ms
     await sleep(350);                                                           // the page's audio stops for a moment (a throttled tab): the VAD still says "speaking"
     await r.feed(160, 0);
     await sleep(400);
     expect(r.earsMade.map((e) => e.name)).toEqual(['labgpu']);
-    expect(r.of('Error').filter((m) => m.code === 'LAB_EARS_SWITCHED')).toHaveLength(0);
+    expect(switched(r)).toBe(false);
   });
 
-  it('does not give the recognizer up for blips of noise spread over seconds, which it rightly ignores', async () => {
+  it('does not give the recognizer up when a blip started the wait long ago and a real utterance has only just begun: the recognizer has had no time to answer it', async () => {
     const r = await rig();
     await started(r);
-    for (let i = 0; i < 10; i++) {
+    await r.feed(80, 7000);                                                     // a click or a cough that the recognizer rightly ignores: it starts a wait
+    await r.feed(1500, 0);                                                      // much longer than the 600 ms: the wait is old by now
+    await r.feed(300, 7000);                                                    // the student begins to speak
+    await sleep(150);
+    expect(r.earsMade.map((e) => e.name)).toEqual(['labgpu']);
+    expect(switched(r)).toBe(false);
+  });
+
+  it('still gives up a recognizer that is deaf to a student who says short things with pauses in between ("hello?" ... "can you hear me?")', async () => {
+    const r = await rig();
+    await started(r);
+    for (let i = 0; i < 6 && !switched(r); i++) {
+      await r.feed(300, 7000);                                                  // a short utterance, no word from the recognizer
+      await r.feed(700, 0);
+    }
+    await r.until(() => switched(r), 2000);
+    expect(r.earsMade.map((e) => e.name)).toContain('flux');
+  });
+
+  it('does not give the recognizer up for blips of noise spread over many seconds, which it rightly ignores', async () => {
+    const r = await rig();
+    await started(r);
+    for (let i = 0; i < 9; i++) {
       await r.feed(80, 7000);                                                   // a click or a cough: loud enough for an onset, and no words
-      await r.feed(320, 0);
+      await r.feed(1120, 0);
     }
     expect(r.earsMade.map((e) => e.name)).toEqual(['labgpu']);
-    expect(r.of('Error').filter((m) => m.code === 'LAB_EARS_SWITCHED')).toHaveLength(0);
-  });
+    expect(switched(r)).toBe(false);
+  }, 60_000);
 
   it('speaks a sentence through the fallback mouth when the first one answers with a substituted voice, and warns', async () => {
     const r = await rig({ mouths: { labgpu: failingMouth('fallback', 'labgpu'), aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 400 }) } });

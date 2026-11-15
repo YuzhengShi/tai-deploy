@@ -174,7 +174,7 @@ export class LabAgent {
   /** When audio last came in from the page: a recognizer is judged silent only while the microphone is being heard (a stalled page is not a silent recognizer). */
   private lastAudioAt = 0;
   private waitingForEarsSince = 0;
-  /** The VAD's voiced time (`voicedTotalMs`) when that wait began: the recognizer is given up on after this much SPEECH without a word from it, not after this much time since a sound. */
+  /** The VAD's voiced time (`voicedTotalMs`) when that wait began: the recognizer is given up on only when `silentEarsVoicedMs` of speech have been heard since then, as well as `silentEarsMs` of time. */
   private voicedAtWait = 0;
   private lastCommitText = '';
   private turnTrace: TurnTrace | null = null;
@@ -566,10 +566,11 @@ export class LabAgent {
     this.speechStartAt = this.speechStartAt ?? at;
     // the student begins again: an eager request made for the turn that seemed to be over is not the answer to what is being said now
     this.dropSpec('speech');
-    // the wait for the recognizer's first word begins with the first onset, and starts again at an onset when the old one is stale: a click or a cough that the recognizer rightly ignored must not
-    // stay on the books for minutes and make the next real utterance look like a silent recognizer
+    // the wait for the recognizer's first word begins with the first onset. A wait that a click or a cough started (long, and with less speech in it than a healthy recognizer always answers) is
+    // dropped at the next onset, so that blips spread over minutes never add up to a silent recognizer
     const waitedFor = this.clock();
-    if (!this.waitingForEarsSince || waitedFor - this.waitingForEarsSince > 3 * this.cfg.silentEarsMs) {
+    const stale = this.waitingForEarsSince > 0 && waitedFor - this.waitingForEarsSince > 6 * this.cfg.silentEarsMs && this.vad.voicedTotalMs - this.voicedAtWait < this.cfg.silentEarsVoicedMs;
+    if (!this.waitingForEarsSince || stale) {
       this.waitingForEarsSince = waitedFor;
       this.voicedAtWait = this.vad.voicedTotalMs;
     }
@@ -609,10 +610,16 @@ export class LabAgent {
         this.userStartedSent = false;
       }
     }
-    // the recognizer says nothing while the student speaks: after `silentEarsMs` of speech it is given up (docs 9.4 C8). It is the speech that is counted, not the time since the first sound: a
-    // pause in the audio, or a few blips of noise spread over seconds, is not a recognizer that has gone deaf (it gave a false alarm in the owner's call of 2026-11-14, and a test of 2026-11-15 hit it:
-    // 360 ms of speech, a pause of 350 ms in the audio, and the recognizers were switched: docs/LOCAL_VOICE.md 9.10)
-    if (this.waitingForEarsSince && this.vad.voiced && now - this.lastAudioAt < 250 && this.vad.voicedTotalMs - this.voicedAtWait >= this.cfg.silentEarsMs) {
+    // the recognizer says nothing while the student speaks: it is given up (docs 9.4 C8) when `silentEarsMs` have passed since the wait began (so that a student who says short things with pauses
+    // still gets the fallback) AND the VAD has heard `silentEarsVoicedMs` of speech since then (so that a blip, a cough, or a pause in the audio is not taken for a deaf recognizer: it gave a false
+    // alarm in the owner's call of 2026-11-14, and a test of 2026-11-15 hit it: 360 ms of speech, a pause of 350 ms in the audio, and the recognizers were switched: docs/LOCAL_VOICE.md 9.10)
+    if (
+      this.waitingForEarsSince &&
+      this.vad.voiced &&
+      now - this.lastAudioAt < 250 &&
+      now - this.waitingForEarsSince >= this.cfg.silentEarsMs &&
+      this.vad.voicedTotalMs - this.voicedAtWait >= this.cfg.silentEarsVoicedMs
+    ) {
       this.waitingForEarsSince = 0;
       void this.onEarsDown('silent while the student was speaking', true);
     }

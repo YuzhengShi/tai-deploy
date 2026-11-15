@@ -42,8 +42,17 @@ export interface LabConfig {
   novaUrl: string;
   auraUrl: string;
   earsConnectTimeoutMs: number;
-  /** While the VAD hears the student speak and the recognizer sends nothing for this long, the recognizer is given up. */
+  /**
+   * While the VAD hears the student speak, the recognizer is given up when it has said nothing for this long since the wait began AND the VAD has heard at least `silentEarsVoicedMs` of speech
+   * in that time (docs/LOCAL_VOICE.md 9.10): the wall time alone is what a deaf recognizer shows to a student who says short things with pauses; the speech alone cannot tell a deaf recognizer
+   * from a click or a cough that a healthy one ignores.
+   */
   silentEarsMs: number;
+  /**
+   * The speech a healthy recognizer always answers with some text before it is given up on: the local service's first interim comes after 3 s of unbroken speech and a decode of up to 1 s
+   * (docs/LOCAL_VOICE.md 3.3), Flux's and LabGPU's within a second or so; the default is more than that.
+   */
+  silentEarsVoicedMs: number;
   mouth: MouthKind;
   /** The synthesizer to use for a sentence when `mouth` fails ('none': the sentence is lost). */
   mouthFallback: MouthKind | 'none';
@@ -197,6 +206,7 @@ export function loadLabConfig(lookup: (key: string) => string | undefined, warn:
     auraUrl: url('TAI_VOICE_LAB_AURA_URL', DEFAULT_AURA_URL, ['http:', 'https:']),
     earsConnectTimeoutMs: 2500,
     silentEarsMs: 8000,
+    silentEarsVoicedMs: 5000,
     mouth,
     mouthFallback: choice<MouthKind | 'none'>('TAI_VOICE_LAB_MOUTH_FALLBACK', ['labgpu', 'aura', 'flux', 'none'], mouth === 'aura' ? 'none' : 'aura'),
     ttsUrl: url('TAI_VOICE_LAB_TTS_URL', DEFAULT_LABGPU_TTS, ['http:', 'https:']),

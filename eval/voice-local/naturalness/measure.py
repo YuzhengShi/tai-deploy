@@ -258,7 +258,7 @@ def cmd_flow() -> None:
     # per-sentence clips played back to back, as the lab plays them: the joins are known
     by = {}
     for it in sentence_clips():
-        if it['root'] == 'raw' and it['cond'] in ('flux-hannah', 'aura-thalia', 'local-F1', 'aura-mars') and not (it['cond'] == 'local-F1' and it['run'] == 2):
+        if it['root'] == 'raw' and it['cond'] in ('flux-hannah', 'aura-thalia', 'local-F1', 'aura-mars'):
             by.setdefault((it['cond'], it['run'], it['passage']), []).append(it)
     for (cond, run, pid), its in sorted(by.items()):
         its.sort(key=lambda r: r['sentence'])
@@ -301,17 +301,20 @@ def cmd_flow() -> None:
 
 
 def flow_table(cache: dict) -> list[str]:
-    lines = ['%-26s %6s %8s %10s %10s %12s %10s' % ('condition', 'joins', 'located', 'pause med', 'no pause', 'pause SD/clip', 'reset |med|')]
-    conds = sorted({v['cond'] for v in cache.values()})
-    for c in conds:
+    """Per condition: pause at the joins (median, quartiles, share with no pause of at least 60 ms), the spread of the pauses inside a clip (mean of the within-clip SD), and the pitch reset at the joins
+    (median of the signed value in semitones, median and 75th percentile of its absolute value)."""
+    lines = ['%-26s %5s %5s %18s %8s %9s %20s' % ('condition', 'joins', 'loc.', 'pause med [q1-q3] ms', 'no pause', 'SD/clip', 'reset med | |med| |p75|')]
+    for c in sorted({v['cond'] for v in cache.values()}):
         cl = [v for v in cache.values() if v['cond'] == c]
         js = [j for v in cl for j in v['joins']]
         loc = [j for j in js if j['located']]
-        pauses = [j['pause_ms'] for j in loc]
+        pauses = np.array([j['pause_ms'] for j in loc], dtype=float)
         sds = [np.std([j['pause_ms'] for j in v['joins'] if j['located']]) for v in cl if sum(j['located'] for j in v['joins']) >= 2]
-        resets = [abs(j['reset_st']) for j in loc if j.get('reset_st') is not None]
-        lines.append('%-26s %6d %8d %9.0fms %9.0f%% %11.0fms %9.1fst' % (c, len(js), len(loc), np.median(pauses) if pauses else float('nan'), 100 * np.mean([p == 0 for p in pauses]) if pauses else float('nan'),
-                                                                        np.mean(sds) if sds else float('nan'), np.median(resets) if resets else float('nan')))
+        resets = np.array([j['reset_st'] for j in loc if j.get('reset_st') is not None], dtype=float)
+        q = np.percentile(pauses, [25, 50, 75]) if len(pauses) else [float('nan')] * 3
+        lines.append('%-26s %5d %5d %6.0f [%4.0f-%4.0f]     %7.0f%% %7.0fms %+6.1f | %4.1f | %4.1f st' % (
+            c, len(js), len(loc), q[1], q[0], q[2], 100 * np.mean(pauses == 0) if len(pauses) else float('nan'), np.mean(sds) if sds else float('nan'),
+            np.median(resets) if len(resets) else float('nan'), np.median(np.abs(resets)) if len(resets) else float('nan'), np.percentile(np.abs(resets), 75) if len(resets) else float('nan')))
     return lines
 
 
@@ -526,7 +529,7 @@ def cmd_report(stub: bool) -> None:
             out['utmos']['B2'] = {'auc': a, 'detail': detail, 'verdict': 'tracks his ear' if a >= 0.9 else ('weakly' if a >= 0.7 else 'does not track his ear')}
             md.append('**B2, his earlier verdicts** (liked: LabGPU and Supertonic F1 to F4, M1 to M5; rejected: Kokoro and Piper): AUC %.2f (%s); %s\n' % (a, out['utmos']['B2']['verdict'], json.dumps(detail)))
         # headline
-        md.append('**Headline: per-sentence UTMOS, level-matched; unit = passage (n = 10); difference to Flux hannah with a 95 % bootstrap interval; margin +/-%.2f**\n' % MARGIN)
+        md.append('**Headline: per-sentence UTMOS, level-matched; unit = passage (n = 10); difference to Flux hannah with a 95 %% bootstrap interval; margin +/-%.2f**\n' % MARGIN)
         md.append('| voice | UTMOS mean [95 % interval] | minus Flux hannah [95 % interval] | reading |')
         md.append('|---|---|---|---|')
         flux = passage_means(scores, clips, 'flux-hannah', 'norm')

@@ -1,0 +1,305 @@
+{
+ "stub": false,
+ "levels": {
+  "aura-mars": {
+   "clips": 80,
+   "level_db": -19.548375,
+   "peak_db": -2.9,
+   "wps": 4.0852875,
+   "seconds": 4.2284999999999995
+  },
+  "aura-thalia": {
+   "clips": 80,
+   "level_db": -22.498624999999997,
+   "peak_db": -2.22,
+   "wps": 4.0138875,
+   "seconds": 4.307
+  },
+  "flux-hannah": {
+   "clips": 80,
+   "level_db": -16.029125,
+   "peak_db": -1.5,
+   "wps": 3.8695499999999994,
+   "seconds": 4.705
+  },
+  "local-F1": {
+   "clips": 80,
+   "level_db": -25.985875,
+   "peak_db": -6.9,
+   "wps": 3.6955124999999995,
+   "seconds": 4.6949749999999995,
+   "deployed_level_db": -16.987625,
+   "limiter_touched_pct": 0.01728326201491774
+  },
+  "local-F1-speed1.0": {
+   "clips": 40,
+   "level_db": -26.149250000000002,
+   "peak_db": -6.63,
+   "wps": 3.1012250000000003,
+   "seconds": 5.6215,
+   "deployed_level_db": -17.1505,
+   "limiter_touched_pct": 0.008746135810812189
+  },
+  "local-F1-steps16": {
+   "clips": 40,
+   "level_db": -26.032500000000006,
+   "peak_db": -7.38,
+   "wps": 3.69125,
+   "seconds": 4.694975,
+   "deployed_level_db": -17.035,
+   "limiter_touched_pct": 0.016307057228452552
+  },
+  "local-F1-steps24": {
+   "clips": 40,
+   "level_db": -25.918,
+   "peak_db": -7.76,
+   "wps": 3.7007500000000007,
+   "seconds": 4.694975,
+   "deployed_level_db": -16.920749999999998,
+   "limiter_touched_pct": 0.016573294897488513
+  },
+  "local-F1-steps5": {
+   "clips": 40,
+   "level_db": -25.9375,
+   "peak_db": -5.7,
+   "wps": 3.692,
+   "seconds": 4.694975,
+   "deployed_level_db": -16.9405,
+   "limiter_touched_pct": 0.02398357668565607
+  },
+  "local-F2": {
+   "clips": 40,
+   "level_db": -24.72625,
+   "peak_db": -5.4,
+   "wps": 4.2448999999999995,
+   "seconds": 4.1621250000000005
+  }
+ },
+ "wer": {
+  "aura-mars": {
+   "words": 1300,
+   "errors": 33,
+   "wer": 0.025384615384615384,
+   "lo": 0.015243791815639491,
+   "hi": 0.03486690014491753,
+   "terms_heard": 26,
+   "terms": 30
+  },
+  "aura-thalia": {
+   "words": 1300,
+   "errors": 17,
+   "wer": 0.013076923076923076,
+   "lo": 0.005401234567901234,
+   "hi": 0.022156940134339744,
+   "terms_heard": 28,
+   "terms": 30
+  },
+  "flux-hannah": {
+   "words": 1300,
+   "errors": 21,
+   "wer": 0.016153846153846154,
+   "lo": 0.004608294930875576,
+   "hi": 0.029411764705882353,
+   "terms_heard": 27,
+   "terms": 30
+  },
+  "local-F1": {
+   "words": 1300,
+   "errors": 36,
+   "wer": 0.027692307692307693,
+   "lo": 0.00868809941411352,
+   "hi": 0.05631873677469648,
+   "terms_heard": 28,
+   "terms": 30
+  },
+  "local-F1-speed1.0": {
+   "words": 650,
+   "errors": 14,
+   "wer": 0.021538461538461538,
+   "lo": 0.004497582795428633,
+   "hi": 0.04938271604938271,
+   "terms_heard": 14,
+   "terms": 15
+  },
+  "local-F1-steps16": {
+   "words": 650,
+   "errors": 15,
+   "wer": 0.023076923076923078,
+   "lo": 0.0,
+   "hi": 0.05401234567901234,
+   "terms_heard": 14,
+   "terms": 15
+  },
+  "local-F1-steps24": {
+   "words": 650,
+   "errors": 18,
+   "wer": 0.027692307692307693,
+   "lo": 0.009188010171825169,
+   "hi": 0.051037855333520954,
+   "terms_heard": 14,
+   "terms": 15
+  },
+  "local-F1-steps5": {
+   "words": 650,
+   "errors": 18,
+   "wer": 0.027692307692307693,
+   "lo": 0.007610060929064135,
+   "hi": 0.05945121951219512,
+   "terms_heard": 14,
+   "terms": 15
+  },
+  "local-F2": {
+   "words": 650,
+   "errors": 13,
+   "wer": 0.02,
+   "lo": 0.001639344262295082,
+   "hi": 0.0490076885179459,
+   "terms_heard": 13,
+   "terms": 15
+  }
+ },
+ "flow": {
+  "aura-mars-persentence": {
+   "joins": 60,
+   "pause_ms_median": 100.0,
+   "reset_abs_st_median": 6.66
+  },
+  "aura-thalia-persentence": {
+   "joins": 60,
+   "pause_ms_median": 115.0,
+   "reset_abs_st_median": 8.035
+  },
+  "aura-thalia-whole": {
+   "joins": 58,
+   "pause_ms_median": 290.0,
+   "reset_abs_st_median": 9.065000000000001
+  },
+  "cf-lab": {
+   "joins": 6,
+   "pause_ms_median": 305.0,
+   "reset_abs_st_median": 3.24
+  },
+  "flux-hannah-persentence": {
+   "joins": 60,
+   "pause_ms_median": 320.0,
+   "reset_abs_st_median": 2.7649999999999997
+  },
+  "flux-hannah-whole": {
+   "joins": 60,
+   "pause_ms_median": 355.0,
+   "reset_abs_st_median": 2.0949999999999998
+  },
+  "live-agent": {
+   "joins": 6,
+   "pause_ms_median": 260.0,
+   "reset_abs_st_median": 0.63
+  },
+  "local-F1-persentence": {
+   "joins": 60,
+   "pause_ms_median": 220.0,
+   "reset_abs_st_median": 6.69
+  },
+  "local-F1-whole": {
+   "joins": 30,
+   "pause_ms_median": 470.0,
+   "reset_abs_st_median": 5.46
+  }
+ },
+ "utmos": {
+  "B1": {
+   "clean (level-matched)": 3.6937525,
+   "band-limited to 8 kHz sampling": 2.9851225,
+   "white noise at 20 dB SNR": 2.6368025000000004,
+   "level -20 dB": 3.7171524999999996,
+   "level -10 dB": 3.7225949999999997,
+   "level as rendered": 3.6934525000000002,
+   "level +9 dB (limited)": 3.0967325000000003
+  },
+  "B2": {
+   "auc": 0.9875,
+   "detail": {
+    "s3": {
+     "liked": 10,
+     "rejected": 8,
+     "liked_mean": 4.428110000000001,
+     "rejected_mean": 3.6107375
+    },
+    "s6": {
+     "liked": 10,
+     "rejected": 8,
+     "liked_mean": 4.41906,
+     "rejected_mean": 3.5834124999999997
+    }
+   },
+   "verdict": "tracks his ear"
+  },
+  "flux-hannah": {
+   "mean": 3.7344899999999996,
+   "lo": 3.69263175,
+   "hi": 3.7771815624999996
+  },
+  "aura-thalia": {
+   "mean": 4.358196250000001,
+   "lo": 4.33444215625,
+   "hi": 4.38079784375,
+   "diff": 0.62370625,
+   "diff_lo": 0.5784929062500002,
+   "diff_hi": 0.66687803125,
+   "reading": "a clear difference"
+  },
+  "aura-mars": {
+   "mean": 4.3302675,
+   "lo": 4.314755000000001,
+   "hi": 4.346838812500001,
+   "diff": 0.5957775000000002,
+   "diff_lo": 0.5561083124999999,
+   "diff_hi": 0.6329146250000002,
+   "reading": "a clear difference"
+  },
+  "local-F1": {
+   "mean": 4.380075,
+   "lo": 4.3420265625,
+   "hi": 4.41203428125,
+   "diff": 0.6455850000000002,
+   "diff_lo": 0.5967665625000002,
+   "diff_hi": 0.6966538750000001,
+   "reading": "a clear difference"
+  },
+  "local-F2": {
+   "mean": 4.312832500000001,
+   "lo": 4.258569937500001,
+   "hi": 4.364674312499999,
+   "diff": 0.5783425,
+   "diff_lo": 0.52353246875,
+   "diff_hi": 0.6340630312499997,
+   "reading": "a clear difference"
+  },
+  "local-F1-speed1.0": {
+   "mean": 4.42329,
+   "lo": 4.398856875,
+   "hi": 4.446849437500001,
+   "diff": 0.6887999999999999,
+   "diff_lo": 0.63927371875,
+   "diff_hi": 0.7387454375,
+   "reading": "a clear difference"
+  },
+  "local-F1-steps16": {
+   "mean": 4.3879775,
+   "lo": 4.346822125,
+   "hi": 4.420823125,
+   "diff": 0.6534875,
+   "diff_lo": 0.6138447499999999,
+   "diff_hi": 0.6914524999999999,
+   "reading": "a clear difference"
+  },
+  "local-F1-steps24": {
+   "mean": 4.3945775000000005,
+   "lo": 4.3402689375,
+   "hi": 4.429683750000001,
+   "diff": 0.6600875,
+   "diff_lo": 0.5973630624999997,
+   "diff_hi": 0.7176350000000001,
+   "reading": "a clear difference"
+  }
+ }
+}

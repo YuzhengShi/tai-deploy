@@ -58,11 +58,23 @@ def make_handler(root: str, results: str):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('--root', default=r'D:\tai-voice-local\listening-test-20261115\site')
-    ap.add_argument('--port', type=int, default=8765)
+    ap.add_argument('--port', type=int, default=18765, help='the first port to try; the next 20 are tried if it is taken (port 8765 was refused on this PC)')
     a = ap.parse_args()
     results = os.path.join(os.path.dirname(os.path.abspath(a.root)), 'results')
-    srv = http.server.ThreadingHTTPServer(('127.0.0.1', a.port), make_handler(os.path.abspath(a.root), results))
-    print('listening test on http://127.0.0.1:%d/  (answers go to %s)' % (a.port, results), flush=True)
+    handler = make_handler(os.path.abspath(a.root), results)
+    srv = None
+    for port in range(a.port, a.port + 21):
+        try:
+            srv = http.server.ThreadingHTTPServer(('127.0.0.1', port), handler)
+            break
+        except OSError:
+            continue
+    if srv is None:
+        print('no free port from %d to %d' % (a.port, a.port + 20), flush=True)
+        return 1
+    port = srv.server_address[1]
+    open(os.path.join(os.path.dirname(os.path.abspath(a.root)), 'port.txt'), 'w').write(str(port))
+    print('listening test on http://127.0.0.1:%d/  (answers go to %s)' % (port, results), flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

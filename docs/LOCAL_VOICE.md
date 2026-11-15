@@ -278,8 +278,9 @@ The question he answered named these changes: a new container on an internal net
   code are unchanged (`TAI_VOICE_LAB_TEMPO=0`, `TAI_VOICE_LAB_AURA_SPEED_SCALE=0.85` as before).
 - **How the owner reaches it:** the page address with `?voice=lab` (and no `chain`): the call runs on the process settings, so ears and mouth are the local service, with no Flux shadow and no fallback (a failure of the service is a
   failed call). The voice is style F1 (`af_bella`); another style is one setting, `TAI_VOICE_LAB_LABGPU_VOICE` (F1 to F5, M1 to M5, then `restart`).
-- **Still to come:** one synthetic call through the lab route with the measuring client, made after 00:01 UTC because the test identity has used 229 of today's minutes and the cap stays 45
-  (`~/voice-local/lv-verify.sh`, results in `~/voice-local/verify/<time>/`: the client's log, and what the container logged for the call).
+- **The synthetic call through the lab route could not be made, and was not needed.** It was planned for 00:01 UTC (`~/voice-local/lv-verify.sh`) and refused with "You have used today's 45 minutes of voice calls" (start-failed, no minute spent):
+  the usage counter's day is the app's time zone, America/Los_Angeles (`src/voice/usage.ts` takes a `timeZone`), so a day ends at 08:00 UTC in winter, not at UTC midnight (an earlier note of this branch said "the host day is UTC": wrong for
+  the voice budget). The path was verified by the owner's own calls instead: the container logged his recognition connections (22:58, 22:59, 23:46 UTC) and the lab's trace holds his 12 turns on it (9.7).
 
 ### 9.7 The owner's first calls on it (22:58 and 23:46 UTC) and what he said
 

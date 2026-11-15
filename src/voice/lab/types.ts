@@ -96,6 +96,8 @@ export interface SynthOptions {
   voice: string;
   /** A pace multiplier the voice itself takes (Aura's `speed`); a mouth with `takesSpeed` false ignores it and the engine time-stretches (src/voice/lab/mouth/tempo.ts). */
   speed?: number;
+  /** Flux's `expressivity` (beta), a whole number from -2 (calmer) to 2 (more animated); undefined or 0 is the voice's own. The other mouths ignore it. */
+  expressivity?: number;
   /** Aborted when the student barges in or the call ends: the HTTP request is dropped and the iterator ends. */
   signal?: AbortSignal;
 }
@@ -130,6 +132,8 @@ export interface TurnOptions {
   voice: string;
   /** The pace the voice itself takes (Flux: 0.5 to 1.5 in steps of 0.05), undefined for its own. */
   speed?: number;
+  /** Flux's `expressivity` (beta): -2 to 2, undefined or 0 for the voice's own. The service fixes it for a connection, so another value is another socket (unlike the pace, which `Configure` changes). */
+  expressivity?: number;
 }
 
 /** What the service says about a speech that was cut short: the text that was heard and the text that was not (cut at a word). */

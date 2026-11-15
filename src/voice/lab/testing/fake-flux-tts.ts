@@ -115,6 +115,8 @@ export class FakeFluxTtsConnection extends FakeConnectionBase {
       if (!(v >= 0.5 && v <= 1.5) || Math.abs(v * 20 - Math.round(v * 20)) > 1e-9) this.violations.push('speed is not 0.5 to 1.5 in steps of 0.05');
       this.configuredSpeed = v;
     }
+    // the service's beta setting: whole numbers from -2 to 2, in the address only; 0 is the voice's own and is never sent
+    if (q.has('expressivity') && !/^(-[12]|[12])$/.test(q.get('expressivity') ?? '')) this.violations.push('expressivity is not a whole number from -2 to 2 other than 0');
     this.sendJson({ type: 'Connected', request_id: '550e8400-e29b-41d4-a716-446655440000', model_name: q.get('model') ?? '', model_version: 'fake', model_uuids: [] });
   }
 

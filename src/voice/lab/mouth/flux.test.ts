@@ -4,7 +4,7 @@ import { recordingLog, sleep, until } from '../testing/fake-asr.js';
 import { FakeFluxTts, type FakeFluxTtsOptions } from '../testing/fake-flux-tts.js';
 import { drain } from '../testing/fake-tts.js';
 import { MouthError, type SpeechTurn } from '../types.js';
-import { FluxTtsMouth, fluxSpeedParam, type FluxTtsMouthOptions } from './flux.js';
+import { FluxTtsMouth, fluxExpressivityParam, fluxSpeedParam, type FluxTtsMouthOptions } from './flux.js';
 
 /** A sentence with words no message of the mouth may ever repeat. */
 const TEXT = 'Zebrafish marmalade quietly orbits seventeen purple lanterns today';
@@ -64,6 +64,18 @@ describe('fluxSpeedParam', () => {
     expect(fluxSpeedParam(1.17)).toBe('1.15');
     expect(fluxSpeedParam(0.3)).toBe('0.5');
     expect(fluxSpeedParam(1.77)).toBe('1.5');
+  });
+});
+
+describe('fluxExpressivityParam', () => {
+  it('is Flux\'s beta scale: the whole numbers -2 to 2, and nothing for its own (0) or for anything else', () => {
+    expect(fluxExpressivityParam(undefined)).toBeUndefined();
+    expect(fluxExpressivityParam(0)).toBeUndefined();
+    expect(fluxExpressivityParam(Number.NaN)).toBeUndefined();
+    expect(fluxExpressivityParam(1.5)).toBeUndefined();
+    expect(fluxExpressivityParam(3)).toBeUndefined();
+    expect(fluxExpressivityParam(-3)).toBeUndefined();
+    expect([-2, -1, 1, 2].map((v) => fluxExpressivityParam(v))).toEqual(['-2', '-1', '1', '2']);
   });
 });
 
@@ -194,6 +206,26 @@ describe('FluxTtsMouth: a whole answer as ONE speech', () => {
     expect(fake.connections).toHaveLength(1);
     expect(fake.last.clientTypes()).toContain('Configure');
     expect(fake.last.configuredSpeed).toBe(0.8);
+    expect(fake.violations).toEqual([]);
+  });
+
+  it('the expressivity is in the address (the service has no Configure for it): nothing is added for 0 or for a value out of range, the same value keeps the socket and another value is another socket', async () => {
+    const { fake, mouth } = await setup();
+    await drain(mouth.synthesize('Plain.', { voice: VOICE, speed: 1.2, expressivity: 0 }));
+    expect(fake.last.query.has('expressivity')).toBe(false);
+    await drain(mouth.synthesize('Out of range.', { voice: VOICE, speed: 1.2, expressivity: 5 }));
+    expect(fake.connections).toHaveLength(1);                                    // 5 is dropped, so it is the same as none: the same socket
+    await drain(mouth.synthesize('Livelier.', { voice: VOICE, speed: 1.2, expressivity: 1 }));
+    expect(fake.connections).toHaveLength(2);
+    expect(fake.last.query.get('expressivity')).toBe('1');
+    expect(fake.last.query.get('speed')).toBe('1.2');
+    await until(() => fake.connections[0].closed, 2000, 'the first socket closed');
+    await drain(mouth.synthesize('Livelier again.', { voice: VOICE, speed: 1.2, expressivity: 1 }));
+    expect(fake.connections).toHaveLength(2);
+    expect(fake.last.clientTypes()).not.toContain('Configure');
+    await drain(mouth.synthesize('Calmer.', { voice: VOICE, speed: 1.2, expressivity: -2 }));
+    expect(fake.connections).toHaveLength(3);
+    expect(fake.last.query.get('expressivity')).toBe('-2');
     expect(fake.violations).toEqual([]);
   });
 

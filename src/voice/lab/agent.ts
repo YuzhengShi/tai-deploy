@@ -156,6 +156,8 @@ export class LabAgent {
   private keyterms: string[] = [];
   private voice = '';
   private speed: number | undefined;
+  /** Flux's second knob from the Settings (src/voice/settings.ts sends it only for a Flux voice and only when it is not 0); the lab follows the live call and has no value of its own. */
+  private expressivity: number | undefined;
   private mouthKind: MouthKind;
 
   private run: Run | null = null;
@@ -356,10 +358,12 @@ export class LabAgent {
   }
 
   private applySpeak(speak: unknown): void {
-    const p = ((speak ?? {}) as { provider?: { model?: unknown; speed?: unknown } }).provider ?? {};
+    const p = ((speak ?? {}) as { provider?: { model?: unknown; speed?: unknown; expressivity?: unknown } }).provider ?? {};
     const model = str(p.model, 100);
     if (model) this.voice = model;
     this.speed = num(p.speed);
+    // an UpdateSpeak that leaves it out (the interviewer's Aura voice, a Flux voice at its own) puts it back to the voice's own
+    this.expressivity = num(p.expressivity);
   }
 
   private applyListen(listen: unknown): void {
@@ -1207,7 +1211,7 @@ export class LabAgent {
     const voice = this.fluxVoice();
     const mouth = this.mouthOf('flux');
     if (!voice || !mouth.openTurn) return null;
-    const turn = mouth.openTurn({ voice, speed: this.fluxSpeed() });
+    const turn = mouth.openTurn({ voice, speed: this.fluxSpeed(), expressivity: this.expressivity });
     return {
       speak: (text) => {
         const clean = spokenText(text);
@@ -1230,7 +1234,7 @@ export class LabAgent {
     if (this.primaryKind() !== 'flux' || !this.deps.haveDeepgramKey()) return;
     const voice = this.fluxVoice();
     const mouth = this.mouthOf('flux');
-    if (voice && mouth.prepare) mouth.prepare({ voice, speed: this.fluxSpeed() });
+    if (voice && mouth.prepare) mouth.prepare({ voice, speed: this.fluxSpeed(), expressivity: this.expressivity });
   }
 
   /** The tempo factor that brings LabGPU's voice (which has no speed control) to the pace the live voices have at the Settings' speed. */
@@ -1257,7 +1261,9 @@ export class LabAgent {
     const factor = !mouth.takesSpeed && this.cfg.tempo ? this.tempoFactor() : 1;
     // the level of the live voice is what the others are brought to (mouth/level.ts); what is cached is what is spoken, and the gain is the same for the life of the process
     const gainDb = kind === 'labgpu' ? this.cfg.ttsGainDb : 0;
-    const key = PcmCache.key(kind, voice, factor !== 1 ? factor : speed, clean);
+    // only Flux has the second knob: the same line with another expressivity is another entry
+    const expressivity = kind === 'flux' ? this.expressivity : undefined;
+    const key = PcmCache.key(kind, expressivity ? `${voice}+expressivity${expressivity}` : voice, factor !== 1 ? factor : speed, clean);
     const cached = this.deps.cache.get(key);
     if (cached) {
       yield cached;
@@ -1275,7 +1281,7 @@ export class LabAgent {
       return;
     }
     const kept: Buffer[] = [];
-    for await (const raw of mouth.synthesize(clean, { voice, speed, signal })) {
+    for await (const raw of mouth.synthesize(clean, { voice, speed, expressivity, signal })) {
       const piece = applyGain(raw, gainDb);
       kept.push(piece);
       yield piece;

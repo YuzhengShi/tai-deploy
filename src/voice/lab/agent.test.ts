@@ -1224,6 +1224,36 @@ describe('LabAgent: the Flux TTS mouth says an answer as ONE continuous speech (
     expect(fake.violations).toEqual([]);
   }, 60_000);
 
+  it('the Settings\' expressivity (the live call\'s second knob, TAI_VOICE_EXPRESSIVITY) is in the Flux socket\'s address next to the pace, and an UpdateSpeak that leaves it out puts the voice back to its own on another socket', async () => {
+    const { r, fake } = await fluxRig();
+    await started(r, { greeting: null, speak: { expressivity: 1 } });
+    r.relay.script = () => [{ text: 'One sentence. ' }, { text: 'Another sentence.' }];
+    await say(r, 'First question.');
+    await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
+    expect(fake.connections).toHaveLength(1);
+    expect(fake.last.query.get('expressivity')).toBe('1');
+    expect(fake.last.query.get('speed')).toBe('1.2');
+    r.send({ type: 'UpdateSpeak', speak: { provider: { type: 'deepgram', version: 'v2', model: 'flux-hannah-en', speed: 1.2 } } });
+    await r.until(() => r.of('SpeakUpdated').length === 1);
+    await r.feed(300, 0);
+    await say(r, 'Second question.');
+    await r.until(() => r.of('AgentAudioDone').length === 2, 20_000);
+    expect(fake.connections).toHaveLength(2);
+    expect(fake.last.query.has('expressivity')).toBe(false);
+    expect(fake.last.query.get('speed')).toBe('1.2');
+    expect(fake.violations).toEqual([]);
+  }, 60_000);
+
+  it('without an expressivity in the Settings (the live default, 0) the address carries none', async () => {
+    const { r, fake } = await fluxRig();
+    await started(r, { greeting: null });
+    r.relay.script = () => [{ text: 'Just one sentence.' }];
+    await say(r, 'Question.');
+    await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
+    expect(fake.last.query.has('expressivity')).toBe(false);
+    expect(fake.violations).toEqual([]);
+  }, 60_000);
+
   it('a student who talks over the answer: the speech is interrupted with the offset of what had played, and the history keeps the words the service says were heard', async () => {
     const { r, fake } = await fluxRig({ msPerChar: 60, frameWallMs: 25 });
     await started(r, { greeting: null });

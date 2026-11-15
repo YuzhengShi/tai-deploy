@@ -1,7 +1,7 @@
 /**
  * `FluxTtsMouth`: Deepgram's Flux TTS (the v2 speak WebSocket, voices `flux-<name>-<language>`) as a `Mouth`: the voice of today's call (`flux-hannah-en`, src/voice/config.ts), spoken the way that call speaks it.
  *
- *   wss://api.deepgram.com/v2/speak?model=flux-hannah-en&encoding=linear16&sample_rate=24000&mip_opt_out=true[&speed=1.2]    Authorization: Token <key>
+ *   wss://api.deepgram.com/v2/speak?model=flux-hannah-en&encoding=linear16&sample_rate=24000&mip_opt_out=true[&speed=1.2][&expressivity=1]    Authorization: Token <key>
  *   client:  {"type":"Speak","text":"..."}  {"type":"Flush"}  {"type":"Interrupt","playback_offset":{"type":"time_ms","value":N}}  {"type":"Configure","speed":1.15}  {"type":"Close"}
  *   server:  Connected, SpeechStarted{speech_id}, binary PCM16 frames, Flushed, SpeechMetadata{audio_duration_ms,...}, SpeechInterrupted{audio_played_ms,text_spoken,text_remaining}, Warning, Error
  *
@@ -61,6 +61,15 @@ export function fluxSpeedParam(speed: number | undefined): string | undefined {
   const steps = Math.round(Math.min(1.5, Math.max(0.5, speed)) * 20) / 20;
   const text = String(Number(steps.toFixed(2)));
   return text === '1' ? undefined : text;
+}
+
+/**
+ * The `expressivity` query value, or undefined: not set, 0 (the voice's own), or anything that is not a whole number from -2 to 2. A value outside the range is dropped, not clamped: the service documents the
+ * setting as beta and a stronger one than the owner asked for would raise the risk of a mispronounced word.
+ */
+export function fluxExpressivityParam(expressivity: number | undefined): string | undefined {
+  if (expressivity === undefined || !Number.isInteger(expressivity) || expressivity < -2 || expressivity > 2 || expressivity === 0) return undefined;
+  return String(expressivity);
 }
 
 class Turn implements SpeechTurn {
@@ -161,6 +170,8 @@ class Session {
     private readonly host: { baseUrl: string; readKey(): string; ended(session: Session): void },
     readonly voice: string,
     speed: string | undefined,
+    /** Fixed for the life of the connection: the service takes it in the address and has no `Configure` for it. */
+    readonly expressivity: string | undefined,
     private readonly o: Required<Pick<FluxTtsMouthOptions, 'connectTimeoutMs' | 'stallMs' | 'pingMs' | 'interruptWaitMs'>>,
     private readonly log: VoiceLog | undefined,
   ) {
@@ -178,7 +189,7 @@ class Session {
       this.fail(err instanceof MouthError ? err : new MouthError('down', 'the Deepgram key is not available'));
       return;
     }
-    const url = `${this.host.baseUrl}/v2/speak?model=${this.voice}&encoding=linear16&sample_rate=24000&mip_opt_out=true${this.speed ? `&speed=${this.speed}` : ''}`;
+    const url = `${this.host.baseUrl}/v2/speak?model=${this.voice}&encoding=linear16&sample_rate=24000&mip_opt_out=true${this.speed ? `&speed=${this.speed}` : ''}${this.expressivity ? `&expressivity=${this.expressivity}` : ''}`;
     let ws: WebSocket;
     try {
       ws = new WebSocket(url, { headers: { Authorization: `Token ${key}` }, perMessageDeflate: false, maxPayload: MAX_PAYLOAD });
@@ -519,15 +530,17 @@ export class FluxTtsMouth implements Mouth {
   private sessionFor(opts: TurnOptions): Session {
     if (typeof opts.voice !== 'string' || !VOICE.test(opts.voice)) throw new Error('Flux TTS: the voice must look like flux-hannah-en');
     const speed = fluxSpeedParam(opts.speed);
+    const expressivity = fluxExpressivityParam(opts.expressivity);
     const have = this.session;
-    if (have && have.state !== 'closed' && have.voice === opts.voice) {
+    // the pace is changed on the open socket; the voice and the expressivity are in the address, so another one of them is another socket
+    if (have && have.state !== 'closed' && have.voice === opts.voice && have.expressivity === expressivity) {
       have.configureSpeed(speed);
       return have;
     }
     have?.close();
     // a session that has ended makes the next speech open another
     const host = { baseUrl: this.baseUrl, readKey: () => this.readKey(), ended: (s: Session) => void (this.session === s ? (this.session = null) : undefined) };
-    this.session = new Session(host, opts.voice, speed, this.o, this.log);
+    this.session = new Session(host, opts.voice, speed, expressivity, this.o, this.log);
     return this.session;
   }
 
@@ -550,7 +563,7 @@ export class FluxTtsMouth implements Mouth {
 
   private async *run(text: string, opts: SynthOptions): AsyncGenerator<Buffer, void, undefined> {
     if (opts.signal?.aborted || !text.trim()) return;
-    const turn = this.openTurn({ voice: opts.voice, speed: opts.speed });
+    const turn = this.openTurn({ voice: opts.voice, speed: opts.speed, expressivity: opts.expressivity });
     const onAbort = (): void => void turn.interrupt(0);
     opts.signal?.addEventListener('abort', onAbort, { once: true });
     try {

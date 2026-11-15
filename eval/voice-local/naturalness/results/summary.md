@@ -64,10 +64,15 @@ local-F1-whole                30    30    470 [ 420- 528]           0%      83ms
 | aura-thalia | 4.36 [4.33, 4.38] | +0.62 [+0.58, +0.67] | a clear difference |
 | aura-mars | 4.33 [4.31, 4.35] | +0.60 [+0.56, +0.63] | a clear difference |
 | local-F1 | 4.38 [4.34, 4.41] | +0.65 [+0.60, +0.70] | a clear difference |
-| local-F2 | 4.31 [4.26, 4.36] | +0.58 [+0.52, +0.63] | a clear difference |
-| local-F1-speed1.0 | 4.42 [4.40, 4.45] | +0.69 [+0.64, +0.74] | a clear difference |
-| local-F1-steps16 | 4.39 [4.35, 4.42] | +0.65 [+0.61, +0.69] | a clear difference |
-| local-F1-steps24 | 4.39 [4.34, 4.43] | +0.66 [+0.60, +0.72] | a clear difference |
+
+**Sensitivity of the local voice: minus local F1 as deployed (F1, speed 1.2, 5 steps), same unit and interval; no margin and no reading (they say what moves the score)**
+
+| variant | UTMOS mean [95 % interval] | minus local F1 deployed [95 % interval] |
+|---|---|---|
+| local-F2 | 4.31 [4.26, 4.36] | -0.07 [-0.13, -0.01] |
+| local-F1-speed1.0 | 4.42 [4.40, 4.45] | +0.04 [+0.01, +0.08] |
+| local-F1-steps16 | 4.39 [4.35, 4.42] | +0.01 [-0.04, +0.05] |
+| local-F1-steps24 | 4.39 [4.34, 4.43] | +0.01 [-0.02, +0.05] |
 
 **Level sensitivity (per-sentence, mean over all clips of the condition)**
 

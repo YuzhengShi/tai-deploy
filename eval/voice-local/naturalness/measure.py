@@ -533,7 +533,7 @@ def cmd_report(stub: bool) -> None:
         md.append('| voice | UTMOS mean [95 % interval] | minus Flux hannah [95 % interval] | reading |')
         md.append('|---|---|---|---|')
         flux = passage_means(scores, clips, 'flux-hannah', 'norm')
-        for cond in ['flux-hannah', 'aura-thalia', 'aura-mars', 'local-F1', 'local-F2', 'local-F1-speed1.0', 'local-F1-steps16', 'local-F1-steps24']:
+        for cond in ['flux-hannah', 'aura-thalia', 'aura-mars', 'local-F1']:
             pm = passage_means(scores, clips, cond, 'norm', 'pc' if 'steps' in cond else 'raw')
             if len(pm) < 10:
                 continue
@@ -548,6 +548,21 @@ def cmd_report(stub: bool) -> None:
             dm, dlo, dhi = L.bootstrap_ci(diff)
             out['utmos'][cond] = {'mean': m, 'lo': lo, 'hi': hi, 'diff': dm, 'diff_lo': dlo, 'diff_hi': dhi, 'reading': reading(dlo, dhi)}
             md.append('| %s | %.2f [%.2f, %.2f] | %+.2f [%+.2f, %+.2f] | %s |' % (cond, m, lo, hi, dm, dlo, dhi, reading(dlo, dhi)))
+        md.append('')
+        # sensitivity of the local voice: PROTOCOL.md reads these against local F1 as deployed, with no margin and no label
+        md.append('**Sensitivity of the local voice: minus local F1 as deployed (F1, speed 1.2, 5 steps), same unit and interval; no margin and no reading (they say what moves the score)**\n')
+        md.append('| variant | UTMOS mean [95 % interval] | minus local F1 deployed [95 % interval] |')
+        md.append('|---|---|---|')
+        base = passage_means(scores, clips, 'local-F1', 'norm', 'raw')
+        for cond in ['local-F2', 'local-F1-speed1.0', 'local-F1-steps16', 'local-F1-steps24']:
+            pm = passage_means(scores, clips, cond, 'norm', 'pc' if 'steps' in cond else 'raw')
+            if len(pm) < 10:
+                continue
+            ps = sorted(pm)
+            m, lo, hi = L.bootstrap_ci(np.array([pm[p] for p in ps]))
+            dm, dlo, dhi = L.bootstrap_ci(np.array([pm[p] - base[p] for p in ps if p in base]))
+            out['utmos'][cond] = {'mean': m, 'lo': lo, 'hi': hi, 'diff_vs_local_F1': dm, 'diff_lo': dlo, 'diff_hi': dhi}
+            md.append('| %s | %.2f [%.2f, %.2f] | %+.2f [%+.2f, %+.2f] |' % (cond, m, lo, hi, dm, dlo, dhi))
         md.append('')
         # level sensitivity
         md.append('**Level sensitivity (per-sentence, mean over all clips of the condition)**\n')

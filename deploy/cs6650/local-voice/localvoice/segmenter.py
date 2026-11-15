@@ -12,7 +12,8 @@ Words used here:
 * an *interim* is the open segment so far, offered for decoding every `interim_ms` of speech while it stays open. It is not cut off: the segment goes on, and when a pause closes it the whole segment is decoded
   again. An interim exists for the sake of the client, not of the text: the lab engine gives up a recognizer that sends no text for `silentEarsMs` (8 s) after the onset of speech
   (src/voice/lab/agent.ts), and a student who explains something at length can speak that long without a 350 ms pause. A partial built from an interim carries real text, decoded with the whole of the
-  segment's left context, so nothing is lost in the segment's final decode; the price is the extra decoding, which only a segment longer than `interim_ms` costs.
+  segment's left context, so nothing is lost in the segment's final decode; the price is the extra decoding, which only a segment longer than `interim_ms` costs. An interim is offered on a frame of
+  speech, never inside a pause: a mark crossed in the pause that is about to close the segment waits for the next speech (and is dropped with the segment when none comes).
 * a *soft cut* (`max_segment_ms`, off by default) is the other way to keep a long stretch short: the segment is split at the quietest spot of its last `cut_window_ms`. It also bounds the wait after the end of
   speech to the decode of the last piece, but a word can be split by the cut and the two pieces are decoded without each other's context: on 4 clips of 5 to 7 s with `max_segment_ms` 4000 it turned
   "CAP theorem" into "capital" and "Theorem" and "log entry" into "a lot" and "entry" (2026-11-14), which is why it is not the default.
@@ -229,7 +230,10 @@ class Segmenter:
                         self._end('pause', events)
             if self._seg is not None and self._max_seg and len(self._seg) >= self._max_seg:
                 self._cut(events)
-            if self._seg is not None and self._interim and len(self._seg) - self._interim_at >= self._interim:
+            # an interim is offered on a frame of speech only: when the mark is crossed inside a pause, the segment is about to close (and its own decode follows), so an interim decode started
+            # now would hold the segment's up for what remains of it (the owner's call of 2026-11-15: speech of 2.6 to 2.8 s was answered 1.2 to 1.45 s after its end instead of 0.5 s). The offer
+            # waits for the next frame of speech, and is never made when none comes
+            if self._seg is not None and self._interim and self._silence == 0 and len(self._seg) - self._interim_at >= self._interim:
                 self._offer_interim(events)
         if self._utt and self._utt_frames >= self._max_utt:
             self._end('cap', events)

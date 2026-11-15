@@ -53,6 +53,12 @@ class _End:
     close_after: bool = False
 
 
+def _forget(task: asyncio.Future) -> None:
+    """The result of a decode nobody waits for any more: read (and so not reported as never retrieved) and dropped."""
+    if not task.cancelled():
+        task.exception()
+
+
 class DecodeGate:
     """How many decodes are asked for and not yet finished, over ALL connections. An interim decode is a convenience (it keeps the client's watchdog fed); a segment's decode is what the engine waits for.
     So an interim is not started when the decode workers are nearly all busy: one worker is always left for the segments."""
@@ -111,6 +117,8 @@ class ListenSession:
         self._stale_silence_ms = stale_silence_ms
         self._tag = tag
         self._q: asyncio.Queue = asyncio.Queue(maxsize=max(1, max_pending))
+        #: set when a segment or an end is queued: what an interim decode that is in flight is overtaken by (see `_interim`)
+        self._newer = asyncio.Event()
         self._task: asyncio.Task | None = None
         self._dead = False
         self._last_audio = time.monotonic()
@@ -175,6 +183,7 @@ class ListenSession:
                 return
             if isinstance(event, Segment):
                 await self._q.put(event)
+                self._newer.set()
             elif isinstance(event, Interim):
                 if self._q.full():
                     self.stats.interims_dropped += 1       # an interim is only worth decoding when nothing is waiting: it never makes the connection wait
@@ -182,6 +191,7 @@ class ListenSession:
                     self._q.put_nowait(event)
             else:
                 await self._q.put(_End(event.reason, close_after=close_after and i == len(events) - 1))
+                self._newer.set()
             self.stats.max_queue = max(self.stats.max_queue, self._q.qsize())
 
     async def _emit_loop(self) -> None:
@@ -237,12 +247,29 @@ class ListenSession:
         return await self._send(self._message(is_final=False, speech_final=False, from_finalize=False))
 
     async def _interim(self, item: Interim) -> bool:
+        self._newer.clear()         # before the look at the queue, with no await between them: whatever is queued from here on sets it again
         if not self._q.empty() or not self._gate.interim_ok():
             self.stats.interims_dropped += 1
             return True             # something newer is waiting (this would be out of date before it was sent), or the decode workers are busy with what the engine is waiting for
         t0 = time.perf_counter()
+        decoding = asyncio.ensure_future(self._decode(item.samples))
+        overtaken = asyncio.ensure_future(self._newer.wait())
         try:
-            decoded = await self._decode(item.samples)
+            await asyncio.wait({decoding, overtaken}, return_when=asyncio.FIRST_COMPLETED)
+        except asyncio.CancelledError:
+            decoding.cancel()
+            raise
+        finally:
+            overtaken.cancel()
+        if not decoding.done():
+            # a segment (or the end of the utterance) was queued while this decode ran: the interim is out of date whatever it says, and that segment's decode must not wait for it (the emitter takes
+            # one item at a time, so it would: the owner's call of 2026-11-15 had speech of 2.6 to 2.8 s answered 1.2 to 1.45 s after its end, 0.5 s being the rule). The decode finishes by itself
+            # on its worker and its result is thrown away.
+            decoding.add_done_callback(_forget)
+            self.stats.interims_dropped += 1
+            return True
+        try:
+            decoded = decoding.result()
         except asyncio.CancelledError:
             raise
         except Exception as exc:

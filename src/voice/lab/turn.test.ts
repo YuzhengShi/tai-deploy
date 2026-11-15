@@ -33,6 +33,41 @@ describe('judgeTurnText', () => {
     }
   });
 
+  it('complete: a clause that ends on the preposition of its own what, who or which, with a full stop (the owner\'s call of 2026-11-15 held two such turns 1.8 s: 3.0 and 3.4 s to the first sound)', () => {
+    for (const t of [
+      'what things people will pay for.',
+      'No, no, no, no, no, no, no, no, it\'s not what people would pay for.',
+      'Who are you talking to.',
+      'Which port does it listen on.',
+      'What is this used for.',
+      'I do not know what it is based on.',
+      'Who did you give it to!',
+      'What are you looking at.',
+    ]) {
+      expect(judgeTurnText(t), t).toBe('complete');
+    }
+  });
+
+  it('still incomplete: a preposition at the end without a full stop, without a what, who or which, or one that takes two things', () => {
+    for (const t of [
+      'what things people will pay for',                         // no full stop: a partial that may go on
+      'What does the leader send to',
+      'How does the leader send heartbeats to.',                 // "how" is not the object of "to": the followers are still to come
+      'I want to talk about.',
+      'So the leader sends heartbeats to.',
+      'What is the difference between.',
+      'What are the trade-offs of.',
+      'What do you want to do with,',
+    ]) {
+      expect(judgeTurnText(t), t).toBe('incomplete');
+    }
+  });
+
+  it('still incomplete: a question mark after a preposition is judged by the question rule, as before', () => {
+    expect(judgeTurnText('What is this used for?')).toBe('complete');          // four words or more: finished
+    expect(judgeTurnText('What for?')).toBe('incomplete');                      // too short to tell from "what for, in the loop"
+  });
+
   it('still incomplete: the same endings without a yes or no, a long sentence, a conjunction, or a trailing comma', () => {
     for (const t of ['A mutex is.', 'It is not.', 'The leader is.', 'Paxos is.', 'Yes, because', 'Yes, and', 'No, it is not,', 'Yes, I think that when a node fails and the client can.', 'I think it is not.', 'Ah, so.', 'So.', 'It is so.', 'I think so,']) {
       expect(judgeTurnText(t), t).toBe('incomplete');

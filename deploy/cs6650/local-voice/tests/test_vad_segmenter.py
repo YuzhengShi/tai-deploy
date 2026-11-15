@@ -283,6 +283,22 @@ class InterimTests(unittest.TestCase):
         events = run(make(interim_ms=0), speech(7.5) + silence(1.0))
         self.assertEqual(kinds(events), ['Segment', 'UtteranceEnd'])
 
+    def test_the_mark_crossed_inside_the_pause_that_closes_the_segment_offers_none(self):
+        # 2.7 s of speech after 0.2 s of lead-in (the segment is 2.9 s long when the speech ends) and the pause that closes it: the segment passes 3.0 s inside the pause. Its own decode follows at
+        # once, so an interim here would only hold that decode up (the owner's call of 2026-11-15: 2.6 to 2.8 s of speech was answered 1.2 to 1.45 s after its end instead of 0.5 s)
+        pcm = silence(0.2) + speech(2.7) + silence(1.0)
+        events = run(make(interim_ms=3000), pcm)
+        self.assertEqual(kinds(events), ['Segment', 'UtteranceEnd'])
+        self.assertGreater(events[0].end_s - events[0].start_s, 3.0)                    # the segment did cross the mark (it keeps 200 ms of the pause)
+
+    def test_the_mark_crossed_inside_a_short_dip_is_offered_on_the_next_speech(self):
+        # the same mark, crossed inside a pause of 160 ms (the segment stays open: 350 ms close it) and the student goes on: the interim comes with the first speech after the pause
+        pcm = silence(0.2) + speech(2.7) + silence(0.16) + speech(1.5, seed=3) + silence(1.0)
+        events = run(make(interim_ms=3000), pcm)
+        self.assertEqual(kinds(events), ['Interim', 'Segment', 'UtteranceEnd'])
+        self.assertGreater(events[0].end_s, 3.04)                                       # offered after the dip, not at the 3.0 s mark inside it
+        self.assertAlmostEqual(events[0].end_s, 3.08, delta=0.06)
+
 
 class SoftCutTests(unittest.TestCase):
     def test_off_by_default(self):

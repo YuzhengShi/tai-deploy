@@ -51,6 +51,15 @@ const ANSWER_ENDS = new Set(['is', 'are', 'was', 'were', 'will', 'would', 'shoul
 /** "I think so.", "I don't think so.", "I hope not.": "so" and "not" after these verbs end a finished answer, not a clause that goes on. (The second tuning call held "I think so." 1.8 s.) */
 const ANSWER_VERBS = new Set(['think', 'guess', 'hope', 'believe', 'suppose', 'expect', 'imagine', 'say', 'do', 'did']);
 
+/**
+ * A question or a clause can end on the preposition of its own wh-word and be finished: "what things people will pay for.", "who are you talking to.", "which port does it listen on.". The
+ * owner's call of 2026-11-15 held two such turns 1.8 s each (3.0 and 3.4 s from his last word to the first sound, against 1.6 to 2.0 s for the rest) because "for" is a dangling word. It counts
+ * as finished only with a full stop (or "!") after it and a "what", "who", "whom" or "which" before it: "how does the leader send heartbeats to" and "I want to talk about." still have more
+ * to come, and so do the prepositions that take two things ("between", "of"). "?" needs none of this: a question of four words or more that ends on one is finished already.
+ */
+const STRANDABLE = new Set(['for', 'to', 'with', 'about', 'at', 'in', 'on', 'from', 'by']);
+const OBJECT_WH = new Set(['what', 'who', 'whom', 'which']);
+
 const wordsOf = (text: string): string[] => text.toLowerCase().match(/[a-z0-9']+/g) ?? [];
 
 /**
@@ -75,6 +84,7 @@ export function judgeTurnText(text: string): TurnVerdict {
   const questionEnd = asksQuestion && words.length >= 4 && last !== 'a' && last !== 'an' && last !== 'the';
   if (ANSWER_OPENERS.has(words[0]) && ANSWER_ENDS.has(last) && words.length >= 2 && words.length <= 5) return 'complete';
   if ((last === 'so' || last === 'not') && words.length >= 2 && words.length <= 6 && ANSWER_VERBS.has(words[words.length - 2])) return 'complete';
+  if (STRANDABLE.has(last) && words.length >= 4 && /[.!]\s*$/.test(t) && words.slice(0, -1).some((w) => OBJECT_WH.has(w))) return 'complete';
   if (STRONG_DANGLING.has(last) && !questionEnd) return 'incomplete';
   if (WEAK_DANGLING.has(last) && words.length >= 4 && !asksQuestion) return 'incomplete';
   if (SUBORDINATORS.has(words[0]) && !t.includes(',') && !asksQuestion && words.length >= 3) return 'incomplete';

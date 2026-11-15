@@ -410,13 +410,47 @@ class InterimTests(unittest.TestCase):
 
     def test_an_interim_result_that_is_out_of_date_when_it_is_ready_is_not_sent(self):
         with service(['stale-interim', 'real'], delay=0.5) as srv, ws_connect(srv.port) as ws:
-            send_audio(ws, speech(3.0))                # the interim is offered at the 3.0 s mark and its decode (0.5 s) begins
+            send_audio(ws, speech(3.1))                # the interim is offered at the first frame of speech after the 3.0 s mark and its decode (0.5 s) begins
             send_audio(ws, silence(0.3))               # the speaker has stopped for 300 ms (not yet the 350 ms that closes the segment) when the decode is ready
             time.sleep(1.0)
             send_audio(ws, silence(1.2))
             msgs = collect(ws, has_end, timeout=8)
         self.assertNotIn('stale-interim', json.dumps(msgs))
         self.assertEqual([transcript(m) for m in finals(msgs)], ['real'])
+
+    def test_a_segment_does_not_wait_for_an_interim_decode_that_is_still_running(self):
+        # the interim is offered with the first speech frame past 3.0 s and its decode takes 1.5 s; the pause closes the segment 350 ms later and the segment's own decode is quick: the segment's
+        # partial must come with that decode (the owner's call of 2026-11-15: it waited for the interim, 1.2 to 1.45 s after the end of speech instead of 0.5 s)
+        def slow_first(index, samples):
+            if index == 0:
+                time.sleep(1.5)
+                return 'stale-interim'
+            return 'real'
+        with service(text_for=slow_first) as srv, ws_connect(srv.port) as ws:
+            send_audio(ws, speech(3.1))
+            t0 = time.perf_counter()
+            send_audio(ws, silence(1.2))
+            first = collect(ws, lambda ms: any(m.get('type') == 'Results' for m in ms), timeout=8)
+            waited = time.perf_counter() - t0
+            msgs = first + collect(ws, has_end, timeout=8)
+        self.assertEqual([transcript(m) for m in msgs if m['type'] == 'Results'], ['real', 'real'])             # the segment's partial and the final; the interim's text was thrown away
+        self.assertLess(waited, 0.9)
+        self.assertEqual(len(srv.services.recognizer.calls), 2)                                                    # the interim was decoded (its worker was free) and the segment
+
+    def test_the_next_utterances_are_not_confused_by_an_interim_decode_that_finishes_late(self):
+        def slow_first(index, samples):
+            if index == 0:
+                time.sleep(1.0)
+                return 'stale-interim'
+            return 'real%d' % index
+        with service(text_for=slow_first) as srv, ws_connect(srv.port) as ws:
+            send_audio(ws, speech(3.1) + silence(1.2))
+            send_audio(ws, speech(1.0, seed=5) + silence(1.2))
+            msgs = collect(ws, lambda ms: sum(1 for m in ms if m.get('type') == 'UtteranceEnd') >= 2, timeout=10)
+            time.sleep(1.2)                                                          # the abandoned decode ends now; nothing of it may be sent
+            msgs += collect(ws, lambda ms: False, timeout=0.3)
+        self.assertNotIn('stale-interim', json.dumps(msgs))
+        self.assertEqual([transcript(m) for m in finals(msgs)], ['real1', 'real2'])
 
 
 class JoinerPortTests(unittest.TestCase):

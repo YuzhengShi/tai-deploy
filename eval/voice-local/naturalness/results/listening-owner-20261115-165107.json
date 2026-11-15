@@ -1,0 +1,137 @@
+{
+ "version": 1,
+ "participant": "owner",
+ "started": "2026-11-15T23:43:39.199Z",
+ "finished": "2026-11-15T23:51:07.179Z",
+ "order": [
+  "k3acee1",
+  "k34f12f",
+  "k7116c7",
+  "ka25465",
+  "kd4ae4b",
+  "ke82451",
+  "ke3cd62",
+  "kb7d8ed",
+  "k3074e3",
+  "k4220d2",
+  "k61dc06",
+  "kf1f885",
+  "k1e464b",
+  "k57ac52",
+  "k2eb2d8",
+  "k3dbd47",
+  "k39b45a",
+  "k7a4e03"
+ ],
+ "ratings": {
+  "k3acee1": {
+   "naturalness": 2,
+   "continuity": 3,
+   "plays": 2,
+   "listen_ms": 18522
+  },
+  "k34f12f": {
+   "naturalness": 3,
+   "continuity": 4,
+   "plays": 3,
+   "listen_ms": 38057
+  },
+  "k7116c7": {
+   "naturalness": 1,
+   "continuity": 2,
+   "plays": 1,
+   "listen_ms": 18412
+  },
+  "ka25465": {
+   "naturalness": 2,
+   "continuity": 3,
+   "plays": 1,
+   "listen_ms": 20328
+  },
+  "kd4ae4b": {
+   "naturalness": 3,
+   "continuity": 4,
+   "plays": 2,
+   "listen_ms": 20327
+  },
+  "ke82451": {
+   "naturalness": 4,
+   "continuity": 4,
+   "plays": 1,
+   "listen_ms": 18491
+  },
+  "ke3cd62": {
+   "naturalness": 3,
+   "continuity": 3,
+   "plays": 1,
+   "listen_ms": 17851
+  },
+  "kb7d8ed": {
+   "naturalness": 2,
+   "continuity": 2,
+   "plays": 1,
+   "listen_ms": 17978
+  },
+  "k3074e3": {
+   "naturalness": 4,
+   "continuity": 5,
+   "plays": 2,
+   "listen_ms": 19004
+  },
+  "k4220d2": {
+   "naturalness": 2,
+   "continuity": 3,
+   "plays": 1,
+   "listen_ms": 17789
+  },
+  "k61dc06": {
+   "naturalness": 2,
+   "continuity": 3,
+   "plays": 1,
+   "listen_ms": 15910
+  },
+  "kf1f885": {
+   "naturalness": 3,
+   "continuity": 4,
+   "plays": 1,
+   "listen_ms": 17075
+  },
+  "k1e464b": {
+   "naturalness": 5,
+   "continuity": 5,
+   "plays": 1,
+   "listen_ms": 21323
+  },
+  "k57ac52": {
+   "naturalness": 3,
+   "continuity": 4,
+   "plays": 1,
+   "listen_ms": 17750
+  },
+  "k2eb2d8": {
+   "naturalness": 4,
+   "continuity": 4,
+   "plays": 2,
+   "listen_ms": 18314
+  },
+  "k3dbd47": {
+   "naturalness": 2,
+   "continuity": 3,
+   "plays": 1,
+   "listen_ms": 19928
+  },
+  "k39b45a": {
+   "naturalness": 5,
+   "continuity": 4,
+   "plays": 2,
+   "listen_ms": 19033
+  },
+  "k7a4e03": {
+   "naturalness": 3,
+   "continuity": 3,
+   "plays": 1,
+   "listen_ms": 16461
+  }
+ },
+ "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+}

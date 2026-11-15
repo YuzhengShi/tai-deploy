@@ -375,4 +375,27 @@ describe('the chain of a call (A10)', () => {
     expect(rows[0].specs[0]).toMatchObject({ outcome: 'adopted', source: 'flux-shadow' });
     expect(rows[0].derived.headStart).toBeGreaterThan(300);
   });
+
+  it('chain cf through the whole hub: Flux ears decide the turn, the answer is spoken through the Flux mouth and not through the others, and the trace says chain cf and mouth flux', async () => {
+    lab = await createLabHarness();
+    lab.gw.respond = () => streamed('A mutex is a lock. It protects shared data.');
+    const b = await placeCall(lab, { type: 'start', mode: 'chat' }, '/api/voice-lab?chain=cf');
+    await until(() => lab!.ears.length >= 1 && lab!.ears[0].connected);
+    expect(lab.ears[0].name).toBe('flux');
+    await speak(b, 400, 6000);
+    await speak(b, 160, 0);
+    lab.ears[0].final('What is a mutex?', { trigger: 'model', confidence: 0.9 });
+    await b.next('transcript', (e) => e.role === 'agent' && e.text === 'A mutex is a lock.');
+    await b.next('transcript', (e) => e.role === 'agent' && e.text === 'It protects shared data.');
+    expect(lab.mouths.flux.requests.map((r) => r.text)).toEqual(expect.arrayContaining(['A mutex is a lock.', 'It protects shared data.']));
+    expect(lab.mouths.flux.requests.every((r) => r.voice === 'flux-hannah-en')).toBe(true);
+    expect(lab.mouths.labgpu.requests.filter((r) => /mutex|shared data/.test(r.text))).toEqual([]);
+    expect(lab.mouths.aura.requests.filter((r) => /mutex|shared data/.test(r.text))).toEqual([]);
+    b.send({ type: 'end' });
+    await b.next('closed');
+    const traceFile = path.join(lab.dataDir, 'voice-lab', 'turns.jsonl');
+    await until(() => fs.existsSync(traceFile) && fs.readFileSync(traceFile, 'utf8').endsWith('\n'));
+    const rows = fs.readFileSync(traceFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    expect(rows[0]).toMatchObject({ turn: 1, chain: 'cf', ears: 'flux', mouth: 'flux', userText: 'What is a mutex?' });
+  });
 });

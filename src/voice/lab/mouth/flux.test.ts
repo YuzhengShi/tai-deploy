@@ -362,6 +362,28 @@ describe('FluxTtsMouth: when it fails', () => {
     expectMouthError(error, 'down');
   }, 8000);
 
+  it('a speech opened on a socket that has been idle for longer than the stall limit is not a stall: the limit runs from the text that was sent (the owner\'s call of 2026-11-15, 159 ms after a speech was opened)', async () => {
+    const { fake, mouth } = await setup({ ...FAST, startDelayMs: 150, startedWithAudio: true }, { stallMs: 400 });
+    expect((await drain(mouth.synthesize('The first answer.', { voice: VOICE }))).error).toBeUndefined();
+    await sleep(700);                                                            // the student speaks for a while: nothing goes over the socket for longer than the limit
+    const { pieces, error } = await drain(mouth.synthesize('The second answer.', { voice: VOICE }));
+    expect(error).toBeUndefined();
+    expect(total(pieces)).toBe(bytesFor('The second answer.'.length + 1));
+    expect(fake.connections).toHaveLength(1);                                    // the same socket: nothing failed and nothing was opened again
+    expect(fake.violations).toEqual([]);
+  }, 8000);
+
+  it('a service that goes silent after an idle period is still given up, counted from the text that was sent to it', async () => {
+    const { mouth } = await setup({ ...FAST, silentTurn: 1 }, { stallMs: 300 });
+    expect((await drain(mouth.synthesize('The first answer.', { voice: VOICE }))).error).toBeUndefined();
+    await sleep(500);
+    const t0 = performance.now();
+    const { pieces, error } = await drain(mouth.synthesize('The second answer.', { voice: VOICE }));
+    expect(pieces).toEqual([]);
+    expectMouthError(error, 'down');
+    expect(performance.now() - t0).toBeGreaterThanOrEqual(280);                  // not at the first tick after the speech was opened, but after the limit
+  }, 8000);
+
   it('a fatal error message is `down` with its code and nothing else of what the service said, and never the text', async () => {
     const { mouth } = await setup({ ...FAST, errorOnSpeak: true });
     const { error } = await drain(mouth.synthesize(TEXT, { voice: VOICE }));

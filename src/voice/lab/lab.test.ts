@@ -399,4 +399,39 @@ describe('the chain of a call (A10)', () => {
     const rows = fs.readFileSync(traceFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
     expect(rows[0]).toMatchObject({ turn: 1, chain: 'cf', ears: 'flux', mouth: 'flux', userText: 'What is a mutex?' });
   });
+
+  it('the stand-in\'s address can carry the key of a call\'s pace lookup, and nothing else is taken for one', async () => {
+    lab = await createLabHarness();
+    const engine = lab.engine()!;
+    const key = engine.registerSpeak(() => undefined);
+    expect(key).toMatch(/^[0-9a-f]{24}$/);
+    expect(engine.agentUrlFor('cf', key)).toBe(`${engine.agentUrl}?chain=cf&speak=${key}`);
+    expect(engine.agentUrlFor(null, key)).toBe(`${engine.agentUrl}?speak=${key}`);
+    for (const x of ['', 'x', key.toUpperCase(), `${key}0`, `${key}&chain=h`]) expect(engine.agentUrlFor('cf', x)).toBe(`${engine.agentUrl}?chain=cf`);
+  });
+
+  it('a pace the owner saves in Settings during a lab call counts from the next answer: the hub gives the stand-in a way to look again (the dialog itself says "next call")', async () => {
+    lab = await createLabHarness();
+    const prefs = path.join(lab.root, 'store', 'portal', `${lab.owner().folder}.prefs.json`);
+    fs.mkdirSync(path.dirname(prefs), { recursive: true });
+    fs.writeFileSync(prefs, JSON.stringify({ voiceSpeed: 1 }));                          // "Normal": a call begins at the voice's own pace
+    lab.gw.respond = () => streamed('A mutex is a lock.');
+    const b = await placeCall(lab, { type: 'start', mode: 'chat' }, '/api/voice-lab?chain=cf');
+    await until(() => lab!.ears.length >= 1 && lab!.ears[0].connected);
+    await speak(b, 400, 6000);
+    await speak(b, 160, 0);
+    lab.ears[0].final('What is a mutex?', { trigger: 'model', confidence: 0.9 });
+    await b.next('transcript', (e) => e.role === 'agent' && e.text === 'A mutex is a lock.');
+    expect(lab.mouths.flux.requests.filter((r) => r.text === 'A mutex is a lock.').map((r) => r.speed)).toEqual([undefined]);
+    fs.writeFileSync(prefs, JSON.stringify({ voiceSpeed: 1.2 }));                        // "Faster", saved while the call goes on
+    lab.gw.respond = () => streamed('A semaphore counts.');
+    await sleep(900);                                                                    // the first answer is over
+    await speak(b, 400, 6000);
+    await speak(b, 160, 0);
+    lab.ears[0].final('What is a semaphore?', { trigger: 'model', confidence: 0.9 });
+    await b.next('transcript', (e) => e.role === 'agent' && e.text === 'A semaphore counts.');
+    expect(lab.mouths.flux.requests.filter((r) => r.text === 'A semaphore counts.').map((r) => r.speed)).toEqual([1.2]);
+    b.send({ type: 'end' });
+    await b.next('closed');
+  });
 });

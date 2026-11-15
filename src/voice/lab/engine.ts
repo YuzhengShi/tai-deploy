@@ -3,7 +3,7 @@
  * relay. Both are bound to 127.0.0.1 on ephemeral ports; the first answers only the token the hub gave the session (compared in constant time), and the second does nothing but hand the
  * request to `hub.relay`, so the think step of a lab call is exactly a live call's, without leaving the machine. Nothing is started unless `TAI_VOICE_LAB=1` (the hub decides).
  */
-import { timingSafeEqual } from 'crypto';
+import { randomBytes, timingSafeEqual } from 'crypto';
 import http from 'http';
 import type { AddressInfo } from 'net';
 
@@ -44,6 +44,18 @@ function chainOf(url: string | undefined): string | null {
   }
 }
 
+type SpeakNow = NonNullable<LabAgentDeps['speakNow']>;
+
+/** `&speak=<key>` on the stand-in's address: the key (24 hex characters) the hub made for this call to hand the agent its way of looking up the student's pace; anything else is none. */
+function speakKeyOf(url: string | undefined): string | null {
+  try {
+    const key = new URL(url ?? '/', 'http://stand-in.invalid').searchParams.get('speak');
+    return key && /^[0-9a-f]{24}$/.test(key) ? key : null;
+  } catch {
+    return null;
+  }
+}
+
 const eq = (a: string, b: string): boolean => {
   const x = Buffer.from(a);
   const y = Buffer.from(b);
@@ -54,14 +66,36 @@ export class LabEngine {
   /** ws://127.0.0.1:<port>/v1/agent/converse: what a lab session's `deepgramUrl` is. */
   readonly agentUrl: string;
   /** The same for a call that asked for a chain (`?chain=d|h|fd|c|cf|lf`, docs A10); any other value is the plain address. */
-  agentUrlFor(chain: string | null | undefined): string {
-    return isChainName(chain) ? `${this.agentUrl}?chain=${chain}` : this.agentUrl;
+  agentUrlFor(chain: string | null | undefined, speakKey?: string): string {
+    const query = [...(isChainName(chain) ? [`chain=${chain}`] : []), ...(speakKey && /^[0-9a-f]{24}$/.test(speakKey) ? [`speak=${speakKey}`] : [])];
+    return query.length ? `${this.agentUrl}?${query.join('&')}` : this.agentUrl;
+  }
+
+  /**
+   * The hub gives a lab call a way to look up the pace its student has saved in Settings NOW (a change during the call counts from the next answer). The key goes into the call's address
+   * (`agentUrlFor`); the closure is handed to the call's agent when it connects (once), and forgotten after a minute if nothing connects.
+   */
+  registerSpeak(look: SpeakNow): string {
+    const key = randomBytes(12).toString('hex');
+    const timer = setTimeout(() => this.speaks.delete(key), 60_000);
+    timer.unref?.();
+    this.speaks.set(key, { look, timer });
+    return key;
+  }
+
+  private takeSpeak(key: string | null): SpeakNow | undefined {
+    const entry = key ? this.speaks.get(key) : undefined;
+    if (!entry || !key) return undefined;
+    clearTimeout(entry.timer);
+    this.speaks.delete(key);
+    return entry.look;
   }
   /** http://127.0.0.1:<port>/voice-llm/v1/chat/completions: what a lab session's relay URL is (the Settings carry it, and the stand-in refuses any other). */
   readonly relayUrl: string;
   /** What the session sends as its "Deepgram key" (`Authorization: Token <token>`): per process, random, never the real key. */
   readonly token: string;
   private readonly agents = new Set<LabAgent>();
+  private readonly speaks = new Map<string, { look: SpeakNow; timer: NodeJS.Timeout }>();
   private closed = false;
 
   private constructor(
@@ -124,6 +158,7 @@ export class LabEngine {
         log: deps.log,
         relayUrl: engine.relayUrl,
         profiles: deps.profiles,
+        speakNow: engine.takeSpeak(speakKeyOf(req.url)),
         makeEars: factories.makeEars,
         makeMouth: factories.makeMouth,
         haveDeepgramKey: () => {
@@ -154,6 +189,8 @@ export class LabEngine {
     this.closed = true;
     for (const a of [...this.agents]) a.close();
     this.agents.clear();
+    for (const entry of this.speaks.values()) clearTimeout(entry.timer);
+    this.speaks.clear();
     try {
       this.wss.close();
     } catch {

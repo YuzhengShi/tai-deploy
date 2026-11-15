@@ -95,7 +95,7 @@ function sse(steps: Step[], res: http.ServerResponse): void {
   next();
 }
 
-async function rig(opts: { env?: Record<string, string>; chain?: string; ears?: (kind: string, h: EarsHandlers) => Ears | null; mouths?: Record<string, FakeMouth>; profiles?: boolean; haveKey?: boolean; sink?: TraceSink } = {}): Promise<Rig> {
+async function rig(opts: { env?: Record<string, string>; chain?: string; ears?: (kind: string, h: EarsHandlers) => Ears | null; mouths?: Record<string, FakeMouth>; profiles?: boolean; haveKey?: boolean; sink?: TraceSink; speakNow?: (voice: string) => unknown } = {}): Promise<Rig> {
   const relay = { requests: [] as Rig['relay']['requests'], script: ((): Step[] => [{ text: 'Okay.' }]) as Rig['relay']['script'] };
   const relayServer = http.createServer((req, res) => {
     const parts: Buffer[] = [];
@@ -169,6 +169,7 @@ async function rig(opts: { env?: Record<string, string>; chain?: string; ears?: 
     log: process.env.LAB_DEBUG ? { ...silentLog, warn: (o, m) => console.log('WARN', m, JSON.stringify(o)), info: (o, m) => console.log('INFO', m, JSON.stringify(o)) } : silentLog,
     relayUrl,
     profiles: { chat: { eotThreshold: 0.75, eotTimeoutMs: 5000 }, interview: { eotThreshold: 0.88, eotTimeoutMs: 8000 }, talk: { eotThreshold: 0.9, eotTimeoutMs: 10000 } },
+    speakNow: opts.speakNow,
     makeEars: (kind, handlers, ctx) => {
       earsAsked.push({ kind, eagerEot: ctx.eagerEot });
       const custom = opts.ears?.(kind, handlers);
@@ -1122,12 +1123,13 @@ describe('LabAgent: the Flux TTS mouth says an answer as ONE continuous speech (
   const assistantLines = (r: Rig): string[] => r.of('ConversationText').filter((m) => m.role === 'assistant').map((m) => String(m.content));
   const sentencesAskedOfAura = (r: Rig, among: string[]): string[] => r.mouths.aura.requests.map((x) => x.text).filter((t) => among.includes(t));
 
-  async function fluxRig(behavior: FakeFluxTtsOptions = {}, over: { env?: Record<string, string>; chain?: string } = {}): Promise<{ r: Rig; fake: FakeFluxTts; mouth: FluxTtsMouth }> {
+  async function fluxRig(behavior: FakeFluxTtsOptions = {}, over: { env?: Record<string, string>; chain?: string; speakNow?: (voice: string) => unknown } = {}): Promise<{ r: Rig; fake: FakeFluxTts; mouth: FluxTtsMouth }> {
     const fake = await FakeFluxTts.start({ msPerChar: 25, frameAudioMs: 40, frameWallMs: 10, startDelayMs: 5, ...behavior });
     const mouth = new FluxTtsMouth({ apiKey: () => 'dg-test-key-abcdef', baseUrl: fake.url });
     const r = await rig({
       env: { TAI_VOICE_LAB_MOUTH: 'flux', ...(over.env ?? {}) },
       ...(over.chain ? { chain: over.chain } : {}),
+      ...(over.speakNow ? { speakNow: over.speakNow } : {}),
       mouths: { flux: mouth as unknown as FakeMouth, labgpu: new FakeMouth({ name: 'labgpu', ms: 300 }), aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 300 }) },
     });
     // (the rig's own cleanup, which closes the agent and so the mouth, was queued first)
@@ -1252,6 +1254,47 @@ describe('LabAgent: the Flux TTS mouth says an answer as ONE continuous speech (
     await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
     expect(fake.last.query.has('expressivity')).toBe(false);
     expect(fake.violations).toEqual([]);
+  }, 60_000);
+
+  it('a pace the student saves during the call counts from the next answer (the hub is asked again where an answer begins), sent to the same socket as a Configure', async () => {
+    let pace: number | undefined;                                                // "Normal": the Settings leave the pace out
+    const { r, fake } = await fluxRig({}, { speakNow: (voice) => ({ provider: { type: 'deepgram', version: 'v2', model: voice, ...(pace !== undefined ? { speed: pace } : {}) } }) });
+    await started(r, { greeting: null, speak: { speed: undefined } });
+    r.relay.script = () => [{ text: 'The first answer is at the pace the call began with.' }];
+    await say(r, 'First question.');
+    await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
+    expect(fake.connections).toHaveLength(1);
+    expect(fake.last.query.has('speed')).toBe(false);
+    pace = 1.2;                                                                  // the dialog's "Faster", saved while the call goes on
+    r.relay.script = () => [{ text: 'The second answer is at the new pace.' }];
+    await r.feed(300, 0);
+    await say(r, 'Second question.');
+    await r.until(() => r.of('AgentAudioDone').length === 2, 20_000);
+    expect(fake.connections).toHaveLength(1);
+    expect(fake.last.clientTypes()).toContain('Configure');
+    expect(fake.last.configuredSpeed).toBe(1.2);
+    expect(fake.violations).toEqual([]);
+  }, 60_000);
+
+  it('the interviewer\'s pace follows the saved pace too, and an answer to the hub that fails leaves the pace the call has', async () => {
+    let pace = 0.9;                                                              // what the Settings say for the interviewer at "Normal" (1 x 0.9)
+    let broken = false;
+    const { r } = await fluxRig({}, { speakNow: (voice) => { if (broken) throw new Error('no preferences file'); return { provider: { type: 'deepgram', model: voice, speed: pace } }; } });
+    await started(r, { greeting: null, speak: { model: 'aura-2-mars-en', speed: 0.9, version: undefined } });
+    r.relay.script = () => [{ text: 'The interviewer asks the first thing.' }];
+    await say(r, 'First answer.');
+    await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
+    pace = 1.08;                                                                 // "Faster" (1.2 x 0.9)
+    r.relay.script = () => [{ text: 'The interviewer asks the second thing.' }];
+    await r.feed(300, 0);
+    await say(r, 'Second answer.');
+    await r.until(() => r.of('AgentAudioDone').length === 2, 20_000);
+    broken = true;                                                               // the file cannot be read now: the pace of the last answer stays
+    r.relay.script = () => [{ text: 'The interviewer asks the third thing.' }];
+    await r.feed(300, 0);
+    await say(r, 'Third answer.');
+    await r.until(() => r.of('AgentAudioDone').length === 3, 20_000);
+    expect(r.mouths.aura.requests.map((x) => x.speed)).toEqual([0.9, 1.08, 1.08]);
   }, 60_000);
 
   it('a student who talks over the answer: the speech is interrupted with the offset of what had played, and the history keeps the words the service says were heard', async () => {

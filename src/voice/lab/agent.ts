@@ -40,6 +40,11 @@ export interface LabAgentDeps {
   relayUrl: string;
   /** The turn-taking fields the session sends for each mode (the hub's VoiceConfig): how a Settings is told which mode it is for. */
   profiles: Record<TurnProfile, TurnFields>;
+  /**
+   * The `speak` block of a Settings for this voice as it is NOW: the hub's own `speakConfig` with the pace the student has saved in Settings at this moment (their preferences file, read again),
+   * so that a pace changed during the call counts from the next answer instead of the next call. Absent: the pace of the Settings and the UpdateSpeaks the call is given stays as it is.
+   */
+  speakNow?: (voice: string) => unknown;
   makeEars(kind: EarsKind, handlers: EarsHandlers, ctx: EarsRequest): Ears;
   makeMouth(kind: MouthKind): Mouth;
   /** Whether the Deepgram key is there (Aura as a mouth or fallback, Flux/nova as ears). */
@@ -238,7 +243,8 @@ export class LabAgent {
           const why = err instanceof MouthError ? err.kind : 'error';
           this.mouthDownUntil.set('flux', this.clock() + MOUTH_DOWN_MS);
           this.turnTrace?.fallbacks.push(`flux:${why}`);
-          this.log.warn({ why }, 'voice lab: the Flux TTS speech failed');
+          // (a MouthError's words are fixed ones: no text, no key)
+          this.log.warn({ why, message: err instanceof MouthError ? err.message : undefined }, 'voice lab: the Flux TTS speech failed');
           this.send({ type: 'Warning', code: 'LAB_SPEECH_FAILED', description: 'The synthesizer failed while speaking.' });
         },
         audio: (chunk) => {
@@ -364,6 +370,17 @@ export class LabAgent {
     this.speed = num(p.speed);
     // an UpdateSpeak that leaves it out (the interviewer's Aura voice, a Flux voice at its own) puts it back to the voice's own
     this.expressivity = num(p.expressivity);
+  }
+
+  /** Looks again at the pace the student has saved (see `LabAgentDeps.speakNow`): done where an answer begins, so that one answer has one pace from its first word to its last. */
+  private refreshSpeak(): void {
+    const look = this.deps.speakNow;
+    if (!look || !this.voice) return;
+    try {
+      this.applySpeak(look(this.voice));
+    } catch {
+      /* a preferences file that cannot be read: the call keeps the pace it has */
+    }
   }
 
   private applyListen(listen: unknown): void {
@@ -727,6 +744,7 @@ export class LabAgent {
   // ---------------------------------------------------------------- the think loop
 
   private newRun(trace: TurnTrace, commitAt: number, speechEndAt: number | undefined, held: boolean): Run {
+    this.refreshSpeak();
     const run: Run = {
       id: ++this.runId,
       controller: new AbortController(),

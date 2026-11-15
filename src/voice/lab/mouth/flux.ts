@@ -161,6 +161,8 @@ class Session {
   private lastOffset = 0;
   private interrupting: { resolve: (split: TurnSplit | null) => void; timer: NodeJS.Timeout } | null = null;
   private lastRx = performance.now();
+  /** When the last message went to the service (see `checkStall`). */
+  private lastTx = performance.now();
   private watchdog: NodeJS.Timeout | null = null;
   private pinger: NodeJS.Timeout | null = null;
   private connectTimer: NodeJS.Timeout | null = null;
@@ -214,7 +216,8 @@ class Session {
         }
       }, this.o.pingMs);
       this.pinger.unref?.();
-      this.watchdog = setInterval(() => this.checkStall(), 1000);
+      // a tick a quarter of the limit apart (a second at most), so that a short limit in a test is checked as often as it needs
+      this.watchdog = setInterval(() => this.checkStall(), Math.max(25, Math.min(1000, Math.floor(this.o.stallMs / 4))));
       this.watchdog.unref?.();
       this.flushOutbox();
     });
@@ -227,7 +230,10 @@ class Session {
   private checkStall(): void {
     if (this.state !== 'open') return;
     if (!this.turns.some((t) => !t.finished)) return;
-    if (performance.now() - this.lastRx > this.o.stallMs) this.fail(new MouthError('down', 'Flux TTS stopped answering'));
+    // The silence is counted from the later of the last thing the service said and the last thing said to it. From the last thing the service said alone, a speech opened on a socket that had been
+    // idle between two answers (a student speaks for ten seconds in between) was "stalled" at the first watchdog tick, a fraction of a second after its text was sent and before the service's first
+    // reply could come: the owner's call of 2026-11-15 05:10 lost a speech that way, 159 ms after it was opened, and the next 30 seconds were spoken by another voice.
+    if (performance.now() - Math.max(this.lastRx, this.lastTx) > this.o.stallMs) this.fail(new MouthError('down', 'Flux TTS stopped answering'));
   }
 
   // ---------------------------------------------------------------- what we send
@@ -240,6 +246,7 @@ class Session {
   }
 
   private send(text: string): void {
+    this.lastTx = performance.now();
     try {
       this.socket?.send(text);
     } catch {

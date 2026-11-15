@@ -28,6 +28,7 @@ import { RelayTokens, createRelay, newSessionId } from './relay.js';
 import { screenNoteFor } from './screen.js';
 import type { ScreenSources } from './screen.js';
 import { DEFAULT_TIMING, VoiceSession, VoiceTiming } from './session.js';
+import { speakConfig } from './settings.js';
 import { speedFor } from './speed.js';
 import type { ToolHost } from './tool-host.js';
 import { ToolHostPool } from './tool-host-pool.js';
@@ -644,6 +645,10 @@ class Hub implements VoiceHub {
       this.deps.log.warn({ folder: user.folder }, 'voice: the student has no registered chat yet: messages and schedules from the call will be refused');
     }
     const sid = newSessionId();
+    // a lab call is told the student's pace again at every answer (the dialog says "next call", and a call in the lab need not wait for it): the same preferences file, the same `speakConfig` as the Settings
+    const speakKey = engine
+      ? engine.registerSpeak((voice) => speakConfig(voice, { speed: speedFor(user.folder, this.config.speed, { storeDir: this.deps.storeDir }), expressivity: this.config.expressivity }))
+      : undefined;
     let session: VoiceSession;
     try {
       session = new VoiceSession(
@@ -655,7 +660,7 @@ class Hub implements VoiceHub {
           dataDir: this.deps.dataDir,
           templateFile: this.deps.templateFile ?? path.join(this.deps.groupsDir, 'global', 'COMPETENCY_TEMPLATE.md'),
           // a lab call connects to the stand-in with a token of its own (never the Deepgram key) and its think requests go to the loopback door of this hub's relay
-          deepgramUrl: engine ? engine.agentUrlFor(conn.chain) : (this.deps.deepgramUrl ?? this.config.deepgramUrl),
+          deepgramUrl: engine ? engine.agentUrlFor(conn.chain, speakKey) : (this.deps.deepgramUrl ?? this.config.deepgramUrl),
           deepgramKey: engine ? () => engine.token : () => this.deepgramKey(),
           relay: this.config.think === 'relay' ? { url: engine ? engine.relayUrl : `${this.base}/voice-llm/v1/chat/completions`, tokens: this.tokens } : null,
           // the student's own host from their last call when it is still up and bound as they are now, else a new one

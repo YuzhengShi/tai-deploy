@@ -29,6 +29,11 @@ export interface FakeFluxTtsOptions extends FakeHandshake {
   startDelayMs?: number;
   /** Send `SpeechStarted` as soon as the first text of a turn arrives and the audio before the Flush (default false: the turn is served when it has been flushed). */
   startBeforeFlush?: boolean;
+  /**
+   * Send `SpeechStarted` (and `Flushed`) together with the first frame, `startDelayMs` after the turn is served, as the real service does, instead of the moment the turn is served: nothing at all is
+   * heard from the service in between (default false). The owner's call of 2026-11-15 lost a speech to a watchdog that counted that silence from the service's last message of the answer before.
+   */
+  startedWithAudio?: boolean;
   /** The turn with this index (0 = the first one on the socket) says `SpeechStarted` and then nothing at all. */
   silentTurn?: number;
   /** Cut the connection (no close frame) after this many frames of the turn with index `dropTurn`. */
@@ -233,8 +238,18 @@ export class FakeFluxTtsConnection extends FakeConnectionBase {
       return;
     }
     this.current = next;
-    this.sendJson({ type: 'SpeechStarted', speech_id: next.id });
-    if (next.flushed) this.sendJson({ type: 'Flushed', speech_id: next.id });
+    const announce = (): void => {
+      this.sendJson({ type: 'SpeechStarted', speech_id: next.id });
+      if (next.flushed) this.sendJson({ type: 'Flushed', speech_id: next.id });
+    };
+    if (this.o.startedWithAudio && this.o.silentTurn !== next.index) {
+      this.timer = setTimeout(() => {
+        announce();
+        this.frame(next);
+      }, this.o.startDelayMs ?? 30);
+      return;
+    }
+    announce();
     if (this.o.silentTurn === next.index) return;
     this.timer = setTimeout(() => this.frame(next), this.o.startDelayMs ?? 30);
   }

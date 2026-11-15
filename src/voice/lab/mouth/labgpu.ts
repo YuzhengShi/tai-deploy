@@ -6,7 +6,8 @@
  *
  * Measured on the real adapter on 2026-11-13 (docs/VOICE_SELFBUILT.md, section 5.4). Things that matter here:
  *
- * - The adapter IGNORES a `speed` field, so none is ever sent: the engine time-stretches instead (tempo.ts).
+ * - The adapter IGNORES a `speed` field, so none is sent unless the mouth is told the service takes one (`speedParam`: the local voice service does, as the engine's own speed,
+ *   docs/LOCAL_VOICE.md 9.12): by default the engine time-stretches instead (tempo.ts).
  * - A response carrying the header `X-TTS-Fallback` means the adapter's own backend failed and it served the sentence from ElevenLabs: the text has LEFT the
  *   private network and the voice is a stranger's. That audio is thrown away unread and the sentence fails with `MouthError('fallback')`.
  * - The voice `DrBerg` is on the adapter's list and must never be used (it is somebody's voice): refused here, before any request.
@@ -268,6 +269,23 @@ export interface LabGPUMouthOptions {
   fetchImpl?: typeof fetch;
   /** The voices the engine is configured to ask for. Checked here, so a forbidden or misspelt voice stops the lab at startup instead of in the middle of a call. */
   voices?: readonly string[];
+  /**
+   * The service takes a `speed` field in the body (the local voice service does: 0.5 to 2, a multiplier on the engine's natural pace, made by the engine and not by stretching finished audio;
+   * LabGPU's own adapter ignores it). Then the mouth `takesSpeed`, the engine passes the pace and does not time-stretch. Default: false.
+   */
+  speedParam?: boolean;
+  /**
+   * Whether the engine renders its fixed lines (the fillers, about forty) through this mouth ahead of time, once per process, when a call starts. Default: true (LabGPU's GPU makes them in no time).
+   * The local voice service runs on the host's four CPUs, beside the recognizer and the real sentences: the burst held the first replies of the first call after a restart back by 2 to 4 seconds
+   * (docs/LOCAL_VOICE.md 9.7), and a filler is only said when a function runs long, so there it is made when it is needed.
+   */
+  prewarm?: boolean;
+}
+
+/** The `speed` value of the request body for a requested pace: undefined when none was asked for or it is not a number, else clamped to the 0.5 to 2 the service takes, in hundredths. */
+export function labgpuSpeedField(speed: number | undefined): number | undefined {
+  if (speed === undefined || !Number.isFinite(speed)) return undefined;
+  return Math.round(Math.min(2, Math.max(0.5, speed)) * 100) / 100;
 }
 
 /** A voice name that may be sent. Throws a plain Error (not a MouthError: this is a mistake in the settings, not a service that is down) for `DrBerg` and for anything that is not a voice name. */
@@ -296,8 +314,9 @@ function httpBase(name: string, url: string): string {
 
 export class LabGPUMouth implements Mouth {
   readonly name = 'labgpu';
-  /** The adapter ignores `speed`; the engine stretches the audio instead (tempo.ts). */
-  readonly takesSpeed = false;
+  /** LabGPU's adapter ignores `speed` and the engine stretches the audio instead (tempo.ts); the local voice service takes it (`speedParam`). */
+  readonly takesSpeed: boolean;
+  readonly prewarm: boolean;
   readonly baseUrl: string;
   private readonly connectTimeoutMs: number;
   private readonly firstByteTimeoutMs: number;
@@ -310,6 +329,8 @@ export class LabGPUMouth implements Mouth {
     this.firstByteTimeoutMs = positive('firstByteTimeoutMs', options.firstByteTimeoutMs ?? 8000);
     this.totalTimeoutMs = positive('totalTimeoutMs', options.totalTimeoutMs ?? 30_000);
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.takesSpeed = options.speedParam === true;
+    this.prewarm = options.prewarm !== false;
     for (const voice of options.voices ?? []) checkLabGPUVoice(voice);
   }
 
@@ -321,8 +342,9 @@ export class LabGPUMouth implements Mouth {
   private async *run(text: string, opts: SynthOptions): AsyncGenerator<Buffer, void, undefined> {
     checkLabGPUVoice(opts.voice);
     if (opts.signal?.aborted || !text.trim()) return;
-    // `speed` is deliberately not in the body: the adapter ignores it.
-    const body = JSON.stringify({ text, voice: opts.voice });
+    // `speed` is in the body only when the service takes it (`speedParam`): LabGPU's adapter ignores it.
+    const speed = this.takesSpeed ? labgpuSpeedField(opts.speed) : undefined;
+    const body = JSON.stringify(speed === undefined ? { text, voice: opts.voice } : { text, voice: opts.voice, speed });
     yield* streamPcm({
       label: 'the TTS adapter',
       send: (signal) => this.fetchImpl(`${this.baseUrl}/tts`, { method: 'POST', headers: { 'content-type': 'application/json' }, body, signal }),

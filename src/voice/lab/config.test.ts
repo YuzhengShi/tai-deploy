@@ -42,6 +42,15 @@ describe('loadLabConfig', () => {
     expect(c.hold.interview).toEqual({ completeMs: 800, incompleteMs: 4000 });
   });
 
+  it('asks the TTS service for a pace only when it is told that the service takes one, and then at the Settings\' pace times its scale', () => {
+    expect(cfg({ TAI_VOICE_LAB: '1' })).toMatchObject({ ttsSpeedField: false, ttsSpeedScale: 1 });
+    expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_TTS_SPEED_FIELD: '1', TAI_VOICE_LAB_TTS_SPEED_SCALE: '1.08' })).toMatchObject({ ttsSpeedField: true, ttsSpeedScale: 1.08 });
+    expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_TTS_SPEED_FIELD: 'yes' }).ttsSpeedField).toBe(false);
+    const warnings: string[] = [];
+    expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_TTS_SPEED_SCALE: '9' }, warnings).ttsSpeedScale).toBe(1);
+    expect(warnings).toHaveLength(1);
+  });
+
   it('never takes DrBerg for LabGPU\'s voice', () => {
     const warnings: string[] = [];
     expect(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_LABGPU_VOICE: 'DrBerg' }, warnings).labgpuVoice).toBe('af_bella');

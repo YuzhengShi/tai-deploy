@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { BODY_MARKER, FakeTts, chunkedFetch, drain, loopbackOnlyFetch, tonePcm, wavBytes, type FakeTtsBehavior } from '../testing/fake-tts.js';
 import { MouthError } from '../types.js';
-import { LabGPUMouth, checkLabGPUVoice, type LabGPUMouthOptions } from './labgpu.js';
+import { LabGPUMouth, checkLabGPUVoice, labgpuSpeedField, type LabGPUMouthOptions } from './labgpu.js';
 
 /** A sentence with words no message of the mouth may ever repeat. */
 const TEXT = 'Zebrafish marmalade quietly orbits seventeen purple lanterns today';
@@ -96,6 +96,32 @@ describe('LabGPUMouth: the sentence', () => {
       expect(r.hasSpeed).toBe(false);
       expect(Object.keys(r.body).sort()).toEqual(['text', 'voice']);
     }
+  });
+
+  it('sends the speed, clamped to what the service takes, when it is told that the service takes one (the local voice service), and then takes a speed', async () => {
+    const { fake, mouth } = await setup({}, { speedParam: true });
+    expect(mouth.takesSpeed).toBe(true);
+    for (const speed of [1.2, 3, 0.2, undefined, Number.NaN, 1.0833]) await drain(mouth.synthesize(TEXT, { voice: VOICE, speed }));
+    expect(fake.requests.map((r) => r.body.speed)).toEqual([1.2, 2, 0.5, undefined, undefined, 1.08]);
+    expect(fake.requests.map((r) => r.hasSpeed)).toEqual([true, true, true, false, false, true]);
+    expect(Object.keys(fake.requests[0].body).sort()).toEqual(['speed', 'text', 'voice']);
+    expect(fake.requests.every((r) => r.body.text === TEXT && r.body.voice === VOICE)).toBe(true);
+  });
+
+  it('lets the engine render its fixed lines ahead of time unless it is told not to (the local CPU service is told not to), whatever it does with the speed', () => {
+    expect(new LabGPUMouth().prewarm).toBe(true);
+    expect(new LabGPUMouth({ speedParam: true }).prewarm).toBe(true);
+    expect(new LabGPUMouth({ prewarm: false }).prewarm).toBe(false);
+    expect(new LabGPUMouth({ prewarm: true, speedParam: true }).prewarm).toBe(true);
+  });
+
+  it('labgpuSpeedField: nothing for no pace, a clamped pace in hundredths otherwise', () => {
+    expect(labgpuSpeedField(undefined)).toBeUndefined();
+    expect(labgpuSpeedField(Number.POSITIVE_INFINITY)).toBeUndefined();
+    expect(labgpuSpeedField(1)).toBe(1);
+    expect(labgpuSpeedField(1.296)).toBe(1.3);
+    expect(labgpuSpeedField(0)).toBe(0.5);
+    expect(labgpuSpeedField(5)).toBe(2);
   });
 
   it('accepts a base URL with a trailing slash, and every voice of the adapter except DrBerg', async () => {

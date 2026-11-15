@@ -57,6 +57,13 @@ export interface LabConfig {
   /** The synthesizer to use for a sentence when `mouth` fails ('none': the sentence is lost). */
   mouthFallback: MouthKind | 'none';
   ttsUrl: string;
+  /**
+   * The TTS service takes a `speed` field in the body, as the engine's own pace (the local voice service does, docs/LOCAL_VOICE.md 9.12; LabGPU's adapter does not and gets the time-stretch of `tempo`
+   * instead). Then the pace of the Settings (1.2 in a conversation, 1.08 in the interview: what the live voices speak at) times `ttsSpeedScale` is what the engine is asked for.
+   */
+  ttsSpeedField: boolean;
+  /** A multiple of the Settings' pace for that field (default 1: the local voice at 1.2 speaks about 3.5 words a second, the live Flux voice at 1.2 about 3.6). */
+  ttsSpeedScale: number;
   /** The voice of LabGPU's TTS (one English voice there: af_bella and default are the same). */
   labgpuVoice: string;
   /** Time-stretch LabGPU's voice, which has no speed control, to the pace the live voices have (src/voice/lab/mouth/tempo.ts). */
@@ -104,6 +111,8 @@ export const LAB_ENV_KEYS = [
   'TAI_VOICE_LAB_MOUTH',
   'TAI_VOICE_LAB_MOUTH_FALLBACK',
   'TAI_VOICE_LAB_TTS_URL',
+  'TAI_VOICE_LAB_TTS_SPEED_FIELD',
+  'TAI_VOICE_LAB_TTS_SPEED_SCALE',
   'TAI_VOICE_LAB_LABGPU_VOICE',
   'TAI_VOICE_LAB_TEMPO',
   'TAI_VOICE_LAB_AURA_SPEED_SCALE',
@@ -210,6 +219,8 @@ export function loadLabConfig(lookup: (key: string) => string | undefined, warn:
     mouth,
     mouthFallback: choice<MouthKind | 'none'>('TAI_VOICE_LAB_MOUTH_FALLBACK', ['labgpu', 'aura', 'flux', 'none'], mouth === 'aura' ? 'none' : 'aura'),
     ttsUrl: url('TAI_VOICE_LAB_TTS_URL', DEFAULT_LABGPU_TTS, ['http:', 'https:']),
+    ttsSpeedField: raw('TAI_VOICE_LAB_TTS_SPEED_FIELD') === '1',
+    ttsSpeedScale: num('TAI_VOICE_LAB_TTS_SPEED_SCALE', 1, 0.5, 2),
     labgpuVoice: safeLabGPUVoice(name('TAI_VOICE_LAB_LABGPU_VOICE', 'af_bella'), warn),
     tempo: raw('TAI_VOICE_LAB_TEMPO') !== '0',
     livePace: 3.45,

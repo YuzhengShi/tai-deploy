@@ -68,6 +68,8 @@ export class FakeEars implements Ears {
 export interface FakeMouthOptions {
   name?: string;
   takesSpeed?: boolean;
+  /** False: the engine does not render its fixed lines ahead of time through this mouth (Mouth.prewarm). */
+  prewarm?: boolean;
   /** How long the audio of a sentence is (ms): a number, or a function of the text. */
   ms?: number | ((text: string) => number);
   /** Called for every request (to fail it, delay it, or record it). May throw a MouthError. */
@@ -77,11 +79,13 @@ export interface FakeMouthOptions {
 export class FakeMouth implements Mouth {
   readonly name: string;
   readonly takesSpeed: boolean;
+  readonly prewarm: boolean | undefined;
   readonly requests: Array<{ text: string; voice: string; speed?: number }> = [];
 
   constructor(private readonly opts: FakeMouthOptions = {}) {
     this.name = opts.name ?? 'fake';
     this.takesSpeed = opts.takesSpeed ?? false;
+    this.prewarm = opts.prewarm;
   }
 
   async *synthesize(text: string, o: SynthOptions): AsyncGenerator<Buffer> {

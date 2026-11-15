@@ -1291,3 +1291,54 @@ describe('LabAgent: the Flux TTS mouth says an answer as ONE continuous speech (
     expect(assistantLines(r)).toEqual([...SENTENCES, 'Second answer.']);
   }, 60_000);
 });
+
+describe('LabAgent: the pace asked of a TTS service that takes one (the local voice service)', () => {
+  it('asks for the Settings\' pace times TAI_VOICE_LAB_TTS_SPEED_SCALE, in a conversation and in the interview, and does not stretch what comes back', async () => {
+    const labgpu = new FakeMouth({ name: 'labgpu', takesSpeed: true, ms: 400 });
+    const r = await rig({ env: { TAI_VOICE_LAB_TTS_SPEED_SCALE: '1.1', TAI_VOICE_LAB_TEMPO: '1' }, mouths: { labgpu, aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 400 }) } });
+    await started(r, { greeting: null });
+    r.relay.script = (n) => [{ text: n === 1 ? 'A mutex is a lock.' : 'Tell me about Raft.' }];
+    await say(r, 'What is a mutex?');
+    await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
+    const first = labgpu.requests.filter((x) => x.text === 'A mutex is a lock.');
+    expect(first).toHaveLength(1);
+    expect(first[0].speed).toBeCloseTo(1.2 * 1.1, 5);
+    expect(r.audio.reduce((a, x) => a + x.bytes, 0)).toBe(Math.round(400 * 48) & ~1);          // the 400 ms the mouth made, not a time-stretched version of them (TEMPO is on)
+    r.send({ type: 'UpdateSpeak', speak: { provider: { type: 'deepgram', model: 'aura-2-mars-en', speed: 1.08 } } });
+    await r.until(() => r.of('SpeakUpdated').length === 1);
+    await r.feed(300, 0);
+    await say(r, 'Next question.');
+    await r.until(() => r.of('AgentAudioDone').length === 2, 20_000);
+    const second = labgpu.requests.filter((x) => x.text === 'Tell me about Raft.');
+    expect(second).toHaveLength(1);
+    expect(second[0].speed).toBeCloseTo(1.08 * 1.1, 5);
+  }, 60_000);
+
+  it('a TTS service that does not take a pace is asked for none and its audio is stretched as before', async () => {
+    const labgpu = new FakeMouth({ name: 'labgpu', takesSpeed: false, ms: 400 });
+    const r = await rig({ env: { TAI_VOICE_LAB_TEMPO: '1' }, mouths: { labgpu, aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 400 }) } });
+    await started(r, { greeting: null });
+    r.relay.script = () => [{ text: 'A mutex is a lock.' }];
+    await say(r, 'What is a mutex?');
+    await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
+    const asked = labgpu.requests.filter((x) => x.text === 'A mutex is a lock.');
+    expect(asked).toHaveLength(1);
+    expect(asked[0].speed).toBeUndefined();
+    expect(r.audio.reduce((a, x) => a + x.bytes, 0)).toBeLessThan(Math.round(400 * 48) & ~1);  // stretched to the live pace: shorter
+  }, 60_000);
+});
+
+describe('LabAgent: the fixed lines rendered ahead of time', () => {
+  it('are rendered through a mouth that allows it when the call starts, and not through one that says it should not (the local CPU service)', async () => {
+    const warm = new FakeMouth({ name: 'labgpu', ms: 100 });
+    const a = await rig({ mouths: { labgpu: warm, aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 100 }) } });
+    await started(a, { greeting: null });
+    await sleep(300);
+    expect(warm.requests.length).toBeGreaterThan(5);
+    const cold = new FakeMouth({ name: 'labgpu', ms: 100, prewarm: false });
+    const b = await rig({ mouths: { labgpu: cold, aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 100 }) } });
+    await started(b, { greeting: null });
+    await sleep(300);
+    expect(cold.requests).toHaveLength(0);
+  }, 60_000);
+});

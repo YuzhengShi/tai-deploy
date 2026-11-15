@@ -47,7 +47,7 @@ export function defaultFactories(cfg: LabConfig, deepgramKey: () => string, log:
       );
     },
     makeMouth: (kind) => {
-      if (kind === 'labgpu') return new LabGPUMouth({ baseUrl: cfg.ttsUrl, voices: [cfg.labgpuVoice] });
+      if (kind === 'labgpu') return new LabGPUMouth({ baseUrl: cfg.ttsUrl, voices: [cfg.labgpuVoice], speedParam: cfg.ttsSpeedField, prewarm: !cfg.ttsSpeedField });
       if (kind === 'flux') return new FluxTtsMouth({ apiKey: deepgramKey, baseUrl: cfg.fluxTtsUrl, log });
       return new AuraMouth({ apiKey: deepgramKey, baseUrl: cfg.auraUrl });
     },

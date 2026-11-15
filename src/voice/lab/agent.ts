@@ -1251,7 +1251,8 @@ export class LabAgent {
   private async *mouthStream(kind: MouthKind, clean: string, signal: AbortSignal): AsyncGenerator<Buffer> {
     const voice = this.voiceFor(kind);
     const mouth = this.mouthOf(kind);
-    const speed = mouth.takesSpeed && this.speed !== undefined ? this.speed * (kind === 'flux' ? this.cfg.fluxSpeedScale : this.cfg.auraSpeedScale) : undefined;
+    const scale = kind === 'flux' ? this.cfg.fluxSpeedScale : kind === 'labgpu' ? this.cfg.ttsSpeedScale : this.cfg.auraSpeedScale;
+    const speed = mouth.takesSpeed && this.speed !== undefined ? this.speed * scale : undefined;
     const factor = !mouth.takesSpeed && this.cfg.tempo ? this.tempoFactor() : 1;
     const key = PcmCache.key(kind, voice, factor !== 1 ? factor : speed, clean);
     const cached = this.deps.cache.get(key);

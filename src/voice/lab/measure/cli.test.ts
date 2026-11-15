@@ -296,19 +296,19 @@ describe('the command line: usage', () => {
 
   it('documents the five chains of interleave, a route with its chain and the `tools` set in the usage', () => {
     for (const flag of ['--c-chain <label>', '--c-path <route>', '--d-chain <label>', '--d-path <route>', '--e-chain <label>', '--e-path <route>']) expect(USAGE).toContain(flag);
-    expect(USAGE).toContain('?chain=d|h|fd|c|cf');
+    expect(USAGE).toContain('?chain=d|h|fd|c|cf|lf');
     expect(USAGE).toContain('latency|pause|short|filler|bargein|interview|talk|tuning|tools');
     expect(USAGE).toContain('testset2.json');
     expect(USAGE).toMatch(/A, B, C, D, E/);
   });
 
   it('knows the same five chain names as the server (a call asks for `?chain=` by them), pinned here, not imported', () => {
-    expect([...LAB_CHAINS]).toEqual(['d', 'h', 'fd', 'c', 'cf']);
+    expect([...LAB_CHAINS]).toEqual(['d', 'h', 'fd', 'c', 'cf', 'lf']);
     expect([...LAB_CHAINS]).toEqual([...CHAIN_NAMES]);
   });
 
-  it('takes a route of the two known ones with at most `?chain=d|h|fd|c|cf`, and refuses everything else a route could carry', async () => {
-    for (const good of ['api/voice', 'api/voice-lab', 'api/voice-lab?chain=d', 'api/voice-lab?chain=h', 'api/voice-lab?chain=fd', 'api/voice-lab?chain=c', 'api/voice-lab?chain=cf']) {
+  it('takes a route of the two known ones with at most `?chain=d|h|fd|c|cf|lf`, and refuses everything else a route could carry', async () => {
+    for (const good of ['api/voice', 'api/voice-lab', 'api/voice-lab?chain=d', 'api/voice-lab?chain=h', 'api/voice-lab?chain=fd', 'api/voice-lab?chain=c', 'api/voice-lab?chain=cf', 'api/voice-lab?chain=lf']) {
       expect(route(good, 'path')).toBe(good);
       expect(route(`/${good}`, 'path')).toBe(good); // leading slashes are dropped, as before
     }
@@ -349,7 +349,7 @@ describe('the command line: usage', () => {
       '',
       '?chain=h',
     ];
-    for (const bad of hostile) expect(() => route(bad, 'path'), JSON.stringify(bad)).toThrow(/--path must be api\/voice or api\/voice-lab, optionally followed by \?chain=d\|h\|fd\|c\|cf and nothing else/);
+    for (const bad of hostile) expect(() => route(bad, 'path'), JSON.stringify(bad)).toThrow(/--path must be api\/voice or api\/voice-lab, optionally followed by \?chain=d\|h\|fd\|c\|cf\|lf and nothing else/);
     expect(() => route('api/other', 'c-path')).toThrow(/--c-path must be/); // the flag is named in the error
     // the same through the command line, for run's --path and every route flag of interleave, and no call is made
     const ok = ['--origin', 'https://x', '--users', files.users, '--secret', files.secret, '--email', 'owner@example.edu', '--set', 'latency', '--audio', files.audio, '--testset', files.testset];

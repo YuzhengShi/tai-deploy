@@ -10,7 +10,7 @@
  *        (calls rotate A, B, C, D, E (as many as are given) within each round, in one process; the raw logs go to <out>/<label> of each chain)
  *   node dist/voice/lab/measure/cli.js analyze --a <dir of chain A's raw logs> --b <dir of chain B's> [--json] [--tuning]
  *
- * A <route> is `api/voice` (today's call; the default of run's --path and of --a-path) or `api/voice-lab` (the lab; the default of --b-path), optionally followed by `?chain=d|h|fd|c|cf`
+ * A <route> is `api/voice` (today's call; the default of run's --path and of --a-path) or `api/voice-lab` (the lab; the default of --b-path), optionally followed by `?chain=d|h|fd|c|cf|lf`
  * (the lab's chain of that call, docs A10) and nothing else: any other query, a fragment or any other path is refused before a call is made.
  * The `tools` set exists only in a test set that has a `tools` list (eval/voice-lab/testset2.json).
  *
@@ -32,7 +32,7 @@ import { AudioLibrary, FROZEN_TESTSET, isLabSet, LAB_SETS, loadTestSet, modeForS
  * The chains a lab call can be asked for with `?chain=` (docs A10): the same five names as src/voice/lab/config.ts (a test pins that they agree). They are pinned here, not imported, so that
  * what this client will ask for does not move with the server's code.
  */
-export const LAB_CHAINS = ['d', 'h', 'fd', 'c', 'cf'] as const;
+export const LAB_CHAINS = ['d', 'h', 'fd', 'c', 'cf', 'lf'] as const;
 /**
  * A route as the flags take it: the live route as it is, or the lab's with at most `?chain=<name>`. No other query, no fragment, nothing after it (anchored at both ends). The live route takes no
  * chain: the hub ignores a query there, so a chain asked for on it would be a live call under another chain's label.
@@ -111,7 +111,7 @@ function integer(p: Parsed, name: string, fallback: number, min: number, max: nu
 }
 
 /**
- * A route flag's value: `api/voice` or `api/voice-lab` (leading slashes dropped, as before), then at most `?chain=d|h|fd|c|cf`. Whatever else is in it (another query or an extra parameter, a fragment, a
+ * A route flag's value: `api/voice` or `api/voice-lab` (leading slashes dropped, as before), then at most `?chain=d|h|fd|c|cf|lf`. Whatever else is in it (another query or an extra parameter, a fragment, a
  * path beyond the route, an unknown chain, a space or a line end) is refused, so that nothing a call is made on can be anything but the two routes with a documented chain.
  */
 export function route(value: string, name: string): string {

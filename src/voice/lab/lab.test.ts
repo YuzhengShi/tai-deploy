@@ -314,6 +314,7 @@ describe('the chain of a call (A10)', () => {
       ['c', ['flux', 'labgpu']],
       ['fd', ['flux', 'labgpu']],
       ['cf', ['flux', 'labgpu']],
+      ['lf', ['labgpu']],
       ['d', ['labgpu', 'flux']],
       ['nonsense', ['labgpu']],
     ];

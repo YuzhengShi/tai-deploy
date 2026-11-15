@@ -236,7 +236,7 @@ export function callUrl(target: RunTarget, route: string): string {
 
 export interface RunOptions {
   chain: string;
-  /** the portal route, api/voice (live) or api/voice-lab, optionally with `?chain=d|h|fd|c|cf` (the lab's chain of this call, docs A10) */
+  /** the portal route, api/voice (live) or api/voice-lab, optionally with `?chain=d|h|fd|c|cf|lf` (the lab's chain of this call, docs A10) */
   path: string;
   mode: CallMode;
   /** the label of the set the scenarios belong to */

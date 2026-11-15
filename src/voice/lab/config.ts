@@ -16,9 +16,10 @@ export type MouthKind = 'labgpu' | 'aura' | 'flux';
  *   fd : Flux's ears (eager end of turn) and LabGPU's mouth: everything but the recognizer self-built
  *   c  : Flux's ears (eager end of turn) and Aura's mouth: the control, our orchestration over Deepgram's models. NOT the live voice: Aura-2 over REST, one request per sentence (amendment A15)
  *   cf : Flux's ears (eager end of turn) and Flux TTS's mouth, the voice of today's call spoken as one continuous speech per answer: the control that is like for like with the live call (A15)
+ *   lf : the local recognizer alone (no second recognizer beside it: the student's audio goes nowhere else) and Flux TTS's mouth: the live call's voice with the audio kept on the host (A19)
  */
-export type ChainName = 'd' | 'h' | 'fd' | 'c' | 'cf';
-export const CHAIN_NAMES: readonly ChainName[] = ['d', 'h', 'fd', 'c', 'cf'];
+export type ChainName = 'd' | 'h' | 'fd' | 'c' | 'cf' | 'lf';
+export const CHAIN_NAMES: readonly ChainName[] = ['d', 'h', 'fd', 'c', 'cf', 'lf'];
 export const isChainName = (value: unknown): value is ChainName => typeof value === 'string' && (CHAIN_NAMES as readonly string[]).includes(value);
 
 /** The eager threshold a chain that uses the eager end of turn takes when `TAI_VOICE_LAB_EAGER_EOT` names none (A10: the live call's request left 0.44 s after the end of speech, p50, and this threshold's eager event came at 0.40 s). */
@@ -270,6 +271,10 @@ export function forChain(base: LabConfig, chain: string | null | undefined): Lab
       return { ...base, chain, ears: 'flux', earsFallback: 'labgpu', shadowEars: 'labgpu', mouth: 'aura', mouthFallback: 'labgpu', eagerEot: eager };
     case 'cf':
       return { ...base, chain, ears: 'flux', earsFallback: 'labgpu', shadowEars: 'labgpu', mouth: 'flux', mouthFallback: 'aura', eagerEot: eager };
+    case 'lf':
+      // the local recognizer, nothing listening beside it (a shadow would be a second copy of the student's audio going out), no eager end of turn (it is Flux's); the fallback recognizer is Flux's, as in
+      // every chain with these ears: it takes over only if the local one fails, and the owner has kept the fallbacks on
+      return { ...base, chain, ears: 'labgpu', earsFallback: 'flux', shadowEars: 'none', mouth: 'flux', mouthFallback: 'aura', eagerEot: 0 };
   }
 }
 

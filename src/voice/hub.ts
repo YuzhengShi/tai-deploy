@@ -484,7 +484,7 @@ class Hub implements VoiceHub {
       if (req.headers.origin !== this.origin) return refuseUpgrade(socket, 403, 'Forbidden');
       if (!user || user.role !== 'owner') return refuseUpgrade(socket, 403, 'Forbidden');
       if (!FOLDER.test(user.folder) || typeof user.jid !== 'string' || !user.jid) return refuseUpgrade(socket, 403, 'Forbidden');
-      // `?chain=d|h|fd|c|cf` picks the chain of this call (docs A10); anything else is the process's own settings, as in round 1
+      // `?chain=d|h|fd|c|cf|lf` picks the chain of this call (docs A10); anything else is the process's own settings, as in round 1
       const chain = query.get('chain');
       this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, user, true, isChainName(chain) ? chain : undefined));
     } catch (err) {

@@ -340,7 +340,7 @@ export function voiceSocketPath(search = '') {
     const params = new URLSearchParams(search);
     if (params.get('voice') !== 'lab') return 'api/voice';
     const chain = params.get('chain');
-    return chain === 'd' || chain === 'h' || chain === 'fd' || chain === 'c' || chain === 'cf' ? `api/voice-lab?chain=${chain}` : 'api/voice-lab';
+    return chain === 'd' || chain === 'h' || chain === 'fd' || chain === 'c' || chain === 'cf' || chain === 'lf' ? `api/voice-lab?chain=${chain}` : 'api/voice-lab';
   } catch {
     return 'api/voice';
   }

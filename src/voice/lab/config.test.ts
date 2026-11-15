@@ -92,7 +92,7 @@ describe('forChain', () => {
   const base = cfg({ TAI_VOICE_LAB: '1' });
 
   it('knows exactly five chains', () => {
-    expect(['d', 'h', 'fd', 'c', 'cf'].every(isChainName)).toBe(true);
+    expect(['d', 'h', 'fd', 'c', 'cf', 'lf'].every(isChainName)).toBe(true);
     for (const x of ['', 'D', 'labgpu', 'h ', 'hh', undefined, null, 4]) expect(isChainName(x)).toBe(false);
   });
 
@@ -104,6 +104,13 @@ describe('forChain', () => {
   it('fd: Flux ears and LabGPU mouth; c: Flux ears and Aura mouth, both with the eager end of turn, LabGPU ears as the shadow and as the fallback', () => {
     expect(forChain(base, 'fd')).toMatchObject({ chain: 'fd', ears: 'flux', earsFallback: 'labgpu', shadowEars: 'labgpu', mouth: 'labgpu', eagerEot: DEFAULT_EAGER_EOT });
     expect(forChain(base, 'c')).toMatchObject({ chain: 'c', ears: 'flux', earsFallback: 'labgpu', shadowEars: 'labgpu', mouth: 'aura', mouthFallback: 'labgpu', eagerEot: DEFAULT_EAGER_EOT });
+  });
+
+  it('lf: the local recognizer alone (no shadow, so no second copy of the audio goes out, and no eager end of turn), the Flux TTS mouth, Flux ears only as the fallback, Aura as the mouth that takes over', () => {
+    expect(forChain(base, 'lf')).toMatchObject({ chain: 'lf', ears: 'labgpu', earsFallback: 'flux', shadowEars: 'none', mouth: 'flux', mouthFallback: 'aura', eagerEot: 0 });
+    // whatever the process's own settings say about listening beside it or asking early, this chain does neither
+    const noisy = forChain(cfg({ TAI_VOICE_LAB: '1', TAI_VOICE_LAB_SHADOW_EARS: 'flux', TAI_VOICE_LAB_EAGER_EOT: '0.6' }), 'lf');
+    expect(noisy).toMatchObject({ shadowEars: 'none', eagerEot: 0 });
   });
 
   it('cf: Flux ears and the Flux TTS mouth (the live call\'s voice, one speech per answer), Aura as the mouth that takes over, LabGPU ears as the shadow and the fallback', () => {

@@ -1371,3 +1371,25 @@ describe('LabAgent: the level of the TTS service\'s voice', () => {
     expect(peakOf(r)).toBe(3000);
   }, 60_000);
 });
+
+describe('LabAgent: chain lf (the local recognizer alone, the Flux voice)', () => {
+  it('asks for one recognizer only, so that the audio goes to no second one, and speaks the answer as one Flux speech; the trace says lf, labgpu, flux', async () => {
+    const fake = await FakeFluxTts.start({ msPerChar: 25, frameAudioMs: 40, frameWallMs: 10, startDelayMs: 5 });
+    const mouth = new FluxTtsMouth({ apiKey: () => 'dg-test-key-abcdef', baseUrl: fake.url });
+    const r = await rig({ chain: 'lf', mouths: { flux: mouth as unknown as FakeMouth, labgpu: new FakeMouth({ name: 'labgpu', ms: 300 }), aura: new FakeMouth({ name: 'aura', takesSpeed: true, ms: 300 }) } });
+    cleanups.push(async () => {
+      mouth.close();
+      await fake.close();
+    });
+    await started(r, { greeting: null });
+    await sleep(300);
+    expect(r.earsAsked.map((a) => a.kind)).toEqual(['labgpu']);
+    expect(r.earsAsked[0].eagerEot).toBeUndefined();
+    r.relay.script = () => [{ text: 'Raft elects a leader first. ' }, { text: 'Then the leader sends heartbeats.' }];
+    await say(r, 'Explain Raft.');
+    await r.until(() => r.of('AgentAudioDone').length === 1, 20_000);
+    expect(fake.last.turns).toHaveLength(1);
+    expect(r.earsAsked.map((a) => a.kind)).toEqual(['labgpu']);
+    expect(r.traces[0]).toMatchObject({ chain: 'lf', ears: 'labgpu', mouth: 'flux' });
+  }, 60_000);
+});

@@ -190,6 +190,7 @@ describe('the call\'s socket path', () => {
     expect(voiceSocketPath('?voice=lab&chain=h')).toBe('api/voice-lab?chain=h');
     expect(voiceSocketPath('?chain=fd&voice=lab')).toBe('api/voice-lab?chain=fd');
     expect(voiceSocketPath('?voice=lab&chain=cf')).toBe('api/voice-lab?chain=cf');
+    expect(voiceSocketPath('?voice=lab&chain=lf')).toBe('api/voice-lab?chain=lf');
     expect(voiceSocketPath('?voice=lab&chain=x')).toBe('api/voice-lab');
     expect(voiceSocketPath('?voice=lab&chain=h%26voice%3Dx')).toBe('api/voice-lab');
     expect(voiceSocketPath('?chain=h')).toBe('api/voice');

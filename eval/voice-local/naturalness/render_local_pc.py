@@ -30,14 +30,17 @@ def main() -> int:
     ap.add_argument('--bank', default=r'D:\tai-voice-local\naturalness-bank-20261115')
     ap.add_argument('--steps', type=int, nargs='+', default=[5, 16, 24])
     ap.add_argument('--threads', type=int, default=4)
+    ap.add_argument('--speed', type=float, default=1.2, help='the request speed (the engine runs at 1.05 x this); 1.2 is the lab, 1.0 the natural pace')
     args = ap.parse_args()
     passages = json.load(open(os.path.join(L.HERE, 'passages.json'), encoding='utf-8'))['passages']
     report = {}
     for steps in args.steps:
         backend = SupertonicBackend(MODEL_DIR, steps=steps, threads=args.threads, instances=1)
-        backend.synthesize('Warm up.', 1.2, 'F1')
+        backend.synthesize('Warm up.', args.speed, 'F1')
         rate = backend.sample_rate
-        out_dir = os.path.join(args.bank, 'pc', 'sent', 'local-F1-steps%d' % steps, 'r1')
+        tag = 'local-F1-steps%d' % steps if args.speed == 1.2 else 'local-F1-pace%.1f-steps%d' % (args.speed, steps)
+        host_cond = {1.2: 'local-F1', 1.0: 'local-F1-speed1.0'}.get(args.speed)   # the container's clips at this speed, if it made any
+        out_dir = os.path.join(args.bank, 'pc', 'sent', tag, 'r1')
         os.makedirs(out_dir, exist_ok=True)
         t0 = time.time()
         audio_s = 0.0
@@ -46,12 +49,12 @@ def main() -> int:
         level_diffs: list[float] = []
         for p in passages:
             for k, text in enumerate(p['sentences'], 1):
-                samples = backend.synthesize(text, 1.2, 'F1')
+                samples = backend.synthesize(text, args.speed, 'F1')
                 pcm = pcm16_24k(samples, rate)
                 x = np.frombuffer(pcm, dtype='<i2')
                 audio_s += len(x) / 24000
                 L.write_wav(os.path.join(out_dir, '%s-s%d.wav' % (p['id'], k)), x.astype(np.float32) / 32768.0, 24000)
-                host = os.path.join(args.bank, 'raw', 'sent', 'local-F1', 'r1', '%s-s%d.wav' % (p['id'], k))
+                host = os.path.join(args.bank, 'raw', 'sent', host_cond or 'none', 'r1', '%s-s%d.wav' % (p['id'], k))
                 if not os.path.exists(host):
                     missing += 1
                     continue
@@ -64,10 +67,11 @@ def main() -> int:
                 hx, _ = L.read_wav(host)
                 level_diffs.append(L.speech_level_db(x.astype(np.float32) / 32768.0, 24000) - L.speech_level_db(hx, 24000))
         wall = time.time() - t0
-        report[steps] = {'clips': sum(len(p['sentences']) for p in passages), 'audio_s': round(audio_s, 1), 'wall_s': round(wall, 1), 'rtf': round(wall / audio_s, 3)}
-        report[steps].update({'same_length_as_container': same, 'different_length': diff, 'missing': missing, 'max_length_difference_samples': worst,
+        key = steps if args.speed == 1.2 else 'pace%.1f-steps%d' % (args.speed, steps)
+        report[key] = {'clips': sum(len(p['sentences']) for p in passages), 'audio_s': round(audio_s, 1), 'wall_s': round(wall, 1), 'rtf': round(wall / audio_s, 3)}
+        report[key].update({'same_length_as_container': same, 'different_length': diff, 'missing': missing, 'max_length_difference_samples': worst,
                               'mean_level_difference_db': round(float(np.mean(level_diffs)), 2) if level_diffs else None})
-        print(json.dumps({'steps': steps, **report[steps]}))
+        print(json.dumps({'steps': steps, 'speed': args.speed, **report[key]}))
     path = os.path.join(args.bank, 'pc', 'render_local_pc.json')
     merged = json.load(open(path)) if os.path.exists(path) else {}
     merged.update({str(k): v for k, v in report.items()})        # a re-run of one setting keeps the others

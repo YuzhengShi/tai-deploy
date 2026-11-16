@@ -83,7 +83,7 @@
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
-  var ids = [], order = [], i = 0, plays = 0, playedFully = false, listenMs = 0, lastPlayAt = 0;
+  var ids = [], apart = [], order = [], i = 0, plays = 0, playedFully = false, listenMs = 0, lastPlayAt = 0;
   var ratings = {}, cur = { nat: 0, con: 0 }, started = '', result = null;
 
   function shuffle(a) {
@@ -91,6 +91,18 @@
     (window.crypto || window.msCrypto).getRandomValues(r);
     for (var k = b.length - 1; k > 0; k--) { var j = r[k] % (k + 1); var t = b[k]; b[k] = b[j]; b[j] = t; }
     return b;
+  }
+  // pairs of ids that are the same clip heard twice (manifest.apart): a random order that puts them fewer than 6 places apart is drawn again
+  function okApart(o) {
+    for (var k = 0; k < apart.length; k++) {
+      if (Math.abs(o.indexOf(apart[k][0]) - o.indexOf(apart[k][1])) < 6) return false;
+    }
+    return true;
+  }
+  function shuffleApart(a) {
+    var o = shuffle(a);
+    for (var t = 0; t < 500 && !okApart(o); t++) o = shuffle(a);
+    return o;
   }
   function scale(el, key) {
     el.innerHTML = '';
@@ -132,7 +144,7 @@
 
   $('start').addEventListener('click', function () {
     started = new Date().toISOString();
-    order = shuffle(ids);
+    order = shuffleApart(ids);
     i = 0; show('trial'); load(0);
   });
   $('next').addEventListener('click', function () {
@@ -158,6 +170,7 @@
 
   fetch('manifest.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (m) {
     ids = m.ids;
+    apart = m.apart || [];
     $('n').textContent = ids.length;
     Array.prototype.forEach.call(document.getElementsByClassName('nn'), function (e) { e.textContent = ids.length; });
   }).catch(function () { $('sub').textContent = 'manifest.json not found: start the page through serve.py'; $('start').disabled = true; });

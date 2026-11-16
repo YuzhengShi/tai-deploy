@@ -1,0 +1,165 @@
+{
+ "version": 1,
+ "participant": "owner",
+ "started": "2026-11-16T00:09:44.467Z",
+ "finished": "2026-11-16T00:17:30.769Z",
+ "order": [
+  "k342cbf",
+  "kc56afa",
+  "k175c23",
+  "kfd05b2",
+  "k94ab8d",
+  "kadb64f",
+  "k40b97e",
+  "kbfcd2a",
+  "k266e80",
+  "k6bf417",
+  "k2535d8",
+  "k1aec0d",
+  "k5e8b4a",
+  "k48969c",
+  "k9be6bd",
+  "k827830",
+  "kd75ca9",
+  "ke99c0b",
+  "kb1b632",
+  "kae2786",
+  "k0b24ce",
+  "k2c8f14"
+ ],
+ "ratings": {
+  "k342cbf": {
+   "naturalness": 2,
+   "continuity": 3,
+   "plays": 1,
+   "listen_ms": 17415
+  },
+  "kc56afa": {
+   "naturalness": 3,
+   "continuity": 3,
+   "plays": 1,
+   "listen_ms": 18599
+  },
+  "k175c23": {
+   "naturalness": 3,
+   "continuity": 4,
+   "plays": 1,
+   "listen_ms": 19001
+  },
+  "kfd05b2": {
+   "naturalness": 3,
+   "continuity": 3,
+   "plays": 1,
+   "listen_ms": 17062
+  },
+  "k94ab8d": {
+   "naturalness": 3,
+   "continuity": 3,
+   "plays": 1,
+   "listen_ms": 15870
+  },
+  "kadb64f": {
+   "naturalness": 2,
+   "continuity": 2,
+   "plays": 1,
+   "listen_ms": 17071
+  },
+  "k40b97e": {
+   "naturalness": 3,
+   "continuity": 3,
+   "plays": 1,
+   "listen_ms": 17409
+  },
+  "kbfcd2a": {
+   "naturalness": 3,
+   "continuity": 4,
+   "plays": 1,
+   "listen_ms": 20825
+  },
+  "k266e80": {
+   "naturalness": 3,
+   "continuity": 2,
+   "plays": 1,
+   "listen_ms": 18062
+  },
+  "k6bf417": {
+   "naturalness": 1,
+   "continuity": 2,
+   "plays": 1,
+   "listen_ms": 15805
+  },
+  "k2535d8": {
+   "naturalness": 3,
+   "continuity": 4,
+   "plays": 1,
+   "listen_ms": 20739
+  },
+  "k1aec0d": {
+   "naturalness": 4,
+   "continuity": 4,
+   "plays": 2,
+   "listen_ms": 18345
+  },
+  "k5e8b4a": {
+   "naturalness": 2,
+   "continuity": 3,
+   "plays": 1,
+   "listen_ms": 19019
+  },
+  "k48969c": {
+   "naturalness": 4,
+   "continuity": 5,
+   "plays": 1,
+   "listen_ms": 16741
+  },
+  "k9be6bd": {
+   "naturalness": 3,
+   "continuity": 3,
+   "plays": 1,
+   "listen_ms": 19013
+  },
+  "k827830": {
+   "naturalness": 5,
+   "continuity": 5,
+   "plays": 2,
+   "listen_ms": 18123
+  },
+  "kd75ca9": {
+   "naturalness": 3,
+   "continuity": 3,
+   "plays": 1,
+   "listen_ms": 17413
+  },
+  "ke99c0b": {
+   "naturalness": 2,
+   "continuity": 2,
+   "plays": 1,
+   "listen_ms": 22750
+  },
+  "kb1b632": {
+   "naturalness": 1,
+   "continuity": 1,
+   "plays": 1,
+   "listen_ms": 17314
+  },
+  "kae2786": {
+   "naturalness": 2,
+   "continuity": 3,
+   "plays": 1,
+   "listen_ms": 17963
+  },
+  "k0b24ce": {
+   "naturalness": 3,
+   "continuity": 4,
+   "plays": 1,
+   "listen_ms": 20394
+  },
+  "k2c8f14": {
+   "naturalness": 4,
+   "continuity": 4,
+   "plays": 1,
+   "listen_ms": 19274
+  }
+ },
+ "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+}

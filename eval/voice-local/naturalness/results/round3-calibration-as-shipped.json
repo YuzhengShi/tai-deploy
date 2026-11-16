@@ -1,0 +1,149 @@
+{
+ "target_words_per_s": 3.519,
+ "live_per_passage": {
+  "p3": 3.335,
+  "p6": 3.559,
+  "p9": 3.663
+ },
+ "control": {
+  "median_join_ms": 240.9,
+  "joins": [
+   312.3,
+   246.0,
+   193.8,
+   188.8,
+   240.9,
+   308.7,
+   106.4,
+   144.0,
+   338.3
+  ],
+  "words_per_s": 3.539
+ },
+ "conditions": {
+  "maple": {
+   "median_join_ms_at_1.0": 195.4,
+   "join_difference_to_control_ms": -45.5,
+   "treatment": "none (played as the engine makes it)",
+   "steps": [
+    {
+     "speed": 1.0,
+     "rate": 3.887
+    },
+    {
+     "speed": 1.2,
+     "rate": 4.307
+    },
+    {
+     "speed": 0.82,
+     "rate": 3.439
+    }
+   ],
+   "chosen_speed": 0.82,
+   "chosen_rate_words_per_s": 3.439,
+   "within_tolerance": true,
+   "synthesis_at_chosen_speed": {
+    "sentences": 12,
+    "first_audio_ms_p50": 10298,
+    "first_audio_ms_p90": 16766,
+    "first_audio_ms_max": 19832,
+    "rtf_median": 2.074,
+    "rtf_max": 2.342,
+    "threads": 4
+   }
+  },
+  "sol": {
+   "median_join_ms_at_1.0": 201.9,
+   "join_difference_to_control_ms": -39.0,
+   "treatment": "none (played as the engine makes it)",
+   "steps": [
+    {
+     "speed": 1.0,
+     "rate": 3.573
+    },
+    {
+     "speed": 1.2,
+     "rate": 3.966
+    },
+    {
+     "speed": 0.97,
+     "rate": 3.518
+    }
+   ],
+   "chosen_speed": 0.97,
+   "chosen_rate_words_per_s": 3.518,
+   "within_tolerance": true,
+   "synthesis_at_chosen_speed": {
+    "sentences": 12,
+    "first_audio_ms_p50": 9990,
+    "first_audio_ms_p90": 16677,
+    "first_audio_ms_max": 19157,
+    "rtf_median": 2.042,
+    "rtf_max": 2.28,
+    "threads": 4
+   }
+  },
+  "vale-us": {
+   "median_join_ms_at_1.0": 203.1,
+   "join_difference_to_control_ms": -37.8,
+   "treatment": "none (played as the engine makes it)",
+   "steps": [
+    {
+     "speed": 1.0,
+     "rate": 3.44
+    },
+    {
+     "speed": 1.2,
+     "rate": 3.83
+    },
+    {
+     "speed": 1.04,
+     "rate": 3.487
+    }
+   ],
+   "chosen_speed": 1.04,
+   "chosen_rate_words_per_s": 3.487,
+   "within_tolerance": true,
+   "synthesis_at_chosen_speed": {
+    "sentences": 12,
+    "first_audio_ms_p50": 9727,
+    "first_audio_ms_p90": 16715,
+    "first_audio_ms_max": 19147,
+    "rtf_median": 2.025,
+    "rtf_max": 2.204,
+    "threads": 4
+   }
+  },
+  "vale-gb": {
+   "median_join_ms_at_1.0": 203.5,
+   "join_difference_to_control_ms": -37.4,
+   "treatment": "none (played as the engine makes it)",
+   "steps": [
+    {
+     "speed": 1.0,
+     "rate": 3.404
+    },
+    {
+     "speed": 1.2,
+     "rate": 3.77
+    },
+    {
+     "speed": 1.06,
+     "rate": 3.515
+    }
+   ],
+   "chosen_speed": 1.06,
+   "chosen_rate_words_per_s": 3.515,
+   "within_tolerance": true,
+   "synthesis_at_chosen_speed": {
+    "sentences": 12,
+    "first_audio_ms_p50": 9640,
+    "first_audio_ms_p90": 15765,
+    "first_audio_ms_max": 19062,
+    "rtf_median": 1.986,
+    "rtf_max": 2.238,
+    "threads": 4
+   }
+  }
+ }
+}

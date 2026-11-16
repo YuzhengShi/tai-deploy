@@ -97,3 +97,31 @@ with the voice the model names (en-us) or the one the config's `lang` option nam
 
 What the check also shows, to be said with the result: the model is fed espeak-ng's IPA and not the Misaki phonemes it was trained with (a diphthong arrives as two symbols, `eɪ`, where Misaki writes one, `A`).
 A front end that gives it Misaki's phonemes needs a download and his word and was not built; if a Kokoro condition comes out "partway" or "close", it is the first thing to try.
+
+## Amendment 2 (2026-11-16, after the first calibration pass; before any repaired render, before any clip was heard by anyone, before the kit)
+
+The first calibration pass ran the protocol as written, through sherpa-onnx (its clips are kept as `played-as-shipped`). Two things in the engine's own behaviour showed up that the protocol did not foresee.
+Both are the engine's and not the model's, and both shape what the owner would have heard.
+
+1. **A dropped phoneme.** For the American front end the engine's log says "Skip unknown phonemes ... U+025a" 12 times in the 12 sentences: espeak-ng's `ɚ` (the unstressed "-er") has no token in the model and is
+   silently left out. It is audible: "worker" reaches the model as `wˈɜːk`, "master" as `mˈæst`, "answers" as `ˈænsz`, "servers" as `sˈɜːvz`, "measure" as `mˈɛʒ`, "percent" as `psˈɛnt`, "record" as `ɹˈɛkd`
+   (decoded in `frontend.json`). The British front end (`lang='en'`) skips nothing.
+2. **Pauses compressed to a fifth.** The engine's default `silence_scale` is 0.2 and its source (`offline-tts-kokoro-impl.h`) applies `ScaleSilence` with it: every silent stretch of the audio is shortened to 20 %.
+   On the first sentence checked (p3, third sentence, af_maple, speed 1.0) the clip has 260 ms of silence before the first sound and 800 ms after the last when the model is run as it is, and 50 ms and 150 ms
+   through the engine; the whole clip is 124678 samples through the engine and 151800 with `silence_scale=1.0`.
+
+The owner's A13 listening ran this engine with both, so "Kokoro: neither will do" may partly have been about them. What changes (nothing else does):
+
+* **The Kokoro conditions are made by running the model itself** (onnxruntime on the same `model.int8.onnx` and `voices.bin`) **on the token ids the engine makes** (read from its debug log, sentence by sentence: the Python
+  API takes text only), **with the model's own silences** (no scaling), and **with the 12 truncated words replaced by the pronunciation of the model's own US lexicon**, Misaki's (`REPAIRS` in `kokoro_direct.py`;
+  found by comparing with the British phonemes of the same sentences and checked against the engine's own count of skipped phonemes: 12 of 12, sentence by sentence). The runner follows the engine's procedure
+  (the style row is the number of tokens without the two pads, the speed is passed as given). **Validated** against the engine run with `silence_scale=1.0` on the four sentences that need no repair: the same number of
+  samples on three, 0.74 % off on the fourth, the same speaking time (to 0.01 s) and the same level (to 0.1 dB).
+* **Conditions** (3 passages each): `kokoro-maple` and `kokoro-sol` (the engine's US ids, repaired), `kokoro-vale` (`bf_vale`, the engine's British ids of `lang='en'`, nothing to repair). `kokoro-vale-us` is dropped:
+  a British voice with American phonemes was there only to settle the lexicon question and would need the same repair. **One context clip, read by no Kokoro rule: `kokoro-maple-shipped`**, the as-shipped render of
+  af_maple of the first pass (the engine's defaults; speed 0.82, rate-matched by the same rule, no join treatment), so that the result can say whether the engine's defaults cost anything by ear: its difference to
+  `kokoro-maple`, per passage, is reported with the wording of rule 1 and is not part of the Kokoro verdict. 9 Kokoro + 3 shipped + 3 control + 3 Flux + 2 Piper + 2 repeats = **22 clips**. "Best of four" is now best
+  of three (the bias, roughly a quarter of a point).
+* The join rule (with the model's own silences a sentence has about a second of silence at its edges, so the rule will act), the speed rule (the live voice's 3.519 words per second, the join rule first), every
+  reading rule and the repeats stand, and are applied to the new renders. The paragraph "Silence at the sentence edges" and the speed rule are unchanged in wording.
+* Reported with the result: the direct run's speed beside the engine's on the same PC (A13's "too slow" was measured through the engine), and the word error rate of the as-shipped render beside the repaired one.

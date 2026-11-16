@@ -19,8 +19,8 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, '..'))
 
-VARIANTS = ['kokoro-maple', 'kokoro-sol', 'kokoro-vale-us', 'kokoro-vale-gb']
-ORDER = ['flux-whole', 'local-control'] + VARIANTS + ['piper-anchor']
+VARIANTS = ['kokoro-maple', 'kokoro-sol', 'kokoro-vale']            # amendment 2: three Kokoro conditions (the model itself, repaired ids, its own silences)
+ORDER = ['flux-whole', 'local-control'] + VARIANTS + ['kokoro-maple-shipped', 'piper-anchor']      # kokoro-maple-shipped: the context clip, read by no Kokoro rule
 PASSAGES = ['p3', 'p6', 'p9']
 ROUND2 = {'flux-whole': (4.00, 3.67), 'local-control': (2.33, 3.00), 'piper-anchor': (1.00, 1.50)}     # round 2's means on its own passages (naturalness, continuity)
 
@@ -100,8 +100,18 @@ def main() -> int:
                 best = v
         L1.append('')
         if best:
-            L1.append('Kokoro as a whole (the best of the four conditions by mean naturalness, ties by continuity): **%s**, naturalness %.2f and continuity %.2f, %s; the live voice %.2f. A best of four is biased upward by roughly a quarter to a third of a point, so any "close" or "better" is provisional until it repeats.' % (
+            L1.append('Kokoro as a whole (the best of the three conditions by mean naturalness, ties by continuity): **%s**, naturalness %.2f and continuity %.2f, %s; the live voice %.2f. A best of three is biased upward by roughly a quarter of a point, so any "close" or "better" is provisional until it repeats.' % (
                 best, means[best][0], means[best][1], closeness(flux_mean, means[best][0]), flux_mean))
+            L1.append('')
+        # amendment 2: what the engine's defaults cost, the same voice (context, not part of the Kokoro verdict)
+        sh = per.get('kokoro-maple-shipped', {})
+        mp = per.get('kokoro-maple', {})
+        ps = [p for p in PASSAGES if p in sh and p in mp]
+        if ps:
+            dn = [mp[p][0] - sh[p][0] for p in ps]
+            dc = [mp[p][1] - sh[p][1] for p in ps]
+            L1.append('Context (amendment 2), af_maple with the repairs and the model\'s own silences minus af_maple through the engine as it ships: naturalness %s (mean %+.2f: %s), continuity %s (mean %+.2f: %s). Not part of the Kokoro verdict.' % (
+                ' / '.join('%+d' % x for x in dn), np.mean(dn), verdict(dn), ' / '.join('%+d' % x for x in dc), np.mean(dc), verdict(dc)))
             L1.append('')
         # drift against round 2 (the same clip, byte for byte), retest of the repeated Kokoro clip
         for cid, v in r.items():

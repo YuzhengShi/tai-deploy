@@ -1,0 +1,162 @@
+{
+ "kokoro-maple": {
+  "wer_percent": 1.4,
+  "edits": 3,
+  "words": 211,
+  "reference_words_not_matched": {
+   "p3": [],
+   "p6": [
+    "a",
+    "percent"
+   ],
+   "p9": [
+    "idempotent"
+   ]
+  }
+ },
+ "kokoro-sol": {
+  "wer_percent": 1.4,
+  "edits": 3,
+  "words": 211,
+  "reference_words_not_matched": {
+   "p3": [],
+   "p6": [
+    "a",
+    "percent"
+   ],
+   "p9": [
+    "idempotent"
+   ]
+  }
+ },
+ "kokoro-vale": {
+  "wer_percent": 1.4,
+  "edits": 3,
+  "words": 211,
+  "reference_words_not_matched": {
+   "p3": [],
+   "p6": [
+    "a",
+    "percent"
+   ],
+   "p9": [
+    "idempotent"
+   ]
+  }
+ },
+ "as-shipped-maple": {
+  "wer_percent": 4.7,
+  "edits": 10,
+  "words": 211,
+  "reference_words_not_matched": {
+   "p3": [
+    "worker",
+    "master",
+    "worker",
+    "worker's",
+    "answers"
+   ],
+   "p6": [
+    "a",
+    "percent",
+    "servers"
+   ],
+   "p9": [
+    "record",
+    "server"
+   ]
+  }
+ },
+ "as-shipped-sol": {
+  "wer_percent": 5.7,
+  "edits": 12,
+  "words": 211,
+  "reference_words_not_matched": {
+   "p3": [
+    "worker",
+    "master",
+    "worker",
+    "worker's",
+    "answers"
+   ],
+   "p6": [
+    "a",
+    "percent",
+    "why",
+    "queues",
+    "servers"
+   ],
+   "p9": [
+    "record",
+    "server"
+   ]
+  }
+ },
+ "as-shipped-vale-us": {
+  "wer_percent": 5.7,
+  "edits": 12,
+  "words": 211,
+  "reference_words_not_matched": {
+   "p3": [
+    "worker",
+    "master",
+    "worker",
+    "worker's",
+    "answers"
+   ],
+   "p6": [
+    "here",
+    "a",
+    "percent",
+    "servers"
+   ],
+   "p9": [
+    "record",
+    "server"
+   ]
+  }
+ },
+ "as-shipped-vale-gb": {
+  "wer_percent": 1.4,
+  "edits": 3,
+  "words": 211,
+  "reference_words_not_matched": {
+   "p3": [],
+   "p6": [
+    "a",
+    "percent"
+   ],
+   "p9": [
+    "idempotent"
+   ]
+  }
+ },
+ "local-control": {
+  "wer_percent": 0.9,
+  "edits": 2,
+  "words": 211,
+  "reference_words_not_matched": {
+   "p3": [],
+   "p6": [
+    "a",
+    "percent"
+   ],
+   "p9": []
+  }
+ },
+ "flux-whole": {
+  "wer_percent": 1.4,
+  "edits": 3,
+  "words": 211,
+  "reference_words_not_matched": {
+   "p3": [],
+   "p6": [
+    "a",
+    "percent"
+   ],
+   "p9": [
+    "idempotent"
+   ]
+  }
+ }
+}

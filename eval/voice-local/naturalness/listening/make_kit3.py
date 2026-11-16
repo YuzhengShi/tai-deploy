@@ -1,10 +1,12 @@
-"""make_kit3.py: builds round 3 of the blind listening test (PROTOCOL-round3.md with its amendment): 3 passages (p3, p6, p9) x [4 Kokoro conditions + the deployed local voice + the live voice whole turn],
-2 Piper anchors, one round-2 clip verbatim (drift between the sessions) and one Kokoro clip of this round heard twice, at least 6 places apart (retest). Every clip is level-matched (-16 dBFS speech
-level, the lab's soft limiter), trimmed to 250 ms of silence at each end, written as 24 kHz mono WAV under an opaque name. The answer key stays OUTSIDE the served folder.
+"""make_kit3.py: builds round 3 of the blind listening test (PROTOCOL-round3.md with its amendments 1 and 2): 3 passages (p3, p6, p9) x [3 Kokoro conditions + the as-shipped Kokoro context clip + the deployed
+local voice + the live voice whole turn], 2 Piper anchors, one round-2 clip verbatim (drift between the sessions) and one Kokoro clip of this round heard twice, at least 6 places apart (retest). 22 clips.
+Every clip is level-matched (-16 dBFS speech level, the lab's soft limiter), trimmed to 250 ms of silence at each end, written as 24 kHz mono WAV under an opaque name. The answer key stays OUTSIDE the
+served folder.
 
     D:\\tai-voice-local\\venv-tts\\Scripts\\python.exe -I -B make_kit3.py [--out D:\\tai-voice-local\\listening-test3-20261115]
 
-The Kokoro clips are the ones `kokoro_round3.py calibrate` wrote under <bank>/pc/kokoro/played (the sentences played back to back, the join treatment of the protocol applied, nothing else).
+The Kokoro clips are the ones `kokoro_round3.py calibrate` wrote under <bank>/pc/kokoro/played (the sentences played back to back, the join treatment of the protocol applied, nothing else); the
+as-shipped context clip is under played-as-shipped (the first pass).
 """
 from __future__ import annotations
 
@@ -27,7 +29,7 @@ BANK = r'D:\tai-voice-local\naturalness-bank-20261115'
 ROUND2 = r'D:\tai-voice-local\listening-test2-20261115'
 KIT_PASSAGES = ['p3', 'p6', 'p9']
 ANCHOR_PASSAGES = ['p6', 'p9']
-KOKORO = ['maple', 'sol', 'vale-us', 'vale-gb']
+KOKORO = ['maple', 'sol', 'vale']       # amendment 2: the model itself on the engine's ids, repaired, its own silences (kokoro_round3.py calibrate)
 RETEST = ('kokoro-maple', 'p6')
 DRIFT_ROUND2 = ('local-control', 'p8')
 
@@ -50,6 +52,7 @@ def main() -> int:
     os.makedirs(os.path.join(site, 'clips'))
     used: set[str] = set()
     chosen = json.load(open(os.path.join(BANK, 'pc', 'kokoro', 'chosen.json')))
+    shipped = json.load(open(os.path.join(BANK, 'pc', 'kokoro', 'chosen-as-shipped.json')))     # the first pass, through the engine as it ships
 
     def new_id() -> str:
         while True:
@@ -81,6 +84,10 @@ def main() -> int:
             x, sr = L.read_wav(os.path.join(BANK, 'pc', 'kokoro', 'played', k, pid + '.wav'))
             y = finish(x, sr)
             made[('kokoro-' + k, pid)] = (add(y, 'kokoro-' + k, pid, speed=chosen[k]['speed'], join_pad_ms=chosen[k]['pad_ms']), y)
+        # the context clip of amendment 2: af_maple through the engine as it ships (first pass), read by no Kokoro rule
+        x, sr = L.read_wav(os.path.join(BANK, 'pc', 'kokoro', 'played-as-shipped', 'maple', pid + '.wav'))
+        y = finish(x, sr)
+        made[('kokoro-maple-shipped', pid)] = (add(y, 'kokoro-maple-shipped', pid, speed=shipped['maple']['speed'], join_pad_ms=shipped['maple']['pad_ms']), y)
     for pid in ANCHOR_PASSAGES:
         x, sr = piper(' '.join(PASSAGES[pid]))
         add(finish(x, sr), 'piper-anchor', pid)

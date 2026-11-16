@@ -1,11 +1,12 @@
-"""kokoro_round3.py: renders and measures the Kokoro conditions of round 3 of the blind listening test, exactly as PROTOCOL-round3.md (with its amendment 1) fixed them. No step uses the owner's ears.
+"""kokoro_round3.py: renders and measures the Kokoro conditions of round 3 of the blind listening test, as PROTOCOL-round3.md (with its amendments 1 and 2) fixed them. No step uses the owner's ears.
 
-    D:\\tai-voice-local\\venv-tts\\Scripts\\python.exe -I -B kokoro_round3.py frontend    # token sequences under en-us and en: do the two bf_vale conditions differ?
-    D:\\tai-voice-local\\venv-tts\\Scripts\\python.exe -I -B kokoro_round3.py calibrate   # join rule, speed rule (rate-matched to the live voice), the clips, the speed of synthesis
-    D:\\tai-voice-local\\venv-tts\\Scripts\\python.exe -I -B kokoro_round3.py wer         # Parakeet on every condition of the kit (as it will be played) and the words it misreads
+    D:\\tai-voice-local\\venv-tts\\Scripts\\python.exe -I -B kokoro_round3.py frontend    # the engine's token sequences under en-us and en (logs kept); amendment 1
+    D:\\tai-voice-local\\venv-tts\\Scripts\\python.exe -I -B kokoro_round3.py engine      # the FIRST pass, through sherpa-onnx as it ships (silence_scale 0.2, the dropped phoneme): kept as `played-as-shipped`
+    D:\\tai-voice-local\\venv-tts\\Scripts\\python.exe -I -B kokoro_round3.py calibrate   # amendment 2: the model itself on the engine's ids (repaired, the model's own silences): join rule, speed rule, clips, speed of synthesis
+    D:\\tai-voice-local\\venv-tts\\Scripts\\python.exe -I -B kokoro_round3.py wer         # Parakeet on every condition of the kit (as it will be played) and the words it does not match
 
-Conditions: maple (af_maple), sol (af_sol), vale-us (bf_vale, the default front end, espeak-ng en-us), vale-gb (bf_vale, lang 'en' = espeak-ng's British voice). Passages p3, p6, p9, one request per sentence.
-Files: raw sentence clips under <bank>/pc/sent/kokoro-<cond>-speed<s>/r1, the clips as they will be played under <bank>/pc/kokoro/played/<cond>/<pid>.wav (join treatment applied, no level match
+Conditions: maple (af_maple, the engine's US ids, repaired), sol (af_sol, the same), vale (bf_vale, the engine's British ids, `lang='en'`, nothing to repair). Passages p3, p6, p9, one request per sentence.
+Files: raw sentence clips under <bank>/pc/sent/kokoro-direct-<cond>-speed<s>/r1, the clips as they will be played under <bank>/pc/kokoro/played/<cond>/<pid>.wav (join treatment applied, no level match
 yet), the numbers in <bank>/pc/kokoro/*.json and, small, in results/round3-*.json (in git).
 """
 from __future__ import annotations
@@ -27,7 +28,12 @@ BANK = r'D:\tai-voice-local\naturalness-bank-20261115'
 OUT = os.path.join(BANK, 'pc', 'kokoro')
 RESULTS = os.path.join(HERE, 'results')
 KIT_PASSAGES = ['p3', 'p6', 'p9']
-CONDITIONS = {   # name -> (speaker id, espeak-ng voice for English: '' = the model's own, en-us)
+CONDITIONS = {   # name -> (speaker id, which engine log the ids come from: '' = the model's own espeak-ng voice en-us, 'en' = espeak-ng's British voice)
+    'maple': (0, ''),
+    'sol': (1, ''),
+    'vale': (2, 'en'),
+}
+SHIPPED = {      # the first pass, through the engine as it ships (kept for the context clip and for the word error rate)
     'maple': (0, ''),
     'sol': (1, ''),
     'vale-us': (2, ''),
@@ -42,14 +48,14 @@ def passages() -> dict[str, list[str]]:
     return {p['id']: p['sentences'] for p in json.load(open(os.path.join(HERE, 'passages.json'), encoding='utf-8'))['passages']}
 
 
-def make_tts(lang: str, debug: bool = False):
+def make_tts(lang: str, debug: bool = False, silence_scale: float = 0.2):
     import sherpa_onnx
     d = MODEL
     kokoro = sherpa_onnx.OfflineTtsKokoroModelConfig(
         model=os.path.join(d, 'model.int8.onnx'), voices=os.path.join(d, 'voices.bin'), tokens=os.path.join(d, 'tokens.txt'), data_dir=os.path.join(d, 'espeak-ng-data'),
         dict_dir=os.path.join(d, 'dict'), lexicon=os.path.join(d, 'lexicon-us-en.txt') + ',' + os.path.join(d, 'lexicon-zh.txt'), lang=lang)
     model = sherpa_onnx.OfflineTtsModelConfig(kokoro=kokoro, num_threads=THREADS, provider='cpu', debug=debug)
-    cfg = sherpa_onnx.OfflineTtsConfig(model=model, max_num_sentences=1)
+    cfg = sherpa_onnx.OfflineTtsConfig(model=model, max_num_sentences=1, silence_scale=silence_scale)
     if not cfg.validate():
         raise SystemExit('invalid TTS config')
     return sherpa_onnx.OfflineTts(cfg)
@@ -88,7 +94,6 @@ def cmd_frontend() -> None:
     a, b = res['en-us (default)'], res['en']
     n_diff = sum(1 for x, y in zip(a, b) if x != y)
     print('sentences %d, with different phonemes under en-us and en: %d' % (len(a), n_diff))
-    os.makedirs(OUT, exist_ok=True)
     json.dump({'sentences': len(a), 'different': n_diff, 'en-us': a, 'en': b}, open(os.path.join(OUT, 'frontend.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
     os.makedirs(RESULTS, exist_ok=True)
     json.dump({'sentences': len(a), 'sentences_with_different_phonemes': n_diff, 'identical_everywhere': n_diff == 0}, open(os.path.join(RESULTS, 'round3-frontend.json'), 'w'), indent=1)
@@ -152,55 +157,84 @@ def played(clips: dict[str, list[np.ndarray]], pad_ms: float | None) -> dict[str
     return {pid: np.concatenate(clips[pid] if pad_ms is None else [set_edges(x, pad_ms) for x in clips[pid]]) for pid in KIT_PASSAGES}
 
 
-# ---------------------------------------------------------------- rendering
+# ---------------------------------------------------------------- the first pass: the engine as it ships (kept for the context clip and the word error rate)
 _TTS: dict[str, object] = {}
 
 
-def render(cond: str, speed: float, timing: dict | None = None) -> dict[str, list[np.ndarray]]:
+def cmd_engine() -> None:
+    """Amendment 2's first pass, kept for reference: the engine as it ships. Do not run it again over `played-as-shipped` unless the folder was lost: its clips are the context clip of the kit."""
+    raise SystemExit('the first pass was run with the earlier version of this file (commit 51c1a15 and before): its clips are under %s' % os.path.join(OUT, 'played-as-shipped'))
+
+
+# ---------------------------------------------------------------- amendment 2: the model itself on the engine's ids
+_RUNNER = None
+_IDS: dict[str, list[list[int]]] = {}
+
+
+def runner():
+    global _RUNNER
+    if _RUNNER is None:
+        import kokoro_direct as K
+        _RUNNER = K.Runner(THREADS)
+    return _RUNNER
+
+
+def sentence_ids(cond: str) -> list[list[int]]:
+    """The 12 token id lists of a condition: the engine's own (from its debug log), the American ones with the truncated words repaired. Every repair is checked against the engine's skip count."""
+    import kokoro_direct as K
+    sid, lang = CONDITIONS[cond]
+    key = lang or 'default'
+    if cond in _IDS:
+        return _IDS[cond]
+    sym2id, id2sym = K.load_vocab()
+    rows = K.read_log(os.path.join(OUT, 'frontend-%s.log' % key))
+    assert len(rows) == 12, len(rows)
+    out = []
+    for i, (ids, skips) in enumerate(rows):
+        if lang == '':
+            new, done = K.repair(ids, sym2id, id2sym)
+            assert len(done) == skips, 'sentence %d: the engine skipped %d phonemes, %d words repaired (%s)' % (i, skips, len(done), done)
+        else:
+            assert skips == 0, 'sentence %d: the British front end skipped %d phonemes' % (i, skips)
+            new = ids
+        out.append(new)
+    _IDS[cond] = out
+    return out
+
+
+def render(cond: str, speed: float) -> dict[str, list[np.ndarray]]:
     """The raw sentence clips of a condition at a request speed (cached on disk: a re-run reads the same clips back)."""
     import nat_lib as L
-    sid, lang = CONDITIONS[cond]
-    d = os.path.join(BANK, 'pc', 'sent', 'kokoro-%s-speed%.2f' % (cond, speed), 'r1')
+    sid, _ = CONDITIONS[cond]
+    d = os.path.join(BANK, 'pc', 'sent', 'kokoro-direct-%s-speed%.2f' % (cond, speed), 'r1')
     P = passages()
-    files = {(pid, k): os.path.join(d, '%s-s%d.wav' % (pid, k)) for pid in KIT_PASSAGES for k in range(1, len(P[pid]) + 1)}
+    names = [(pid, k) for pid in KIT_PASSAGES for k in range(1, len(P[pid]) + 1)]
+    files = {n: os.path.join(d, '%s-s%d.wav' % n) for n in names}
     if all(os.path.exists(f) for f in files.values()):
         return {pid: [L.read_wav(files[(pid, k)])[0] for k in range(1, len(P[pid]) + 1)] for pid in KIT_PASSAGES}
-    if lang not in _TTS:
-        _TTS[lang] = make_tts(lang)
-        _TTS[lang].generate('Warm up.', sid=sid, speed=1.0)
-    tts = _TTS[lang]
-    out: dict[str, list[np.ndarray]] = {}
+    ids = sentence_ids(cond)
+    r = runner()
     print('  rendering %s at speed %.2f (12 sentences)...' % (cond, speed), flush=True)
-    for pid in KIT_PASSAGES:
-        out[pid] = []
-        for k, text in enumerate(P[pid], 1):
-            t0 = time.perf_counter()
-            a = tts.generate(text, sid=sid, speed=speed)
-            ms = (time.perf_counter() - t0) * 1000.0
-            x = np.asarray(a.samples, dtype=np.float32)
-            assert a.sample_rate == 24000, a.sample_rate
-            L.write_wav(files[(pid, k)], x, 24000)
-            out[pid].append(L.read_wav(files[(pid, k)])[0])      # as the 16-bit file holds it
-            if timing is not None:
-                timing.setdefault('%.2f' % speed, []).append((ms, len(x) / 24000.0))
+    out: dict[str, list[np.ndarray]] = {pid: [] for pid in KIT_PASSAGES}
+    for i, (pid, k) in enumerate(names):
+        x = r.synth(ids[i], sid, speed)
+        L.write_wav(files[(pid, k)], x, 24000)
+        out[pid].append(L.read_wav(files[(pid, k)])[0])      # as the 16-bit file holds it
     return out
 
 
 def time_synthesis(cond: str, speed: float) -> list[tuple[float, float]]:
-    """(milliseconds, seconds of audio) of one request per sentence, the clips thrown away: the engine sends one sentence per request, so a sentence's synthesis time is its time to first audio.
-    One stream, four threads, after a warm-up: the numbers of A13's stage 1 and 2 (docs/VOICE_SELFBUILT.md 10.11, 10.12) are on the same footing."""
-    sid, lang = CONDITIONS[cond]
-    if lang not in _TTS:
-        _TTS[lang] = make_tts(lang)
-        _TTS[lang].generate('Warm up.', sid=sid, speed=1.0)
-    tts = _TTS[lang]
-    P = passages()
+    """(milliseconds, seconds of audio) of one model run per sentence, the clips thrown away, after a warm-up: one stream, four threads, the model only (the ids exist already; the engine's front end takes
+    a few milliseconds more). The engine's own numbers on this PC are in the as-shipped calibration, from the same sentences."""
+    sid, _ = CONDITIONS[cond]
+    ids = sentence_ids(cond)
+    r = runner()
+    r.synth(ids[0], sid, speed)
     out = []
-    for pid in KIT_PASSAGES:
-        for text in P[pid]:
-            t0 = time.perf_counter()
-            a = tts.generate(text, sid=sid, speed=speed)
-            out.append(((time.perf_counter() - t0) * 1000.0, len(a.samples) / 24000.0))
+    for i in range(12):
+        t0 = time.perf_counter()
+        x = r.synth(ids[i], sid, speed)
+        out.append(((time.perf_counter() - t0) * 1000.0, len(x) / 24000.0))
     return out
 
 
@@ -241,20 +275,18 @@ def cmd_calibrate() -> None:
     report = {'target_words_per_s': round(target, 3), 'live_per_passage': {k: round(v, 3) for k, v in per_flux.items()}, 'control': {'median_join_ms': round(ctl_med, 1), 'joins': [round(j, 1) for j in ctl_joins], 'words_per_s': round(ctl_rate, 3)}, 'conditions': {}}
     chosen = {}
     for cond in CONDITIONS:
-        timing: dict = {}
-        c10 = render(cond, 1.0, timing)
+        c10 = render(cond, 1.0)
         j10 = joins_ms(c10)
         med = float(statistics.median(j10))
         normalise = abs(med - ctl_med) > JOIN_TOLERANCE_MS
         pad = ctl_med / 2.0 if normalise else None
         r10 = rate_of(c10, pad)
-        c12 = render(cond, 1.2, timing)
+        c12 = render(cond, 1.2)
         r12 = rate_of(c12, pad)
         pts = [(1.0, r10), (1.2, r12)]
         s_star = interpolate(pts[0], pts[1], target)
         steps = [{'speed': 1.0, 'rate': round(r10, 3)}, {'speed': 1.2, 'rate': round(r12, 3)}]
-        final_speed, final_clips, final_rate = None, None, None
-        c3 = render(cond, s_star, timing)
+        c3 = render(cond, s_star)
         r3 = rate_of(c3, pad)
         pts.append((s_star, r3))
         steps.append({'speed': s_star, 'rate': round(r3, 3)})
@@ -263,11 +295,10 @@ def cmd_calibrate() -> None:
         else:
             near = sorted(pts, key=lambda p: abs(p[1] - target))[:2]
             s4 = interpolate(near[0], near[1], target)
-            c4 = render(cond, s4, timing)
+            c4 = render(cond, s4)
             r4 = rate_of(c4, pad)
             steps.append({'speed': s4, 'rate': round(r4, 3), 'note': 'second interpolation step, used whatever its rate'})
             final_speed, final_clips, final_rate = s4, c4, r4
-        # the clips as they will be played
         pl = played(final_clips, pad)
         for pid, x in pl.items():
             L.write_wav(os.path.join(OUT, 'played', cond, pid + '.wav'), x, 24000)
@@ -275,14 +306,14 @@ def cmd_calibrate() -> None:
         rtf = [ms / 1000.0 / dur for ms, dur in fin if dur]
         first = [ms for ms, _ in fin]
         report['conditions'][cond] = {
-            'median_join_ms_at_1.0': round(med, 1), 'join_difference_to_control_ms': round(med - ctl_med, 1), 'treatment': 'normalise: every sentence edge %.0f ms' % pad if normalise else 'none (played as the engine makes it)',
+            'median_join_ms_at_1.0': round(med, 1), 'join_difference_to_control_ms': round(med - ctl_med, 1), 'treatment': ('normalise: every sentence edge %.0f ms' % pad) if normalise else 'none (played as the model makes it)',
             'steps': steps, 'chosen_speed': final_speed, 'chosen_rate_words_per_s': round(final_rate, 3), 'within_tolerance': abs(final_rate - target) <= RATE_TOLERANCE,
-            'synthesis_at_chosen_speed': {'sentences': len(fin), 'first_audio_ms_p50': round(statistics.median(first)), 'first_audio_ms_p90': round(sorted(first)[int(round(0.9 * (len(first) - 1)))]), 'first_audio_ms_max': round(max(first)),
-                                          'rtf_median': round(statistics.median(rtf), 3), 'rtf_max': round(max(rtf), 3), 'threads': THREADS},
+            'model_run_at_chosen_speed': {'sentences': len(fin), 'ms_p50': round(statistics.median(first)), 'ms_p90': round(sorted(first)[int(round(0.9 * (len(first) - 1)))]), 'ms_max': round(max(first)),
+                                          'rtf_median': round(statistics.median(rtf), 3), 'rtf_max': round(max(rtf), 3), 'threads': THREADS, 'what': 'onnxruntime on token ids, one stream, this PC'},
         }
         chosen[cond] = {'speed': final_speed, 'pad_ms': pad}
-        print('%-8s join %.0f ms (control %.0f): %s | rates %s | chosen speed %.2f at %.3f words/s | synthesis %s' % (
-            cond, med, ctl_med, report['conditions'][cond]['treatment'], [(s['speed'], s['rate']) for s in steps], final_speed, final_rate, report['conditions'][cond]['synthesis_at_chosen_speed']), flush=True)
+        print('%-6s join %.0f ms (control %.0f): %s | rates %s | chosen speed %.2f at %.3f words/s | model run %s' % (
+            cond, med, ctl_med, report['conditions'][cond]['treatment'], [(s['speed'], s['rate']) for s in steps], final_speed, final_rate, report['conditions'][cond]['model_run_at_chosen_speed']), flush=True)
     json.dump(report, open(os.path.join(OUT, 'calibration.json'), 'w'), indent=1)
     json.dump(chosen, open(os.path.join(OUT, 'chosen.json'), 'w'), indent=1)
     os.makedirs(RESULTS, exist_ok=True)
@@ -298,7 +329,9 @@ def cmd_wer() -> None:
     rows = {}
     sources: dict[str, dict[str, tuple[np.ndarray, int]]] = {}
     for cond in CONDITIONS:
-        sources[cond] = {pid: L.read_wav(os.path.join(OUT, 'played', cond, pid + '.wav')) for pid in KIT_PASSAGES}
+        sources['kokoro-' + cond] = {pid: L.read_wav(os.path.join(OUT, 'played', cond, pid + '.wav')) for pid in KIT_PASSAGES}
+    for cond in SHIPPED:
+        sources['as-shipped-' + cond] = {pid: L.read_wav(os.path.join(OUT, 'played-as-shipped', cond, pid + '.wav')) for pid in KIT_PASSAGES}
     ctl = control_clips()
     sources['local-control'] = {pid: (np.concatenate(ctl[pid]), 24000) for pid in KIT_PASSAGES}
     sources['flux-whole'] = {pid: L.read_wav(os.path.join(BANK, 'raw', 'para', 'flux-hannah-whole', 'r1', pid + '.wav')) for pid in KIT_PASSAGES}
@@ -315,7 +348,7 @@ def cmd_wer() -> None:
             idx = L.aligned_index(ref, hyp)
             misread[pid] = [ref[k] for k in range(len(ref)) if k not in idx]
         rows[cond] = {'wer_percent': round(100.0 * edits / words, 1), 'edits': edits, 'words': words, 'reference_words_not_matched': misread}
-        print('%-14s WER %5.1f %% (%d / %d)  not matched: %s' % (cond, rows[cond]['wer_percent'], edits, words, {k: v for k, v in misread.items() if v}), flush=True)
+        print('%-18s WER %5.1f %% (%d / %d)  not matched: %s' % (cond, rows[cond]['wer_percent'], edits, words, {k: v for k, v in misread.items() if v}), flush=True)
     json.dump(rows, open(os.path.join(OUT, 'wer.json'), 'w'), indent=1)
     json.dump(rows, open(os.path.join(RESULTS, 'round3-wer.json'), 'w'), indent=1)
 
@@ -330,9 +363,9 @@ def main() -> int:
     except Exception:
         pass
     ap = argparse.ArgumentParser()
-    ap.add_argument('step', choices=['frontend', 'calibrate', 'wer'])
+    ap.add_argument('step', choices=['frontend', 'engine', 'calibrate', 'wer'])
     a = ap.parse_args()
-    {'frontend': cmd_frontend, 'calibrate': cmd_calibrate, 'wer': cmd_wer}[a.step]()
+    {'frontend': cmd_frontend, 'engine': cmd_engine, 'calibrate': cmd_calibrate, 'wer': cmd_wer}[a.step]()
     return 0
 
 

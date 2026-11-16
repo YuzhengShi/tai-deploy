@@ -1,0 +1,121 @@
+{
+ "target_words_per_s": 3.519,
+ "live_per_passage": {
+  "p3": 3.335,
+  "p6": 3.559,
+  "p9": 3.663
+ },
+ "control": {
+  "median_join_ms": 240.9,
+  "joins": [
+   312.3,
+   246.0,
+   193.8,
+   188.8,
+   240.9,
+   308.7,
+   106.4,
+   144.0,
+   338.3
+  ],
+  "words_per_s": 3.539
+ },
+ "conditions": {
+  "maple": {
+   "median_join_ms_at_1.0": 1010.0,
+   "join_difference_to_control_ms": 769.1,
+   "treatment": "normalise: every sentence edge 120 ms",
+   "steps": [
+    {
+     "speed": 1.0,
+     "rate": 3.591
+    },
+    {
+     "speed": 1.2,
+     "rate": 3.992
+    },
+    {
+     "speed": 0.96,
+     "rate": 3.52
+    }
+   ],
+   "chosen_speed": 0.96,
+   "chosen_rate_words_per_s": 3.52,
+   "within_tolerance": true,
+   "model_run_at_chosen_speed": {
+    "sentences": 12,
+    "ms_p50": 2408,
+    "ms_p90": 3845,
+    "ms_max": 4552,
+    "rtf_median": 0.421,
+    "rtf_max": 0.43,
+    "threads": 4,
+    "what": "onnxruntime on token ids, one stream, this PC"
+   }
+  },
+  "sol": {
+   "median_join_ms_at_1.0": 1000.0,
+   "join_difference_to_control_ms": 759.1,
+   "treatment": "normalise: every sentence edge 120 ms",
+   "steps": [
+    {
+     "speed": 1.0,
+     "rate": 3.251
+    },
+    {
+     "speed": 1.2,
+     "rate": 3.614
+    },
+    {
+     "speed": 1.15,
+     "rate": 3.479
+    }
+   ],
+   "chosen_speed": 1.15,
+   "chosen_rate_words_per_s": 3.479,
+   "within_tolerance": true,
+   "model_run_at_chosen_speed": {
+    "sentences": 12,
+    "ms_p50": 2374,
+    "ms_p90": 3984,
+    "ms_max": 4559,
+    "rtf_median": 0.425,
+    "rtf_max": 0.436,
+    "threads": 4,
+    "what": "onnxruntime on token ids, one stream, this PC"
+   }
+  },
+  "vale": {
+   "median_join_ms_at_1.0": 1050.0,
+   "join_difference_to_control_ms": 809.1,
+   "treatment": "normalise: every sentence edge 120 ms",
+   "steps": [
+    {
+     "speed": 1.0,
+     "rate": 3.17
+    },
+    {
+     "speed": 1.2,
+     "rate": 3.538
+    },
+    {
+     "speed": 1.19,
+     "rate": 3.511
+    }
+   ],
+   "chosen_speed": 1.19,
+   "chosen_rate_words_per_s": 3.511,
+   "within_tolerance": true,
+   "model_run_at_chosen_speed": {
+    "sentences": 12,
+    "ms_p50": 2323,
+    "ms_p90": 3938,
+    "ms_max": 4635,
+    "rtf_median": 0.419,
+    "rtf_max": 0.434,
+    "threads": 4,
+    "what": "onnxruntime on token ids, one stream, this PC"
+   }
+  }
+ }
+}

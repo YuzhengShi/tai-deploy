@@ -1,4 +1,4 @@
-# Round 3 of the blind listening test: is Kokoro, the one local engine already on this PC, as natural as the live voice? (written 2026-11-16, before the kit was built and before any Kokoro clip of this round existed)
+# Round 3 of the blind listening test: is Kokoro, the one local engine already on this PC, as natural as the live voice? (written 2026-11-16, before the kit was built and before any Kokoro clip of this round existed; amended once, see the end, before any render)
 
 Round 1 and round 2 (`docs/LOCAL_VOICE.md` 9.20, `PROTOCOL.md` E, `PROTOCOL-round2.md`) were taken by the owner on 2026-11-15: blind and level-matched, the deployed local voice (Supertonic F1, request speed 1.2,
 5 steps) was rated 2.0 and 2.33 of 5 for naturalness against 4.0 for the live Flux voice, and no tested setting of it (pace 1.1 and 1.0, 24 synthesis steps) met the pre-written rule for "improved". Piper was
@@ -82,3 +82,18 @@ Kokoro's synthesis speed on this PC (four threads) beside A13's host figures abo
 One listener who is the developer and knows these voices; three passages; whether students agree; the int8 build only (the full-precision build was not run), the three English voices of release 1.1 only (other
 releases and voices are downloads and need his word), sherpa-onnx's own text front end with the two lexicons it ships only; real conversation (latency, barge-in, the model's own pauses); speed on the host (A13
 measured it; this round does not).
+
+## Amendment 1 (2026-11-16, before any render of this round; found by the front-end check the protocol asks for)
+
+The check (the engine's own debug output for one sentence of p3, decoded with the model's `tokens.txt`) found that **the lexicon files take no part in English in sherpa-onnx 1.13.8**: the token sequences
+under `lexicon-us-en.txt` and under `lexicon-gb-en.txt` are identical, and they are espeak-ng's IPA for the sentence (the model's metadata: `has_espeak=1`, `voice=en-us`). The English front end is espeak-ng
+with the voice the model names (en-us) or the one the config's `lang` option names. So the two `bf_vale` conditions are redefined, and nothing else changes:
+
+* `kokoro-vale-us`: voice `bf_vale`, the default front end (espeak-ng voice `en-us`): what A13 and the documentation's examples run.
+* `kokoro-vale-gb`: voice `bf_vale`, `lang='en'`: espeak-ng's own British English voice (in the data file shipped with the model: `name English (Great Britain)`, `language en-gb`). The name `en-gb` fails in
+  this build ("Failed to set eSpeak-ng voice"); `en-GB-x-rp` (Received Pronunciation) works and was the other candidate. `en` is chosen because it is the voice espeak-ng itself calls en-gb, not by ear. The decoded
+  phonemes differ from en-us (for example `bɪkˈɒz`, `ɹɪdjˈuːs` against `bɪkˈʌz`, `ɹᵻdˈuːs`), so the two are different clips; the same check on all twelve sentences is repeated after the render and reported.
+* The paragraph "Why `bf_vale` twice" and the lexicon check in it are superseded by this. The lexicon is not a variable of this round.
+
+What the check also shows, to be said with the result: the model is fed espeak-ng's IPA and not the Misaki phonemes it was trained with (a diphthong arrives as two symbols, `eɪ`, where Misaki writes one, `A`).
+A front end that gives it Misaki's phonemes needs a download and his word and was not built; if a Kokoro condition comes out "partway" or "close", it is the first thing to try.

@@ -598,3 +598,51 @@ The live voice starts the next sentence about 2 semitones above where the last o
 **What can be cited, and what cannot.** Can: (1) the blind, level-matched test (one listener, the developer; 3 passages x 5 ways of speaking them): naturalness of the local voice 2.0 against 4.0 for the live voice and 2.0 for a Piper clip he had rejected, continuity 2.67 against 4.33, 6 of 6 passage comparisons lower, and the same with the passage in one request; (2) an automatic predictor of the UTMOS family does not track his ratings on these voices (Spearman +0.03 over 18 clips; it scores the local voice and the Piper anchor above the live voice) and is blind to level, so it cannot be used to compare them; (3) the recognizer reads the local voice about as well as the others (WER 2.8 % against 1.6 %, intervals overlapping), so the problem is not intelligibility; (4) for Aura-2 the whole passage in one request is rated as natural as the live voice and one request per sentence about 1.3 points lower; (5) in round 2 none of three settings of the local voice (pace 1.1, the natural pace 1.0, 24 steps) met the rule fixed in advance for "improved": naturalness 3.00, 2.67 and 2.67 against 2.33 for the deployed setting and 4.00 for the live voice, the differences among the local settings inside a single rating's noise of about a point (one listener, three passages, and the Piper anchor was rated a point lower than in round 1). Cannot: that students would rate the same (one listener who knows the voices; his earlier verdicts are a prior); which local setting would do better (round 2 tried pace 1.1, the natural pace 1.0 and 24 steps and none closed the gap; other styles and other engines were not heard; the predictor cannot say); that the join descriptors explain the ratings (they do not).
 
 **Files.** `eval/voice-local/naturalness/`: `PROTOCOL.md`, `PROTOCOL-round2.md`, `passages.json`, `render_host.mjs`, `render_local_pc.py`, `nat_lib.py`, `measure.py`, `README.md`, `listening/` (the page, its local server, the builders `make_kit.py` and `make_kit2.py`, the analyses `analyse_listening.py --utmos` and `analyse_round2.py`), and `results/` (`summary.md`, `summary.json`, his answers `listening-owner-20261115-165107.json` and `listening2-owner-20261115-171730.json` with their readings `.md`). The audio (570 clips, 154 MB, and the listening clips) stays out of git in `D:\tai-voice-local\naturalness-bank-20261115\`, `D:\tai-voice-local\listening-test-20261115\` and `D:\tai-voice-local\listening-test2-20261115\`; the predictor is `D:\tai-voice-local\predictors\utmos22_strong.onnx`.
+
+### 9.21 Round 3: Kokoro, what the engine does to it, and what the owner heard (2026-11-16, from 00:40 UTC; `eval/voice-local/naturalness/PROTOCOL-round3.md`)
+
+**Why.** After round 2 (9.20) found no setting of the deployed local voice that closes the gap to the live voice, I asked whether to try the one local engine on this PC that needs no download, Kokoro (int8 multi-lang v1.1,
+through sherpa-onnx 1.13.8, the files of A13: `docs/VOICE_SELFBUILT.md` 10.11, 10.12). He answered "试 Kokoro". The owner had heard Kokoro once, in A13, as two single sentences per voice that were not level-matched, and
+had said "Piper, Kokoro: neither will do"; A13's second stage had measured it on the host's CPU as too slow (real-time factor 0.78 to 0.89, first audio of a sentence p50 2448 ms: "not met, dropped"). The protocol of this
+round (`PROTOCOL-round3.md`, commit `625de83`) was written before any clip: three passages used in neither earlier round (p3 MapReduce failures, p6 load testing, p9 idempotent retries), each Kokoro voice's speed matched
+by a rule to the live voice's speaking rate, a two-sided rule for the silence at sentence edges, and reading rules (better / worse / no detectable difference, close / partway / far; best of the voices provisional).
+
+**What the first pass found: three things in the engine, none in the model** (found by the front-end check the protocol asked for and by the calibration's own logs, before anything was heard; amendments `599c375` and
+`51c1a15`, both before any repaired render).
+
+1. *The lexicon files take no part in English.* The token ids the engine makes for a sentence are identical under `lexicon-us-en.txt` and `lexicon-gb-en.txt`. The model's metadata says `has_espeak=1` and `voice=en-us`:
+   English goes through espeak-ng, with the voice the model names or the one the config's `lang` option names (`en-gb` fails with "Failed to set eSpeak-ng voice"; `en` and `en-GB-x-rp` work and give British
+   phonemes). The model is fed espeak's IPA and not the Misaki phonemes it was trained with (a diphthong arrives as two symbols, `eɪ`, where Misaki writes one, `A`).
+2. *A dropped phoneme.* For the American front end the engine's log says "Skip unknown phonemes ... U+025a" 12 times in the 12 sentences: espeak-ng's `ɚ`, the unstressed "-er", has no token in the model and is left
+   out without any error. "Worker" reaches the model as `wˈɜːk`, "master" as `mˈæst`, "answers" as `ˈænsz`, "servers" as `sˈɜːvz`, "measure" as `mˈɛʒ`, "percent" as `psˈɛnt`, "record" as `ɹˈɛkd`. The British
+   front end (`lang='en'`) skips nothing.
+3. *Every silence is compressed to a fifth.* The engine's default `silence_scale` is 0.2 and its source applies `ScaleSilence` with it. On the first sentence checked (p3, third sentence, af_maple, speed 1.0) the model
+   run as it is leaves 260 ms of silence before the first sound and 800 ms after the last, the engine 50 ms and 150 ms; the clip is 151800 samples with `silence_scale=1.0` and 124678 through the engine's default.
+
+The owner's A13 listening ran this engine with all three, so "Kokoro: neither will do" may partly have been about them; A13's "too slow" is also a measurement through the engine (below).
+
+**What was built (amendment 2).** The Kokoro conditions are made by running the model itself (onnxruntime on the same `model.int8.onnx` and `voices.bin`) on the token ids the engine makes (read from its debug log, one
+sentence at a time: the Python API takes text only), with the model's own silences, and with the 12 truncated words replaced by the pronunciation the model's own US lexicon (Misaki's) gives (`REPAIRS` in
+`kokoro_direct.py`; the replacements found by comparing with the British phonemes of the same sentences and checked against the engine's own count of skipped phonemes: 12 of 12, sentence by sentence). The runner is
+the engine's own procedure (the style row is the number of tokens without the two pads, the speed is passed as given). **Validated** against the engine run with `silence_scale=1.0` on the four sentences that
+need no repair: the same number of samples on three (151800, 73800, 79800), 0.74 % off on the fourth (81600 against 82200), the same speaking time (to 0.01 s) and the same level (to 0.1 dB).
+
+Calibration by the pre-written rules (`results/round3-calibration.json`; the live voice speaks p3, p6, p9 at 3.519 words per second of speaking time, the deployed local voice at 3.539, the control's median join is
+241 ms): with the model's own silences a Kokoro sentence has about a second at its edges (joins of 1010, 1000 and 1050 ms for af_maple, af_sol and bf_vale), so the join rule acted: every sentence edge 120 ms, a join of 241 ms.
+The speeds that match the live voice's rate: af_maple 0.96 (3.520 words per second), af_sol 1.15 (3.479), bf_vale 1.19 (3.511). The kit has 22 clips and 441 s of audio: 9 Kokoro clips (3 voices x 3 passages), one context
+clip of af_maple through the engine as it ships (3 passages; the first pass, speed 0.82), the deployed local voice and the live voice on the 3 passages, 2 Piper anchors, one round-2 clip byte for byte (drift) and one
+Kokoro clip heard twice (retest, 6 or more places apart). The page was run three times through the browser as a self-test before he saw it (all 22 clips served, the repeated pair 11, 16 and 9 places apart); its answers were
+deleted. The limiter touches 0.0000 to 0.0002 of the samples of a Kokoro clip, 0.0008 to 0.0017 of the live voice's and 0.0004 to 0.0006 of the deployed local voice's, so the level match does not favour Kokoro.
+
+**What the recognizer says** (Parakeet-TDT-0.6B-v2, 211 words in the 3 passages as they are played; `results/round3-wer.json`). Repaired Kokoro, all three voices: 1.4 % (3 words not matched: "a" and "percent" on p6, "idempotent"
+on p9); the live voice 1.4 % with the same three words, the deployed local voice 0.9 %. The engine as it ships: af_maple 4.7 %, af_sol 5.7 %, bf_vale with American phonemes 5.7 %, bf_vale with British phonemes 1.4 % (the
+words lost are worker, master, worker's, answers, servers, record, server). So the repairs take Kokoro to the recognizer's level of the live voice; the three words that remain are the recognizer's and the normaliser's, not
+Kokoro's.
+
+**Speed.** The model runs about four times faster through onnxruntime than through the engine, on this PC with the same four threads and the same sentences, in one process: the engine (silence scale 1.0) took 10.5, 5.3,
+5.9 and 5.5 s for the four sentences, the direct run 2.7, 1.3, 1.5 and 1.4 s (3.9 to 4.1 times). Alone, the direct run's real-time factor is 0.42 to 0.43 (the 12 sentences of the passages per voice, median; the model only), a sentence's
+time to first audio p50 2.3 to 2.4 s, p90 3.8 to 4.0 s, max 4.6 s (these sentences are 3 to 7 s of speech). The engine as it ships had a median real-time factor of 2.0 to 2.1 on the same sentences
+(`results/round3-calibration-as-shipped.json`). A13's host figures (0.78 to 0.89, p50 2.4 s, on its own twelve sentences) are through the engine; the direct run was NOT measured on the host. So "too slow" is not established for
+the model itself, and "fast enough" is not either: 2.4 s to the first audio of a sentence is still long for a conversation, and the host check is open.
+
+**What he heard.** (to be filled in with his ratings)

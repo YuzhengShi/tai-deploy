@@ -434,6 +434,8 @@ For comparison, LabGPU raw has 5.96 % and 74.3 % on this set and Flux 3.73 % and
 
 Mouth, this PC, 12 agent-style sentences one at a time: **Piper `en_US-lessac-medium`**: first audio of a sentence p50 289 ms and p90 424 ms with 4 threads (real-time factor 0.081; with 1 thread 565 and 778 ms, 0.154). **Kokoro int8 multi-lang v1.1**: a real-time factor of 2.0 to 2.5 on this CPU (6.6 to 8.1 s for a sentence): too slow here; the host's AMX and VNNI may change that, and it is re-tested there. sherpa-onnx 2.0.1 no longer phonemizes Piper voices itself, so the mouth runs in a second environment with 1.13.8. Listening samples (Piper, and Kokoro's three English voices at speeds 1.0 and 1.2) are in `D:\tai-voice-local\samples`.
 
+*Note added 2026-11-16 (`docs/LOCAL_VOICE.md` 9.21): the Kokoro figures above, and the owner's listening to the Kokoro samples (10.12 (c) and the paragraph under it), are through sherpa-onnx's engine as it ships. That engine leaves out espeak-ng's unstressed "-er" phoneme without an error (12 of 12 skipped phonemes in the 12 sentences of round 3) and compresses every silence of the audio to 20 % (`silence_scale` 0.2). The same model run directly through onnxruntime on the engine's own token ids was about four times faster on this PC, in one process (real-time factor 0.42 against about 2.0). The host was not measured again. So "too slow here" and "the owner rejected it" are statements about the engine as it ships, not yet about the model.*
+
 Stage 2 is next (A13): set 3 with the frozen configuration, Flux and LabGPU on it, the speeds on the host with three streams at once, and the owner's ears on the samples.
 
 ### 10.12 The local trial, stage 2 (2026-11-14 evening; A13)
@@ -467,6 +469,8 @@ The simulated calls were added after the saturating test, because that test is n
 **(c) The owner's ears** on the samples of `D:\tai-voice-local\samples` (Piper and Kokoro, and two of LabGPU's for reference): not yet given.
 
 **What this says.** Local ears (Parakeet-TDT-0.6B-v2 int8 with the key-term layer) hold A13's clause against Flux on both sets and are better than LabGPU's; they are fast enough at three simulated calls on this host. Local mouth: Piper is fast, with one voice; Kokoro is too slow on this CPU. **The owner listened to the samples and answered "labgpu的声音最好，也清晰。Piper、Kokoro都不行"** (LabGPU's voice is the best and clear; Piper and Kokoro will not do), and approved the download of LabGPU's own engine, Supertonic: 10.13. Deploying needs the service that speaks LabGPU's two interfaces (docs/LOCAL_VOICE.md, being written), then the lab's two settings pointed at it, and the owner's word.
+
+*Note added 2026-11-16: read the note under 10.11 and `docs/LOCAL_VOICE.md` 9.21 before citing "Kokoro is too slow" or "the owner rejected Kokoro": both were obtained through the engine as it ships.*
 
 ### 10.13 Supertonic, the engine behind LabGPU's mouth, on our own CPU (2026-11-14 evening; A13)
 

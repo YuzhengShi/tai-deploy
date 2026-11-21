@@ -1,5 +1,7 @@
 # TAi — Teaching Assistant Intelligence
 
+> This is the spring 2026 working brief for AI coding sessions (AWS Bedrock, WhatsApp), kept as it was. The fall 2026 system, the one the thesis describes, is in [README.md](README.md) and [docs/](docs/README.md).
+
 An agentic AI Teaching Assistant for CS6650 Building Scalable Distributed Systems at Northeastern University Vancouver. Built on NanoClaw (fork), runs on AWS Bedrock. This is NOT a chatbot — it's an autonomous teaching agent that maintains graduated student models, discovers misconceptions organically, selects pedagogical strategies, and proactively intervenes.
 
 Supervised by Professor Yvonne Coady. Developer: Yuzheng Shi (MS CS, graduating Aug 2026).

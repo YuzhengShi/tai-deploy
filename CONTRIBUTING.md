@@ -1,23 +1,19 @@
 # Contributing
 
-## Source Code Changes
+TAi is the code of an MS thesis project, built for one course and run on that course's server. The tag `thesis-2026-12` is frozen as the version the thesis describes; `main` may move on.
 
-**Accepted:** Bug fixes, security fixes, simplifications, reducing code.
+**Questions, bug reports and ideas are welcome as issues.** It helps to say:
 
-**Not accepted:** Features, capabilities, compatibility, enhancements. These should be skills.
+- which part of TAi the issue is about (the seven parts are listed in the [README](README.md#what-tai-does));
+- which document you read ([docs/README.md](docs/README.md) is the index);
+- what you expected, and what happened instead.
 
-## Skills
+**Pull requests.** Open an issue first, so we can agree on the change before you spend time on it. Then:
 
-A [skill](https://code.claude.com/docs/en/skills) is a markdown file in `.claude/skills/` that teaches Claude Code how to transform a NanoClaw installation.
+- **Tests.** Keep them passing (`npm test`), and add one for the behavior you change. The design documents describe how each part is tested.
+- **No secrets or personal data.** Never commit secrets, keys, `.env` files, student data, or names of students or course staff. Each student's folder, the database, `data/` and `logs/` stay on the host and are ignored by git.
+- **No answers in TAi's replies.** TAi guides students and must not give them assignment answers. Changes to its persona (`groups/global/`) should keep the rules in [groups/global/CLAUDE.md](groups/global/CLAUDE.md).
 
-A PR that contributes a skill should not modify any source files.
+**Changes to the framework itself** (containers, the skills system, channels) are better proposed upstream to [NanoClaw](https://github.com/gavrielc/nanoclaw), the project TAi is a fork of. NanoClaw's own contribution rules are in its repository.
 
-Your skill should contain the **instructions** Claude follows to add the feature—not pre-built code. See `/convert-to-docker` for a good example.
-
-### Why?
-
-Every user should have clean and minimal code that does exactly what they need. Skills let users selectively add features to their fork without inheriting code for features they don't want.
-
-### Testing
-
-Test your skill by running it on a fresh clone before submitting.
+**Security issues.** Please do not open a public issue; see [SECURITY.md](SECURITY.md).

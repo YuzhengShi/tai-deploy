@@ -1,10 +1,2 @@
-# Core code - maintainer only
-/src/ @gavrielc
-/container/ @gavrielc
-/groups/ @gavrielc
-/launchd/ @gavrielc
-/package.json @gavrielc
-/package-lock.json @gavrielc
-
-# Skills - open to contributors
-/.claude/skills/
+# TAi is maintained by its author; NanoClaw's own maintainers are upstream (https://github.com/gavrielc/nanoclaw)
+* @YuzhengShi

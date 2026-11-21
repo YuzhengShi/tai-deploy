@@ -1,0 +1,48 @@
+cff-version: 1.2.0
+message: "If you use TAi or refer to it, please cite the thesis that describes it."
+title: "TAi: an agentic AI teaching assistant for a graduate distributed systems course"
+abstract: >-
+  TAi is the AI teaching assistant of CS6650 Building Scalable Distributed Systems at
+  Northeastern University's Vancouver campus. It offers practice interviews by voice;
+  a weekly brief built from the student's own code, submissions and posts; a Go sandbox;
+  a student record written by host code; a weekday patrol; course-system tools bound to
+  each student; and a teaching-team page. It is a fork of NanoClaw. The tag
+  thesis-2026-12 is the version the thesis describes.
+type: software
+authors:
+  - family-names: Shi
+    given-names: Yuzheng
+repository-code: "https://github.com/YuzhengShi/tai-deploy"
+license: MIT
+version: thesis-2026-12
+date-released: 2026-11-20
+keywords:
+  - AI teaching assistant
+  - AI agent
+  - large language models
+  - oral assessment
+  - voice agent
+  - distributed systems education
+preferred-citation:
+  type: thesis
+  thesis-type: "Master's thesis"
+  title: "TAi: An Agentic Teaching Assistant for a Graduate Distributed Systems Course"
+  authors:
+    - family-names: Shi
+      given-names: Yuzheng
+  department: "Khoury College of Computer Sciences"
+  institution:
+    name: "Northeastern University"
+    city: Vancouver
+    region: British Columbia
+    country: CA
+  year: 2026
+  month: 12
+  url: "https://github.com/YuzhengShi/tai-deploy"
+references:
+  - type: software
+    title: NanoClaw
+    authors:
+      - name: "The NanoClaw contributors"
+    url: "https://github.com/gavrielc/nanoclaw"
+    license: MIT

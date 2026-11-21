@@ -19,12 +19,16 @@ groups/global/*
 !groups/global/CLAUDE.md
 !groups/global/COMPETENCY_TEMPLATE.md
 !groups/global/COMPETENCY_PROTOCOL.md
-!groups/global/COURSE_REFERENCE.md
 !groups/global/TEACHING_STRATEGIES.md
 
 # Secrets
 *.keys.json
 .env
+.env.*
+!.env.example
+*.env
+gateway.env
+.claude/settings.local.json
 memory-bank/secrets-reference.md
 
 # OS
@@ -79,3 +83,16 @@ leanrag/stub_corpus.json
 
 # Astryx UI exploration sandbox (prototype, not deployed)
 design-lab/
+
+# Generated on the host from the pages the course publishes (deploy/cs6650/make_course_reference.py);
+# a course's own reference can name its teaching team, so it is never committed
+groups/global/COURSE_REFERENCE.md
+groups/global/COURSE_STATUS.md
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Local tooling of AI coding sessions
+.claude/launch.json
+.claude/worktrees/

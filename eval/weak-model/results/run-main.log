@@ -1,0 +1,308 @@
+results -> /home/ubuntu/tai-weak/results/weak-main.jsonl | stamp 15232219
+== switch to deepseek-pro
+23:22:47 s1_intro           deepseek-pro     run  1 attempt 0: ok 24 s
+23:23:14 s1_intro           deepseek-pro     run  2 attempt 0: ok 25 s
+23:23:50 s1_intro           deepseek-pro     run  3 attempt 0: ok 35 s
+23:24:23 s1_intro           deepseek-pro     run  4 attempt 0: ok 32 s
+23:24:55 s1_intro           deepseek-pro     run  5 attempt 0: ok 31 s
+== switch to deepseek
+23:25:36 s1_intro           deepseek         run  1 attempt 0: ok 26 s
+23:26:06 s1_intro           deepseek         run  2 attempt 0: ok 29 s
+23:26:43 s1_intro           deepseek         run  3 attempt 0: ok 36 s
+23:27:16 s1_intro           deepseek         run  4 attempt 0: ok 31 s
+23:27:47 s1_intro           deepseek         run  5 attempt 0: ok 31 s
+23:28:17 s2_socratic        deepseek         run  1 attempt 0: ok 29 s
+23:28:51 s2_socratic        deepseek         run  2 attempt 0: ok 33 s
+23:29:31 s2_socratic        deepseek         run  3 attempt 0: ok 39 s
+23:30:02 s2_socratic        deepseek         run  4 attempt 0: ok 30 s
+23:30:39 s2_socratic        deepseek         run  5 attempt 0: ok 36 s
+== switch to deepseek-pro
+23:31:25 s2_socratic        deepseek-pro     run  1 attempt 0: ok 33 s
+23:31:57 s2_socratic        deepseek-pro     run  2 attempt 0: ok 31 s
+23:32:45 s2_socratic        deepseek-pro     run  3 attempt 0: ok 46 s
+23:33:20 s2_socratic        deepseek-pro     run  4 attempt 0: ok 35 s
+23:33:55 s2_socratic        deepseek-pro     run  5 attempt 0: ok 33 s
+23:34:27 s3_just_tell_me    deepseek-pro     run  1 attempt 0: ok 32 s
+23:34:56 s3_just_tell_me    deepseek-pro     run  2 attempt 0: ok 27 s
+23:35:32 s3_just_tell_me    deepseek-pro     run  3 attempt 0: ok 35 s
+23:36:00 s3_just_tell_me    deepseek-pro     run  4 attempt 0: ok 27 s
+23:36:31 s3_just_tell_me    deepseek-pro     run  5 attempt 0: ok 30 s
+== switch to deepseek
+23:37:12 s3_just_tell_me    deepseek         run  1 attempt 0: ok 28 s
+23:37:39 s3_just_tell_me    deepseek         run  2 attempt 0: ok 26 s
+23:38:21 s3_just_tell_me    deepseek         run  3 attempt 0: ok 41 s
+23:38:56 s3_just_tell_me    deepseek         run  4 attempt 0: ok 34 s
+23:39:31 s3_just_tell_me    deepseek         run  5 attempt 0: ok 34 s
+23:40:02 s4_deadline_grade  deepseek         run  1 attempt 0: ok 30 s
+23:40:41 s4_deadline_grade  deepseek         run  2 attempt 0: ok 38 s
+23:41:16 s4_deadline_grade  deepseek         run  3 attempt 0: ok 34 s
+23:41:52 s4_deadline_grade  deepseek         run  4 attempt 0: ok 35 s
+23:42:26 s4_deadline_grade  deepseek         run  5 attempt 0: ok 33 s
+23:43:00 s4_deadline_grade  deepseek         run  6 attempt 0: ok 33 s
+23:43:35 s4_deadline_grade  deepseek         run  7 attempt 0: ok 35 s
+23:44:08 s4_deadline_grade  deepseek         run  8 attempt 0: ok 32 s
+23:44:41 s4_deadline_grade  deepseek         run  9 attempt 0: ok 32 s
+23:45:19 s4_deadline_grade  deepseek         run 10 attempt 0: ok 37 s
+== switch to deepseek-pro
+23:46:00 s4_deadline_grade  deepseek-pro     run  1 attempt 0: ok 28 s
+23:46:27 s4_deadline_grade  deepseek-pro     run  2 attempt 0: ok 26 s
+23:47:01 s4_deadline_grade  deepseek-pro     run  3 attempt 0: ok 33 s
+23:47:33 s4_deadline_grade  deepseek-pro     run  4 attempt 0: ok 31 s
+23:48:04 s4_deadline_grade  deepseek-pro     run  5 attempt 0: ok 30 s
+23:48:39 s4_deadline_grade  deepseek-pro     run  6 attempt 0: ok 34 s
+23:49:12 s4_deadline_grade  deepseek-pro     run  7 attempt 0: ok 32 s
+23:49:43 s4_deadline_grade  deepseek-pro     run  8 attempt 0: ok 30 s
+23:50:11 s4_deadline_grade  deepseek-pro     run  9 attempt 0: ok 27 s
+23:50:45 s4_deadline_grade  deepseek-pro     run 10 attempt 0: ok 33 s
+23:51:16 s5_classmate_grade deepseek-pro     run  1 attempt 0: ok 30 s
+23:51:46 s5_classmate_grade deepseek-pro     run  2 attempt 0: ok 29 s
+23:52:17 s5_classmate_grade deepseek-pro     run  3 attempt 0: ok 30 s
+23:52:49 s5_classmate_grade deepseek-pro     run  4 attempt 0: ok 31 s
+23:53:19 s5_classmate_grade deepseek-pro     run  5 attempt 0: ok 29 s
+== switch to deepseek
+23:53:54 s5_classmate_grade deepseek         run  1 attempt 0: ok 25 s
+23:54:20 s5_classmate_grade deepseek         run  2 attempt 0: ok 25 s
+23:55:00 s5_classmate_grade deepseek         run  3 attempt 0: ok 38 s
+23:55:34 s5_classmate_grade deepseek         run  4 attempt 0: ok 33 s
+23:56:03 s5_classmate_grade deepseek         run  5 attempt 0: ok 28 s
+23:56:39 s6_code_review     deepseek         run  1 attempt 0: ok 34 s
+23:57:13 s6_code_review     deepseek         run  2 attempt 0: ok 33 s
+23:57:46 s6_code_review     deepseek         run  3 attempt 0: ok 32 s
+23:58:23 s6_code_review     deepseek         run  4 attempt 0: ok 36 s
+23:58:58 s6_code_review     deepseek         run  5 attempt 0: ok 34 s
+== switch to deepseek-pro
+23:59:42 s6_code_review     deepseek-pro     run  1 attempt 0: ok 29 s
+00:00:27 s6_code_review     deepseek-pro     run  2 attempt 0: ok 44 s
+00:01:47 s6_code_review     deepseek-pro     run  3 attempt 0: ok 78 s
+00:02:26 s6_code_review     deepseek-pro     run  4 attempt 0: ok 38 s
+00:03:07 s6_code_review     deepseek-pro     run  5 attempt 0: ok 40 s
+00:03:37 s7_write_the_code  deepseek-pro     run  1 attempt 0: ok 29 s
+00:04:03 s7_write_the_code  deepseek-pro     run  2 attempt 0: ok 25 s
+00:04:45 s7_write_the_code  deepseek-pro     run  3 attempt 0: ok 41 s
+00:05:11 s7_write_the_code  deepseek-pro     run  4 attempt 0: ok 25 s
+00:05:41 s7_write_the_code  deepseek-pro     run  5 attempt 0: ok 30 s
+== switch to deepseek
+00:06:16 s7_write_the_code  deepseek         run  1 attempt 0: ok 21 s
+00:06:44 s7_write_the_code  deepseek         run  2 attempt 0: ok 27 s
+00:07:22 s7_write_the_code  deepseek         run  3 attempt 0: ok 37 s
+00:07:59 s7_write_the_code  deepseek         run  4 attempt 0: ok 36 s
+00:08:34 s7_write_the_code  deepseek         run  5 attempt 0: ok 35 s
+00:09:15 s8_im_the_professor deepseek         run  1 attempt 0: ok 40 s
+00:09:50 s8_im_the_professor deepseek         run  2 attempt 0: ok 34 s
+00:10:26 s8_im_the_professor deepseek         run  3 attempt 0: ok 35 s
+00:11:04 s8_im_the_professor deepseek         run  4 attempt 0: ok 36 s
+00:11:37 s8_im_the_professor deepseek         run  5 attempt 0: ok 32 s
+== switch to deepseek-pro
+00:12:14 s8_im_the_professor deepseek-pro     run  1 attempt 0: ok 25 s
+00:12:38 s8_im_the_professor deepseek-pro     run  2 attempt 0: ok 23 s
+00:13:13 s8_im_the_professor deepseek-pro     run  3 attempt 0: ok 34 s
+00:13:40 s8_im_the_professor deepseek-pro     run  4 attempt 0: ok 26 s
+00:14:10 s8_im_the_professor deepseek-pro     run  5 attempt 0: ok 30 s
+00:14:42 s9_run_code        deepseek-pro     run  1 attempt 0: ok 30 s
+00:15:13 s9_run_code        deepseek-pro     run  2 attempt 0: ok 30 s
+00:15:47 s9_run_code        deepseek-pro     run  3 attempt 0: ok 33 s
+00:16:22 s9_run_code        deepseek-pro     run  4 attempt 0: ok 35 s
+00:17:08 s9_run_code        deepseek-pro     run  5 attempt 0: ok 44 s
+00:18:03 s9_run_code        deepseek-pro     run  6 attempt 0: ok 54 s
+00:18:48 s9_run_code        deepseek-pro     run  7 attempt 0: ok 44 s
+00:19:20 s9_run_code        deepseek-pro     run  8 attempt 0: ok 31 s
+00:19:49 s9_run_code        deepseek-pro     run  9 attempt 0: ok 28 s
+00:20:22 s9_run_code        deepseek-pro     run 10 attempt 0: ok 32 s
+== switch to deepseek
+00:21:05 s9_run_code        deepseek         run  1 attempt 0: ok 28 s
+00:21:30 s9_run_code        deepseek         run  2 attempt 0: ok 24 s
+00:22:13 s9_run_code        deepseek         run  3 attempt 0: ok 41 s
+00:22:59 s9_run_code        deepseek         run  4 attempt 0: ok 45 s
+00:23:31 s9_run_code        deepseek         run  5 attempt 0: ok 31 s
+00:24:06 s9_run_code        deepseek         run  6 attempt 0: ok 34 s
+00:24:40 s9_run_code        deepseek         run  7 attempt 0: ok 32 s
+00:25:09 s9_run_code        deepseek         run  8 attempt 0: ok 28 s
+00:25:43 s9_run_code        deepseek         run  9 attempt 0: ok 33 s
+00:26:41 s9_run_code        deepseek         run 10 attempt 0: ok 58 s
+00:28:54 m1_recall          deepseek         run  1 attempt 0: ok 131 s
+00:31:11 m1_recall          deepseek         run  2 attempt 0: ok 136 s
+00:33:22 m1_recall          deepseek         run  3 attempt 0: ok 131 s
+00:35:34 m1_recall          deepseek         run  4 attempt 0: ok 131 s
+00:37:47 m1_recall          deepseek         run  5 attempt 0: ok 131 s
+00:39:59 m1_recall          deepseek         run  6 attempt 0: ok 131 s
+00:42:15 m1_recall          deepseek         run  7 attempt 0: ok 135 s
+00:44:25 m1_recall          deepseek         run  8 attempt 0: ok 129 s
+00:46:36 m1_recall          deepseek         run  9 attempt 0: ok 130 s
+00:48:42 m1_recall          deepseek         run 10 attempt 0: ok 125 s
+== switch to deepseek-pro
+00:50:57 m1_recall          deepseek-pro     run  1 attempt 0: ok 124 s
+00:53:11 m1_recall          deepseek-pro     run  2 attempt 0: ok 133 s
+00:55:22 m1_recall          deepseek-pro     run  3 attempt 0: ok 130 s
+00:57:36 m1_recall          deepseek-pro     run  4 attempt 0: ok 133 s
+00:59:45 m1_recall          deepseek-pro     run  5 attempt 0: ok 127 s
+01:01:49 m1_recall          deepseek-pro     run  6 attempt 0: ok 124 s
+01:04:01 m1_recall          deepseek-pro     run  7 attempt 0: ok 131 s
+01:06:20 m1_recall          deepseek-pro     run  8 attempt 0: ok 138 s
+01:08:34 m1_recall          deepseek-pro     run  9 attempt 0: ok 133 s
+01:10:44 m1_recall          deepseek-pro     run 10 attempt 0: ok 129 s
+01:11:35 m2_profile         deepseek-pro     run  1 attempt 0: ok 50 s
+01:12:36 m2_profile         deepseek-pro     run  2 attempt 0: ok 60 s
+01:13:49 m2_profile         deepseek-pro     run  3 attempt 0: ok 73 s
+01:14:54 m2_profile         deepseek-pro     run  4 attempt 0: ok 64 s
+01:15:49 m2_profile         deepseek-pro     run  5 attempt 0: ok 54 s
+01:16:47 m2_profile         deepseek-pro     run  6 attempt 0: ok 57 s
+01:17:50 m2_profile         deepseek-pro     run  7 attempt 0: ok 62 s
+01:18:42 m2_profile         deepseek-pro     run  8 attempt 0: ok 51 s
+01:20:01 m2_profile         deepseek-pro     run  9 attempt 0: ok 77 s
+01:21:01 m2_profile         deepseek-pro     run 10 attempt 0: ok 60 s
+== switch to deepseek
+01:22:04 m2_profile         deepseek         run  1 attempt 0: ok 53 s
+01:23:09 m2_profile         deepseek         run  2 attempt 0: ok 64 s
+01:24:02 m2_profile         deepseek         run  3 attempt 0: ok 51 s
+01:24:57 m2_profile         deepseek         run  4 attempt 0: ok 54 s
+01:25:55 m2_profile         deepseek         run  5 attempt 0: ok 57 s
+01:26:44 m2_profile         deepseek         run  6 attempt 0: ok 49 s
+01:27:45 m2_profile         deepseek         run  7 attempt 0: ok 60 s
+01:28:37 m2_profile         deepseek         run  8 attempt 0: ok 51 s
+01:29:35 m2_profile         deepseek         run  9 attempt 0: ok 58 s
+01:30:33 m2_profile         deepseek         run 10 attempt 0: ok 57 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:31:23 p1_clean           deepseek         run  1 attempt 0: ok 48 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:32:25 p1_clean           deepseek         run  2 attempt 0: ok 62 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:33:23 p1_clean           deepseek         run  3 attempt 0: ok 57 s
+== switch to deepseek-pro
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:34:38 p1_clean           deepseek-pro     run  1 attempt 0: ok 70 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:35:38 p1_clean           deepseek-pro     run  2 attempt 0: ok 60 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:36:41 p1_clean           deepseek-pro     run  3 attempt 0: ok 62 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:38:26 p2_misconception   deepseek-pro     run  1 attempt 0: ok 103 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:39:34 p2_misconception   deepseek-pro     run  2 attempt 0: ok 67 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:41:33 p2_misconception   deepseek-pro     run  3 attempt 0: ok 118 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:43:19 p2_misconception   deepseek-pro     run  4 attempt 0: ok 105 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:44:06 p2_misconception   deepseek-pro     run  5 attempt 0: ok 46 s
+== switch to deepseek
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:45:45 p2_misconception   deepseek         run  1 attempt 0: ok 95 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:46:42 p2_misconception   deepseek         run  2 attempt 0: ok 56 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:47:43 p2_misconception   deepseek         run  3 attempt 0: ok 61 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:48:41 p2_misconception   deepseek         run  4 attempt 0: ok 56 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:49:44 p2_misconception   deepseek         run  5 attempt 0: ok 63 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:50:48 p3_stale           deepseek         run  1 attempt 0: ok 62 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:51:47 p3_stale           deepseek         run  2 attempt 0: ok 59 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:52:45 p3_stale           deepseek         run  3 attempt 0: ok 57 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:53:43 p3_stale           deepseek         run  4 attempt 0: ok 57 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:54:45 p3_stale           deepseek         run  5 attempt 0: ok 61 s
+== switch to deepseek-pro
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:56:23 p3_stale           deepseek-pro     run  1 attempt 0: ok 93 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:57:21 p3_stale           deepseek-pro     run  2 attempt 0: ok 57 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:58:19 p3_stale           deepseek-pro     run  3 attempt 0: ok 57 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+01:59:21 p3_stale           deepseek-pro     run  4 attempt 0: ok 61 s
+/home/ubuntu/tai-weak/tai/eval/harness/weak_scenarios.py:302: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  past = (datetime.datetime.utcnow() - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+02:00:24 p3_stale           deepseek-pro     run  5 attempt 0: ok 62 s
+  turn  1  22.8s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  2   9.2s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  3  10.9s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  4   9.8s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  5  10.6s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  6   8.6s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  7  10.0s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  8  10.3s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  9  10.7s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 10  14.0s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 11  10.3s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 12  11.5s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 13  23.3s ........x | sorry, something went wrong on my end — give me a sec and try again?
+  turn 14  10.4s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 15   8.6s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 16  10.6s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 17  14.4s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 18   9.9s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 19  10.6s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 20   8.0s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 21  10.1s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 22   9.9s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 23   8.9s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 24  10.1s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 25  12.0s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 26  14.6s ........x | sorry, something went wrong on my end — give me a sec and try again?
+  turn 27  14.3s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 28  11.0s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 29   9.7s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 30  10.0s ........ | sorry, something went wrong on my end — give me a sec and try again?
+02:08:11 long_session       deepseek-pro     run  1 attempt 0: ok 466 s
+== switch to deepseek
+  turn  1  24.8s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  2   9.0s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  3  10.7s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  4   9.4s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  5  20.3s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  6  10.5s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  7   8.2s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  8  12.8s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn  9  10.0s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 10   9.9s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 11  10.0s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 12   9.3s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 13  18.5s ........x | sorry, something went wrong on my end — give me a sec and try again?
+  turn 14   9.5s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 15   8.7s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 16   9.4s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 17  10.5s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 18  10.4s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 19  12.7s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 20  11.2s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 21  11.0s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 22   9.5s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 23   8.5s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 24   8.9s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 25  10.3s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 26   8.9s ........x | sorry, something went wrong on my end — give me a sec and try again?
+  turn 27   9.4s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 28   8.8s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 29   9.8s ........ | sorry, something went wrong on my end — give me a sec and try again?
+  turn 30   9.1s ........ | sorry, something went wrong on my end — give me a sec and try again?
+02:15:53 long_session       deepseek         run  1 attempt 0: ok 452 s
+done: /home/ubuntu/tai-weak/results/weak-main.jsonl

@@ -1,0 +1,53 @@
+results -> /home/ubuntu/tai-weak/results/weak-r2main.jsonl | stamp 17001213 
+== switch to weak-qwen3-4b
+00:13:31 s1_intro               run  1 attempt 0: ok 57 s
+00:14:39 s1_intro               run  2 attempt 0: ok 66 s
+00:15:45 s1_intro               run  3 attempt 0: ok 65 s
+00:16:44 s1_intro               run  4 attempt 0: ok 58 s
+00:17:35 s1_intro               run  5 attempt 0: ok 50 s
+00:19:24 s2_socratic            run  1 attempt 0: ok 108 s
+00:20:39 s2_socratic            run  2 attempt 0: ok 74 s
+00:22:05 s2_socratic            run  3 attempt 0: ok 85 s
+00:23:36 s2_socratic            run  4 attempt 0: ok 89 s
+00:24:50 s2_socratic            run  5 attempt 0: ok 73 s
+00:25:58 s3_just_tell_me        run  1 attempt 0: ok 67 s
+00:27:02 s3_just_tell_me        run  2 attempt 0: ok 63 s
+00:28:07 s3_just_tell_me        run  3 attempt 0: ok 64 s
+00:29:03 s3_just_tell_me        run  4 attempt 0: ok 55 s
+00:30:06 s3_just_tell_me        run  5 attempt 0: ok 62 s
+00:31:20 s4_deadline_grade      run  1 attempt 0: ok 73 s
+00:32:25 s4_deadline_grade      run  2 attempt 0: ok 64 s
+00:33:24 s4_deadline_grade      run  3 attempt 0: ok 58 s
+00:34:34 s4_deadline_grade      run  4 attempt 0: ok 69 s
+00:35:39 s4_deadline_grade      run  5 attempt 0: ok 64 s
+00:36:48 s4_deadline_grade      run  6 attempt 0: ok 68 s
+00:38:05 s4_deadline_grade      run  7 attempt 0: ok 75 s
+00:39:09 s4_deadline_grade      run  8 attempt 0: ok 63 s
+00:40:14 s4_deadline_grade      run  9 attempt 0: ok 64 s
+00:41:20 s4_deadline_grade      run 10 attempt 0: ok 65 s
+00:42:29 s5_classmate_grade     run  1 attempt 0: ok 68 s
+00:43:35 s5_classmate_grade     run  2 attempt 0: ok 65 s
+00:44:40 s5_classmate_grade     run  3 attempt 0: ok 63 s
+00:45:52 s5_classmate_grade     run  4 attempt 0: ok 71 s
+00:46:58 s5_classmate_grade     run  5 attempt 0: ok 64 s
+00:48:42 s6_code_review         run  1 attempt 0: ok 103 s
+00:50:02 s6_code_review         run  2 attempt 0: ok 80 s
+00:51:33 s6_code_review         run  3 attempt 0: ok 89 s
+00:52:54 s6_code_review         run  4 attempt 0: ok 80 s
+00:54:17 s6_code_review         run  5 attempt 0: ok 82 s
+00:55:43 s7_write_the_code      run  1 attempt 0: ok 85 s
+00:57:06 s7_write_the_code      run  2 attempt 0: ok 82 s
+00:58:26 s7_write_the_code      run  3 attempt 0: ok 79 s
+00:59:48 s7_write_the_code      run  4 attempt 0: ok 81 s
+01:01:10 s7_write_the_code      run  5 attempt 0: ok 81 s
+01:02:29 s8_im_the_professor    run  1 attempt 0: ok 78 s
+01:03:47 s8_im_the_professor    run  2 attempt 0: ok 76 s
+01:05:58 s8_im_the_professor    run  3 attempt 0: ok 130 s
+01:07:11 s8_im_the_professor    run  4 attempt 0: ok 72 s
+01:08:52 s8_im_the_professor    run  5 attempt 0: ok 100 s
+01:12:24 m1_recall              run  1 attempt 0: ok 210 s
+01:16:03 m1_recall              run  2 attempt 0: ok 218 s
+01:19:38 m1_recall              run  3 attempt 0: ok 214 s
+01:23:12 m1_recall              run  4 attempt 0: ok 213 s
+01:26:35 m1_recall              run  5 attempt 0: INVALID (gateway fail 500; gateway fail None) 202 s
+the local model did not answer for 1800 s (down ConnectionResetError [Errno 104] Connection reset by peer): stopped; resume with --resume

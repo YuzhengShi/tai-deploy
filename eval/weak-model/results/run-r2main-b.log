@@ -1,0 +1,30 @@
+results -> /home/ubuntu/tai-weak/results/weak-r2main.jsonl | stamp 17001213 | resume
+== switch to weak-qwen3-4b
+03:23:58 m1_recall              run  5 attempt 1: ok 211 s
+03:27:33 m1_recall              run  6 attempt 0: ok 214 s
+03:31:16 m1_recall              run  7 attempt 0: ok 222 s
+03:34:40 m1_recall              run  8 attempt 0: ok 203 s
+03:38:12 m1_recall              run  9 attempt 0: ok 211 s
+03:42:20 m1_recall              run 10 attempt 0: ok 247 s
+03:46:46 m2_profile             run  1 attempt 0: ok 265 s
+03:49:56 m2_profile             run  2 attempt 0: ok 188 s
+03:54:32 m2_profile             run  3 attempt 0: ok 275 s
+03:57:44 m2_profile             run  4 attempt 0: ok 190 s
+04:02:53 m2_profile             run  5 attempt 0: ok 308 s
+04:08:00 m2_profile             run  6 attempt 0: ok 305 s
+04:12:16 m2_profile             run  7 attempt 0: ok 255 s
+04:16:28 m2_profile             run  8 attempt 0: ok 251 s
+04:20:39 m2_profile             run  9 attempt 0: ok 250 s
+04:24:50 m2_profile             run 10 attempt 0: ok 250 s
+04:25:48 p1_clean               run  1 attempt 0: ok 57 s
+04:26:50 p1_clean               run  2 attempt 0: ok 60 s
+04:27:54 p1_clean               run  3 attempt 0: ok 63 s
+04:31:32 p2_misconception       run  1 attempt 0: ok 217 s
+04:35:05 p2_misconception       run  2 attempt 0: ok 212 s
+04:38:41 p2_misconception       run  3 attempt 0: ok 215 s
+04:41:50 s9b_run_code_2turns    run  1 attempt 0: ok 187 s
+04:44:36 s9b_run_code_2turns    run  2 attempt 0: ok 165 s
+04:47:12 s9b_run_code_2turns    run  3 attempt 0: ok 155 s
+04:50:27 s9b_run_code_2turns    run  4 attempt 0: ok 194 s
+04:52:54 s9b_run_code_2turns    run  5 attempt 0: ok 146 s
+done: /home/ubuntu/tai-weak/results/weak-r2main.jsonl

@@ -1,0 +1,10 @@
+results -> /home/ubuntu/tai-weak/results/weak-r2pilot.jsonl | stamp 16212031 
+== switch to weak-qwen3-4b
+21:37:44 s1_intro               run  1 attempt 0: ok 975 s
+21:48:27 s4_deadline_grade      run  1 attempt 0: ok 642 s
+21:59:12 m1_recall              run  1 attempt 0: INVALID (gateway fail 500; gateway fail None) 644 s
+22:04:16 m1_recall              run  1 attempt 1: ok 237 s
+22:08:43 m2_profile             run  1 attempt 0: ok 266 s
+22:11:54 p2_misconception       run  1 attempt 0: ok 190 s
+22:14:43 s9b_run_code_2turns    run  1 attempt 0: ok 168 s
+done: /home/ubuntu/tai-weak/results/weak-r2pilot.jsonl

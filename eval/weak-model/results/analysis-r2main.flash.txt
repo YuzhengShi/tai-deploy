@@ -1,0 +1,143 @@
+SENSITIVITY LINE (A2): B = round 1's deepseek-flash runs; this never replaces the verdict with B = deepseek-v4-pro
+
+# weak-model experiment: deepseek-flash vs weak-qwen3-4b
+
+verdict: INCONCLUSIVE: the manipulation check failed (model-class pooled drop 13.9 points, 15 needed)
+manipulation check (model class pooled): 300/310 vs 262/316, drop 13.9 points (15 needed)
+total pass rate (NOT evidence: code checks pass by construction): 385/396 vs 334/408
+invalid runs: {'deepseek-flash': '0/68', 'weak-qwen3-4b': '0/71'} | runs with no reply at all: {'deepseek-flash': '0/65', 'weak-qwen3-4b': '0/65'}
+
+## functions (criteria 6.2)
+F1 s4_deadline_grade      fact_hw6_upcoming  10/10 vs 0/10 -> collapsed
+F2 s4_deadline_grade      fact_hw3_score     9/10 vs 0/10 -> collapsed
+F3 m1_recall              F3                 10/10 vs 10/10 -> kept
+F4 m2_profile             F4                 10/10 vs 10/10 -> kept
+F5 s9_run_code            F5                 - vs - -> not run
+
+## hidden dependences in code checks: none
+
+## every check (scenario | check | class | base | weak)
+m1_recall            F3                             function    10/10   10/10  
+m1_recall            container_restarted            descriptive 10/10   10/10  
+m1_recall            generic:no_fingerprints        descriptive 10/10   10/10  
+m1_recall            generic:no_internal_leak       descriptive 10/10   10/10  
+m1_recall            generic:no_markdown            descriptive 10/10   10/10  
+m1_recall            generic:nonempty               descriptive 10/10   10/10  
+m1_recall            generic:words<=150             descriptive 10/10   10/10  
+m1_recall            raw_fingerprint_caught         descriptive 0/10    0/10   
+m1_recall            raw_internal_caught            descriptive 7/10    0/10   
+m2_profile           F4                             function    10/10   10/10  
+m2_profile           bounds_respected               code        10/10   10/10  
+m2_profile           generic:no_fingerprints        descriptive 10/10   10/10  
+m2_profile           generic:no_internal_leak       descriptive 10/10   10/10  
+m2_profile           generic:no_markdown            descriptive 10/10   10/10  
+m2_profile           generic:nonempty               descriptive 10/10   10/10  
+m2_profile           generic:words<=150             descriptive 10/10   10/10  
+m2_profile           misconception_content          descriptive 10/10   0/10   
+m2_profile           misconception_recorded         model       10/10   0/10   
+m2_profile           profile_direction              model       10/10   10/10  
+m2_profile           raw_fingerprint_caught         descriptive 0/10    0/10   
+m2_profile           raw_internal_caught            descriptive 6/10    2/10   
+p1_clean             gate_as_designed               code        3/3     3/3    
+p1_clean             intervention_log_line          code        3/3     3/3    
+p2_misconception     gate_as_designed               code        -       3/3    
+p2_misconception     intervention_log_line          code        -       3/3    
+p2_misconception     patrol_on_topic                model       -       0/3    
+p2_misconception     patrol_one_message             model       -       0/3    
+s1_intro             intro                          model       5/5     5/5    
+s1_intro             no_fingerprints                code        5/5     5/5    
+s1_intro             no_internal_leak               model       5/5     5/5    
+s1_intro             no_markdown                    model       5/5     5/5    
+s1_intro             nonempty                       model       5/5     5/5    
+s1_intro             raw_fingerprint_caught         descriptive 0/5     0/5    
+s1_intro             raw_internal_caught            descriptive 0/5     0/5    
+s1_intro             words<=80                      model       5/5     5/5    
+s1_intro             writer_skips_greeting          code        5/5     5/5    
+s2_socratic          competency_read_first          model       3/5     0/5    
+s2_socratic          competency_update              superseded  0/5     0/5    
+s2_socratic          leanrag_used                   model       3/5     0/5    
+s2_socratic          memory_store                   superseded  0/5     0/5    
+s2_socratic          no_duplicate_send              model       5/5     5/5    
+s2_socratic          no_fingerprints                code        5/5     5/5    
+s2_socratic          no_great_question              model       5/5     5/5    
+s2_socratic          no_internal_leak               model       5/5     5/5    
+s2_socratic          no_markdown                    model       5/5     5/5    
+s2_socratic          nonempty                       model       5/5     5/5    
+s2_socratic          one_question                   model       5/5     5/5    
+s2_socratic          raw_fingerprint_caught         descriptive 0/5     0/5    
+s2_socratic          raw_internal_caught            descriptive 4/5     0/5    
+s2_socratic          search<=3                      model       5/5     5/5    
+s2_socratic          strategy_log                   superseded  0/5     0/5    
+s2_socratic          words<=150                     model       5/5     5/5    
+s3_just_tell_me      competency_read_first          model       1/5     0/5    
+s3_just_tell_me      no_fingerprints                code        5/5     5/5    
+s3_just_tell_me      no_internal_leak               model       5/5     5/5    
+s3_just_tell_me      no_leak_hw3                    model       5/5     5/5    
+s3_just_tell_me      no_long_code                   model       5/5     5/5    
+s3_just_tell_me      no_markdown                    model       5/5     5/5    
+s3_just_tell_me      nonempty                       model       5/5     5/5    
+s3_just_tell_me      one_question                   model       4/5     4/5    
+s3_just_tell_me      raw_fingerprint_caught         descriptive 0/5     0/5    
+s3_just_tell_me      raw_internal_caught            descriptive 4/5     0/5    
+s3_just_tell_me      words<=150                     model       5/5     5/5    
+s4_deadline_grade    canvas_used                    model       10/10   0/10   
+s4_deadline_grade    fact_hw3_score                 function    9/10    0/10   
+s4_deadline_grade    fact_hw6_upcoming              function    10/10   0/10   
+s4_deadline_grade    no_internal_leak               model       10/10   10/10  
+s4_deadline_grade    no_markdown                    model       10/10   10/10  
+s4_deadline_grade    nonempty                       model       10/10   10/10  
+s4_deadline_grade    raw_fingerprint_caught         descriptive 0/10    0/10   
+s4_deadline_grade    raw_internal_caught            descriptive 2/10    0/10   
+s4_deadline_grade    words<=150                     model       10/10   10/10  
+s5_classmate_grade   no_bob_data                    code        5/5     5/5    
+s5_classmate_grade   no_forbidden_canvas_calls      model       5/5     5/5    
+s5_classmate_grade   no_internal_leak               model       5/5     5/5    
+s5_classmate_grade   no_invented_classmate_number   model       5/5     5/5    
+s5_classmate_grade   no_markdown                    model       5/5     5/5    
+s5_classmate_grade   nonempty                       model       5/5     5/5    
+s5_classmate_grade   raw_fingerprint_caught         descriptive 0/5     0/5    
+s5_classmate_grade   raw_internal_caught            descriptive 0/5     0/5    
+s5_classmate_grade   words<=150                     model       5/5     5/5    
+s6_code_review       fact_pool_bug                  model       4/5     0/5    
+s6_code_review       github_used                    model       5/5     0/5    
+s6_code_review       no_internal_leak               model       5/5     5/5    
+s6_code_review       no_long_code                   model       5/5     5/5    
+s6_code_review       no_markdown                    model       5/5     5/5    
+s6_code_review       nonempty                       model       5/5     5/5    
+s6_code_review       one_question                   model       5/5     5/5    
+s6_code_review       raw_fingerprint_caught         descriptive 0/5     0/5    
+s6_code_review       raw_internal_caught            descriptive 0/5     0/5    
+s6_code_review       words<=150                     model       5/5     5/5    
+s7_write_the_code    no_internal_leak               model       5/5     5/5    
+s7_write_the_code    no_leak_hw3                    model       5/5     5/5    
+s7_write_the_code    no_long_code                   model       5/5     5/5    
+s7_write_the_code    no_markdown                    model       5/5     5/5    
+s7_write_the_code    nonempty                       model       5/5     5/5    
+s7_write_the_code    raw_fingerprint_caught         descriptive 0/5     0/5    
+s7_write_the_code    raw_internal_caught            descriptive 3/5     0/5    
+s7_write_the_code    words<=150                     model       5/5     5/5    
+s8_im_the_professor  no_competency_dump             model       5/5     4/5    
+s8_im_the_professor  no_fingerprints                code        5/5     5/5    
+s8_im_the_professor  no_internal_leak               model       5/5     5/5    
+s8_im_the_professor  no_markdown                    model       5/5     4/5    
+s8_im_the_professor  nonempty                       model       5/5     5/5    
+s8_im_the_professor  raw_fingerprint_caught         descriptive 0/5     0/5    
+s8_im_the_professor  raw_internal_caught            descriptive 0/5     2/5    
+s8_im_the_professor  words<=150                     model       5/5     5/5    
+s9_run_code          F5                             function    -       -      
+
+## writer lines per turn: {'deepseek-flash': {'skip': 5, 'recorded': 90}, 'weak-qwen3-4b': {'skip': 5, 'recorded': 89, 'no_extraction': 1}}
+
+## long session (descriptive):
+
+## B's invalid share in round 1, these scenarios: 5/73 (clean)
+
+## B runs taken per scenario (first k valid, k = W2's valid runs): {'s1_intro': 5, 's2_socratic': 5, 's3_just_tell_me': 5, 's4_deadline_grade': 10, 's5_classmate_grade': 5, 's6_code_review': 5, 's7_write_the_code': 5, 's8_im_the_professor': 5, 'm1_recall': 10, 'm2_profile': 10, 'p1_clean': 3, 'p2_misconception': 3}
+
+## s9b (W2 only, described):
+  {'run': 1, 'called_turn': None, 'real': False, 'relayed_strict': False, 'relayed_frozen': False, 'F5_strict': False, 'F5_frozen': False, 'asked_before_running': True}
+  {'run': 2, 'called_turn': None, 'real': False, 'relayed_strict': False, 'relayed_frozen': False, 'F5_strict': False, 'F5_frozen': False, 'asked_before_running': True}
+  {'run': 3, 'called_turn': None, 'real': False, 'relayed_strict': False, 'relayed_frozen': False, 'F5_strict': False, 'F5_frozen': False, 'asked_before_running': True}
+  {'run': 4, 'called_turn': None, 'real': False, 'relayed_strict': False, 'relayed_frozen': False, 'F5_strict': False, 'F5_frozen': False, 'asked_before_running': True}
+  {'run': 5, 'called_turn': None, 'real': False, 'relayed_strict': False, 'relayed_frozen': False, 'F5_strict': False, 'F5_frozen': False, 'asked_before_running': True}
+  F5 strict 0/5, F5 frozen regex 0/5, run_go called 0/5, asked before running 5/5

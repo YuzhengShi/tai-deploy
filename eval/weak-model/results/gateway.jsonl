@@ -1,0 +1,784 @@
+{"event": "fail", "model": "mock", "seconds": 2.22, "status": 400, "error": "400: {'error': '/chat/completions: Invalid model name passed in model=mock. Call `/v1/models` to view available models for your key.'}", "ts": 1794780871.901}
+{"event": "fail", "model": "mock", "seconds": 0.0, "status": 400, "error": "400: {'error': '/chat/completions: Invalid model name passed in model=mock. Call `/v1/models` to view available models for your key.'}", "ts": 1794781213.413}
+{"event": "fail", "model": "mock", "seconds": 0.0, "status": 400, "error": "400: {'error': '/chat/completions: Invalid model name passed in model=mock. Call `/v1/models` to view available models for your key.'}", "ts": 1794781260.329}
+{"event": "fail", "model": "mock", "seconds": 0.0, "status": 400, "error": "400: {'error': '/chat/completions: Invalid model name passed in model=mock. Call `/v1/models` to view available models for your key.'}", "ts": 1794781287.289}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.14, "in": 19, "out": 1, "cached": 0, "ts": 1794784058.432}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.07, "in": 276, "out": 41, "cached": 0, "ts": 1794784059.511}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.18, "in": 359, "out": 29, "cached": 128, "ts": 1794784060.702}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 0.89, "in": 19, "out": 1, "cached": 0, "ts": 1794784061.658}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.42, "in": 285, "out": 47, "cached": 0, "ts": 1794784063.083}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.01, "in": 374, "out": 21, "cached": 256, "ts": 1794784064.099}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.74, "in": 24109, "out": 81, "cached": 23680, "ts": 1794784101.86}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.15, "in": 28286, "out": 46, "cached": 24064, "ts": 1794784103.156}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.7, "in": 29363, "out": 66, "cached": 28288, "ts": 1794784104.997}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.96, "in": 1606, "out": 43, "cached": 1152, "ts": 1794784107.059}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.44, "in": 24121, "out": 90, "cached": 0, "ts": 1794784135.587}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.63, "in": 26350, "out": 47, "cached": 24192, "ts": 1794784137.488}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.29, "in": 1586, "out": 62, "cached": 0, "ts": 1794784139.52}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.55, "in": 24202, "out": 133, "cached": 15744, "ts": 1794784161.929}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.56, "in": 24506, "out": 30, "cached": 24320, "ts": 1794784189.677}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.19, "in": 1260, "out": 37, "cached": 0, "ts": 1794784191.393}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.05, "in": 1612, "out": 122, "cached": 0, "ts": 1794784192.251}
+{"event": "ok", "model": "deepseek-flash", "seconds": 3.55, "in": 24189, "out": 354, "cached": 23680, "ts": 1794784227.771}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.05, "in": 1267, "out": 40, "cached": 896, "ts": 1794784229.948}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.33, "in": 1619, "out": 93, "cached": 1152, "ts": 1794784230.222}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.53, "in": 24142, "out": 90, "cached": 23680, "ts": 1794784253.128}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.76, "in": 28872, "out": 50, "cached": 24192, "ts": 1794784255.033}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.08, "in": 1624, "out": 74, "cached": 1152, "ts": 1794784257.343}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.71, "in": 29177, "out": 75, "cached": 28800, "ts": 1794784367.787}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.37, "in": 1688, "out": 78, "cached": 1280, "ts": 1794784369.4}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.51, "in": 24151, "out": 51, "cached": 23808, "ts": 1794784400.258}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.3, "in": 27190, "out": 60, "cached": 24192, "ts": 1794784401.57}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.84, "in": 28942, "out": 64, "cached": 27136, "ts": 1794784403.461}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.49, "in": 1651, "out": 102, "cached": 1280, "ts": 1794784405.154}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.55, "in": 29258, "out": 34, "cached": 28928, "ts": 1794784502.233}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.64, "in": 1670, "out": 114, "cached": 1280, "ts": 1794784504.426}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.42, "in": 24101, "out": 59, "cached": 23808, "ts": 1794784526.828}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.33, "in": 1599, "out": 114, "cached": 1280, "ts": 1794784528.785}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.29, "in": 24405, "out": 92, "cached": 24064, "ts": 1794784538.859}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 0.91, "in": 1265, "out": 13, "cached": 0, "ts": 1794784541.312}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.76, "in": 1707, "out": 113, "cached": 1280, "ts": 1794784542.161}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.24, "in": 24741, "out": 46, "cached": 24448, "ts": 1794784551.679}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.07, "in": 1246, "out": 13, "cached": 1024, "ts": 1794784553.559}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.69, "in": 1685, "out": 172, "cached": 1280, "ts": 1794784554.177}
+{"event": "ok", "model": "deepseek-flash", "seconds": 3.35, "in": 24091, "out": 219, "cached": 23680, "ts": 1794784594.52}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.32, "in": 1643, "out": 77, "cached": 1152, "ts": 1794784598.062}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.6, "in": 24560, "out": 162, "cached": 24192, "ts": 1794784609.953}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.19, "in": 1231, "out": 13, "cached": 896, "ts": 1794784612.404}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.49, "in": 1715, "out": 88, "cached": 1280, "ts": 1794784612.701}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.69, "in": 24959, "out": 137, "cached": 24704, "ts": 1794784624.036}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.77, "in": 1278, "out": 13, "cached": 896, "ts": 1794784626.933}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.21, "in": 1686, "out": 127, "cached": 1152, "ts": 1794784627.372}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.63, "in": 24644, "out": 90, "cached": 23808, "ts": 1794784720.331}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.81, "in": 28644, "out": 146, "cached": 24704, "ts": 1794784722.162}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.7, "in": 28874, "out": 154, "cached": 28672, "ts": 1794784723.879}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.33, "in": 29068, "out": 170, "cached": 28928, "ts": 1794784726.215}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.03, "in": 29274, "out": 172, "cached": 29184, "ts": 1794784728.258}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.12, "in": 29479, "out": 176, "cached": 29440, "ts": 1794784731.758}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.12, "in": 29669, "out": 220, "cached": 29568, "ts": 1794784733.888}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.45, "in": 29920, "out": 54, "cached": 29824, "ts": 1794784735.351}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.83, "in": 29991, "out": 132, "cached": 29952, "ts": 1794784737.196}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.52, "in": 30152, "out": 71, "cached": 30080, "ts": 1794784738.729}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.51, "in": 30240, "out": 87, "cached": 30208, "ts": 1794784740.25}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.78, "in": 24635, "out": 82, "cached": 23680, "ts": 1794784841.521}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.52, "in": 28627, "out": 80, "cached": 24704, "ts": 1794784843.056}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.32, "in": 28777, "out": 86, "cached": 28544, "ts": 1794784844.396}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.94, "in": 28917, "out": 48, "cached": 28672, "ts": 1794784846.351}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.15, "in": 31883, "out": 107, "cached": 28928, "ts": 1794784848.644}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.93, "in": 32026, "out": 269, "cached": 31872, "ts": 1794784851.59}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.9, "in": 32323, "out": 85, "cached": 32128, "ts": 1794784853.505}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.4, "in": 24087, "out": 21, "cached": 23808, "ts": 1794784959.485}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.4, "in": 24093, "out": 8, "cached": 23808, "ts": 1794784985.391}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.29, "in": 24089, "out": 21, "cached": 23808, "ts": 1794785021.825}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.18, "in": 24091, "out": 51, "cached": 23808, "ts": 1794785053.402}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.24, "in": 27073, "out": 21, "cached": 24064, "ts": 1794785054.672}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.42, "in": 24089, "out": 21, "cached": 23808, "ts": 1794785086.763}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.46, "in": 24080, "out": 21, "cached": 23680, "ts": 1794785127.112}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.24, "in": 24080, "out": 21, "cached": 23680, "ts": 1794785156.865}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.93, "in": 24077, "out": 21, "cached": 23680, "ts": 1794785195.532}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.01, "in": 24081, "out": 21, "cached": 23680, "ts": 1794785228.33}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.57, "in": 24080, "out": 21, "cached": 23680, "ts": 1794785258.713}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.63, "in": 24094, "out": 92, "cached": 23680, "ts": 1794785287.262}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.73, "in": 28830, "out": 54, "cached": 24064, "ts": 1794785289.045}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.28, "in": 1595, "out": 77, "cached": 1280, "ts": 1794785291.04}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.06, "in": 24094, "out": 155, "cached": 23680, "ts": 1794785321.214}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.34, "in": 27237, "out": 54, "cached": 24192, "ts": 1794785322.57}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.93, "in": 1589, "out": 77, "cached": 1280, "ts": 1794785324.503}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.58, "in": 24090, "out": 108, "cached": 23680, "ts": 1794785356.338}
+{"event": "ok", "model": "deepseek-flash", "seconds": 3.68, "in": 27186, "out": 382, "cached": 24192, "ts": 1794785360.034}
+{"event": "ok", "model": "deepseek-flash", "seconds": 3.28, "in": 29355, "out": 268, "cached": 27520, "ts": 1794785363.363}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.29, "in": 1658, "out": 77, "cached": 1152, "ts": 1794785365.331}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.48, "in": 24091, "out": 155, "cached": 23680, "ts": 1794785394.61}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.24, "in": 1588, "out": 77, "cached": 1152, "ts": 1794785396.172}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.84, "in": 24094, "out": 137, "cached": 23680, "ts": 1794785426.758}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.9, "in": 29302, "out": 104, "cached": 24192, "ts": 1794785428.713}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.53, "in": 1613, "out": 77, "cached": 1152, "ts": 1794785433.376}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.77, "in": 24101, "out": 53, "cached": 23808, "ts": 1794785475.399}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.78, "in": 1587, "out": 108, "cached": 1280, "ts": 1794785479.784}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.75, "in": 24104, "out": 80, "cached": 23808, "ts": 1794785508.271}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.38, "in": 1621, "out": 115, "cached": 1280, "ts": 1794785511.518}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.28, "in": 24101, "out": 17, "cached": 23808, "ts": 1794785555.684}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.08, "in": 1551, "out": 108, "cached": 1408, "ts": 1794785558.689}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.91, "in": 24101, "out": 58, "cached": 23808, "ts": 1794785591.61}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.55, "in": 1592, "out": 109, "cached": 1408, "ts": 1794785594.806}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.96, "in": 24100, "out": 65, "cached": 23808, "ts": 1794785625.37}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.09, "in": 1599, "out": 112, "cached": 1408, "ts": 1794785628.641}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.59, "in": 24129, "out": 43, "cached": 23808, "ts": 1794785659.566}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.28, "in": 1593, "out": 52, "cached": 1280, "ts": 1794785661.748}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.42, "in": 24127, "out": 45, "cached": 23808, "ts": 1794785688.658}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 0.86, "in": 1589, "out": 49, "cached": 1408, "ts": 1794785689.837}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.66, "in": 24125, "out": 47, "cached": 23808, "ts": 1794785723.878}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.83, "in": 1597, "out": 60, "cached": 1280, "ts": 1794785727.087}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.15, "in": 24129, "out": 44, "cached": 23808, "ts": 1794785752.07}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.35, "in": 1595, "out": 54, "cached": 1280, "ts": 1794785754.642}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.66, "in": 24129, "out": 42, "cached": 23808, "ts": 1794785783.639}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.28, "in": 1601, "out": 52, "cached": 1280, "ts": 1794785785.59}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.75, "in": 24119, "out": 178, "cached": 23680, "ts": 1794785821.934}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.01, "in": 28690, "out": 43, "cached": 24192, "ts": 1794785823.996}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.06, "in": 1588, "out": 49, "cached": 1280, "ts": 1794785825.812}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.27, "in": 24123, "out": 166, "cached": 23680, "ts": 1794785848.342}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.45, "in": 29178, "out": 202, "cached": 24192, "ts": 1794785850.847}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.95, "in": 1640, "out": 41, "cached": 1152, "ts": 1794785852.558}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.93, "in": 24121, "out": 258, "cached": 23680, "ts": 1794785890.356}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.58, "in": 28935, "out": 35, "cached": 24064, "ts": 1794785891.985}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.86, "in": 1586, "out": 46, "cached": 1152, "ts": 1794785894.601}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.96, "in": 24119, "out": 190, "cached": 23680, "ts": 1794785924.729}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.63, "in": 25189, "out": 40, "cached": 24192, "ts": 1794785926.417}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.25, "in": 1595, "out": 48, "cached": 1152, "ts": 1794785929.938}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.61, "in": 24118, "out": 49, "cached": 23680, "ts": 1794785963.521}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.12, "in": 1600, "out": 45, "cached": 1408, "ts": 1794785965.021}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.28, "in": 24115, "out": 82, "cached": 23680, "ts": 1794785991.522}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.5, "in": 26336, "out": 65, "cached": 24192, "ts": 1794785993.296}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.89, "in": 1608, "out": 43, "cached": 1280, "ts": 1794785995.859}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.3, "in": 24112, "out": 45, "cached": 23680, "ts": 1794786027.704}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.48, "in": 25269, "out": 46, "cached": 24064, "ts": 1794786029.334}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.58, "in": 26346, "out": 58, "cached": 25216, "ts": 1794786031.052}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.11, "in": 1600, "out": 44, "cached": 1280, "ts": 1794786034.715}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.45, "in": 24114, "out": 82, "cached": 23680, "ts": 1794786064.583}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.44, "in": 26335, "out": 56, "cached": 24192, "ts": 1794786066.296}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.81, "in": 1598, "out": 44, "cached": 1280, "ts": 1794786069.307}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.49, "in": 24115, "out": 82, "cached": 23680, "ts": 1794786101.225}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.62, "in": 26336, "out": 106, "cached": 24192, "ts": 1794786103.126}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.98, "in": 1594, "out": 43, "cached": 1280, "ts": 1794786105.594}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.45, "in": 24117, "out": 82, "cached": 23680, "ts": 1794786135.907}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.51, "in": 26338, "out": 69, "cached": 24192, "ts": 1794786137.687}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.22, "in": 1611, "out": 41, "cached": 1408, "ts": 1794786140.068}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.33, "in": 24108, "out": 82, "cached": 23680, "ts": 1794786170.055}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.64, "in": 26329, "out": 78, "cached": 24064, "ts": 1794786171.97}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.13, "in": 1620, "out": 44, "cached": 1280, "ts": 1794786173.61}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.22, "in": 24111, "out": 82, "cached": 23680, "ts": 1794786205.328}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.95, "in": 26332, "out": 75, "cached": 24192, "ts": 1794786207.549}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.63, "in": 1627, "out": 44, "cached": 1152, "ts": 1794786208.688}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.36, "in": 24110, "out": 82, "cached": 23680, "ts": 1794786238.078}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.64, "in": 26331, "out": 39, "cached": 24192, "ts": 1794786240.004}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.2, "in": 1581, "out": 43, "cached": 1280, "ts": 1794786242.306}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.47, "in": 24111, "out": 82, "cached": 23680, "ts": 1794786270.762}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.61, "in": 26332, "out": 91, "cached": 24192, "ts": 1794786272.642}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.7, "in": 1593, "out": 43, "cached": 1408, "ts": 1794786274.575}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.66, "in": 24114, "out": 45, "cached": 23680, "ts": 1794786307.407}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.47, "in": 25271, "out": 46, "cached": 24064, "ts": 1794786309.02}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.39, "in": 26348, "out": 61, "cached": 25216, "ts": 1794786310.548}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.88, "in": 1603, "out": 41, "cached": 1408, "ts": 1794786312.419}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.69, "in": 24121, "out": 90, "cached": 23808, "ts": 1794786350.166}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.41, "in": 26350, "out": 46, "cached": 24192, "ts": 1794786351.875}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.29, "in": 1587, "out": 52, "cached": 1408, "ts": 1794786354.043}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.29, "in": 24121, "out": 90, "cached": 23808, "ts": 1794786376.137}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.44, "in": 26350, "out": 59, "cached": 24192, "ts": 1794786377.857}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.65, "in": 1598, "out": 58, "cached": 1280, "ts": 1794786381.406}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.64, "in": 24121, "out": 90, "cached": 23808, "ts": 1794786409.851}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.53, "in": 26350, "out": 51, "cached": 24192, "ts": 1794786411.659}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 0.98, "in": 1592, "out": 56, "cached": 1408, "ts": 1794786414.788}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.35, "in": 24118, "out": 90, "cached": 23808, "ts": 1794786443.481}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.53, "in": 26347, "out": 53, "cached": 24192, "ts": 1794786445.299}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.23, "in": 1592, "out": 52, "cached": 1408, "ts": 1794786447.471}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.8, "in": 24125, "out": 90, "cached": 23808, "ts": 1794786475.256}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.11, "in": 25510, "out": 47, "cached": 24192, "ts": 1794786476.622}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 0.96, "in": 1586, "out": 58, "cached": 1536, "ts": 1794786477.988}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.64, "in": 24124, "out": 101, "cached": 23808, "ts": 1794786510.027}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.66, "in": 26364, "out": 52, "cached": 24192, "ts": 1794786511.967}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 0.89, "in": 1593, "out": 56, "cached": 1408, "ts": 1794786513.122}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.62, "in": 24120, "out": 90, "cached": 23808, "ts": 1794786542.465}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.38, "in": 26349, "out": 46, "cached": 24192, "ts": 1794786544.112}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.39, "in": 1587, "out": 56, "cached": 1536, "ts": 1794786546.243}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.34, "in": 24120, "out": 103, "cached": 23808, "ts": 1794786573.871}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.37, "in": 26362, "out": 60, "cached": 24192, "ts": 1794786575.515}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.01, "in": 1599, "out": 56, "cached": 1408, "ts": 1794786576.874}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.59, "in": 24122, "out": 90, "cached": 23808, "ts": 1794786600.903}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.16, "in": 26351, "out": 46, "cached": 24192, "ts": 1794786602.459}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.37, "in": 1585, "out": 56, "cached": 1408, "ts": 1794786605.557}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.88, "in": 24119, "out": 90, "cached": 23808, "ts": 1794786635.465}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.69, "in": 26348, "out": 52, "cached": 24192, "ts": 1794786637.427}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.42, "in": 1593, "out": 57, "cached": 1408, "ts": 1794786639.817}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.4, "in": 24122, "out": 41, "cached": 23808, "ts": 1794786668.411}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.09, "in": 1583, "out": 62, "cached": 1408, "ts": 1794786670.554}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.14, "in": 24120, "out": 42, "cached": 23808, "ts": 1794786698.035}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.29, "in": 1594, "out": 61, "cached": 1280, "ts": 1794786700.541}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.46, "in": 24122, "out": 44, "cached": 23808, "ts": 1794786729.246}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.29, "in": 1586, "out": 62, "cached": 1536, "ts": 1794786731.459}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.28, "in": 24122, "out": 45, "cached": 23808, "ts": 1794786761.898}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.33, "in": 1602, "out": 56, "cached": 1280, "ts": 1794786763.485}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.72, "in": 24123, "out": 82, "cached": 23808, "ts": 1794786790.322}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.28, "in": 1631, "out": 60, "cached": 1536, "ts": 1794786793.364}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.25, "in": 24111, "out": 44, "cached": 23680, "ts": 1794786824.586}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.62, "in": 1587, "out": 40, "cached": 1280, "ts": 1794786828.038}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.21, "in": 24111, "out": 48, "cached": 23680, "ts": 1794786852.186}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.05, "in": 1601, "out": 40, "cached": 1280, "ts": 1794786854.32}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.12, "in": 24114, "out": 40, "cached": 23680, "ts": 1794786891.519}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.12, "in": 1594, "out": 40, "cached": 1280, "ts": 1794786893.915}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.16, "in": 24115, "out": 47, "cached": 23680, "ts": 1794786925.868}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.34, "in": 1596, "out": 48, "cached": 1280, "ts": 1794786928.257}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.4, "in": 24111, "out": 36, "cached": 23680, "ts": 1794786955.125}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.02, "in": 1585, "out": 45, "cached": 1408, "ts": 1794786957.308}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.25, "in": 24173, "out": 115, "cached": 23680, "ts": 1794786985.263}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.5, "in": 27389, "out": 85, "cached": 24192, "ts": 1794786986.919}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.08, "in": 27514, "out": 88, "cached": 27264, "ts": 1794786988.111}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.43, "in": 27891, "out": 86, "cached": 27520, "ts": 1794786989.653}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.32, "in": 28022, "out": 64, "cached": 27776, "ts": 1794786991.082}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.9, "in": 1266, "out": 46, "cached": 896, "ts": 1794786992.444}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.22, "in": 1639, "out": 87, "cached": 1152, "ts": 1794786992.769}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.37, "in": 24172, "out": 115, "cached": 23680, "ts": 1794787018.657}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.28, "in": 27388, "out": 85, "cached": 24192, "ts": 1794787020.06}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.32, "in": 27513, "out": 88, "cached": 27264, "ts": 1794787021.494}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.6, "in": 27890, "out": 66, "cached": 27520, "ts": 1794787023.213}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.02, "in": 1629, "out": 98, "cached": 1152, "ts": 1794787026.587}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.02, "in": 1270, "out": 55, "cached": 1024, "ts": 1794787026.593}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.14, "in": 24171, "out": 115, "cached": 23680, "ts": 1794787052.486}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.3, "in": 27387, "out": 85, "cached": 24192, "ts": 1794787053.907}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.47, "in": 27512, "out": 88, "cached": 27264, "ts": 1794787055.497}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.31, "in": 27889, "out": 50, "cached": 27520, "ts": 1794787056.921}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.85, "in": 1252, "out": 54, "cached": 1024, "ts": 1794787059.405}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.2, "in": 1611, "out": 94, "cached": 1152, "ts": 1794787059.754}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.04, "in": 24171, "out": 115, "cached": 23680, "ts": 1794787088.867}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.5, "in": 27387, "out": 85, "cached": 24192, "ts": 1794787090.489}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.33, "in": 27512, "out": 88, "cached": 27264, "ts": 1794787091.94}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.14, "in": 27889, "out": 86, "cached": 27520, "ts": 1794787093.21}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.82, "in": 28020, "out": 60, "cached": 27776, "ts": 1794787095.147}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.85, "in": 1262, "out": 54, "cached": 1024, "ts": 1794787096.738}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.23, "in": 1621, "out": 115, "cached": 1408, "ts": 1794787097.118}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.33, "in": 24174, "out": 79, "cached": 23680, "ts": 1794787124.938}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.09, "in": 24370, "out": 85, "cached": 24192, "ts": 1794787126.155}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.28, "in": 24495, "out": 88, "cached": 24320, "ts": 1794787127.56}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.42, "in": 24872, "out": 53, "cached": 24576, "ts": 1794787129.103}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.91, "in": 1257, "out": 57, "cached": 1024, "ts": 1794787131.786}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.05, "in": 1616, "out": 94, "cached": 1408, "ts": 1794787131.918}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.69, "in": 24182, "out": 93, "cached": 23808, "ts": 1794787166.927}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.94, "in": 24392, "out": 170, "cached": 24192, "ts": 1794787168.994}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.56, "in": 24643, "out": 94, "cached": 24448, "ts": 1794787170.79}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.12, "in": 25026, "out": 64, "cached": 24704, "ts": 1794787173.019}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.54, "in": 1265, "out": 66, "cached": 1024, "ts": 1794787176.937}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.85, "in": 1614, "out": 124, "cached": 1280, "ts": 1794787177.242}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.29, "in": 24181, "out": 85, "cached": 23808, "ts": 1794787199.011}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.95, "in": 24383, "out": 170, "cached": 24192, "ts": 1794787201.088}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.87, "in": 24634, "out": 94, "cached": 24448, "ts": 1794787203.183}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.15, "in": 25017, "out": 43, "cached": 24704, "ts": 1794787205.451}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 6.07, "in": 1244, "out": 54, "cached": 1152, "ts": 1794787218.23}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 6.4, "in": 1617, "out": 126, "cached": 1280, "ts": 1794787218.556}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.03, "in": 24183, "out": 85, "cached": 23808, "ts": 1794787292.308}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.76, "in": 24385, "out": 170, "cached": 24192, "ts": 1794787294.186}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.63, "in": 24636, "out": 94, "cached": 24448, "ts": 1794787296.034}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.23, "in": 25019, "out": 69, "cached": 24704, "ts": 1794787298.382}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.03, "in": 1270, "out": 59, "cached": 1152, "ts": 1794787300.597}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.28, "in": 1619, "out": 125, "cached": 1408, "ts": 1794787300.841}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.03, "in": 24182, "out": 77, "cached": 23808, "ts": 1794787327.829}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.08, "in": 24376, "out": 83, "cached": 24192, "ts": 1794787330.031}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.06, "in": 24499, "out": 157, "cached": 24448, "ts": 1794787332.206}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.44, "in": 24986, "out": 143, "cached": 24576, "ts": 1794787334.863}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.95, "in": 25172, "out": 50, "cached": 25088, "ts": 1794787336.923}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 0.98, "in": 1251, "out": 56, "cached": 1152, "ts": 1794787339.587}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.85, "in": 1600, "out": 122, "cached": 1408, "ts": 1794787340.45}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.83, "in": 24178, "out": 85, "cached": 23808, "ts": 1794787370.717}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.05, "in": 24380, "out": 170, "cached": 24192, "ts": 1794787372.912}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.51, "in": 24631, "out": 94, "cached": 24448, "ts": 1794787374.65}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.62, "in": 25014, "out": 144, "cached": 24704, "ts": 1794787377.384}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.81, "in": 25257, "out": 71, "cached": 25088, "ts": 1794787379.304}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.37, "in": 1272, "out": 64, "cached": 1152, "ts": 1794787381.055}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.56, "in": 1634, "out": 120, "cached": 1280, "ts": 1794787381.241}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.96, "in": 24119, "out": 56, "cached": 23808, "ts": 1794787408.774}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.66, "in": 1611, "out": 119, "cached": 1280, "ts": 1794787411.237}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.64, "in": 24121, "out": 48, "cached": 23808, "ts": 1794787435.363}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.37, "in": 1599, "out": 59, "cached": 1280, "ts": 1794787437.36}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.65, "in": 24121, "out": 46, "cached": 23808, "ts": 1794787476.199}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.62, "in": 1595, "out": 58, "cached": 1280, "ts": 1794787479.349}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.55, "in": 24118, "out": 55, "cached": 23808, "ts": 1794787502.591}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.31, "in": 1610, "out": 56, "cached": 1536, "ts": 1794787504.855}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.47, "in": 24118, "out": 46, "cached": 23808, "ts": 1794787532.734}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.21, "in": 1602, "out": 114, "cached": 1280, "ts": 1794787535.346}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.42, "in": 24112, "out": 32, "cached": 23680, "ts": 1794787568.047}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.28, "in": 1588, "out": 95, "cached": 1152, "ts": 1794787570.296}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.75, "in": 24112, "out": 77, "cached": 23680, "ts": 1794787594.513}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.02, "in": 1602, "out": 86, "cached": 1152, "ts": 1794787597.985}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.82, "in": 24111, "out": 91, "cached": 23680, "ts": 1794787633.311}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.11, "in": 1640, "out": 91, "cached": 1152, "ts": 1794787635.907}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.07, "in": 24113, "out": 116, "cached": 23680, "ts": 1794787669.792}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.17, "in": 1617, "out": 92, "cached": 1152, "ts": 1794787672.714}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.95, "in": 24113, "out": 73, "cached": 23680, "ts": 1794787705.38}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.09, "in": 1628, "out": 87, "cached": 1152, "ts": 1794787708.366}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.38, "in": 24140, "out": 35, "cached": 23680, "ts": 1794787745.073}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.23, "in": 1589, "out": 42, "cached": 1280, "ts": 1794787749.118}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.82, "in": 24135, "out": 42, "cached": 23680, "ts": 1794787782.129}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.94, "in": 1606, "out": 44, "cached": 1280, "ts": 1794787784.029}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.46, "in": 24138, "out": 53, "cached": 23680, "ts": 1794787818.711}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.39, "in": 1618, "out": 43, "cached": 1280, "ts": 1794787820.763}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.11, "in": 24142, "out": 38, "cached": 23680, "ts": 1794787854.785}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.0, "in": 1586, "out": 42, "cached": 1408, "ts": 1794787857.779}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.48, "in": 24145, "out": 49, "cached": 23680, "ts": 1794787889.654}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.07, "in": 1603, "out": 45, "cached": 1408, "ts": 1794787891.162}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.2, "in": 24149, "out": 47, "cached": 23808, "ts": 1794787925.336}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.36, "in": 1585, "out": 58, "cached": 1408, "ts": 1794787928.283}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.44, "in": 24145, "out": 32, "cached": 23808, "ts": 1794787950.45}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 0.97, "in": 1585, "out": 52, "cached": 1536, "ts": 1794787952.41}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.28, "in": 24148, "out": 48, "cached": 23808, "ts": 1794787985.772}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.06, "in": 1604, "out": 58, "cached": 1408, "ts": 1794787987.107}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.66, "in": 24147, "out": 56, "cached": 23808, "ts": 1794788011.665}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.27, "in": 1614, "out": 52, "cached": 1280, "ts": 1794788014.115}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.49, "in": 24149, "out": 37, "cached": 23808, "ts": 1794788042.517}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.23, "in": 1590, "out": 52, "cached": 1536, "ts": 1794788044.614}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.38, "in": 24203, "out": 25, "cached": 23808, "ts": 1794788072.295}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.36, "in": 1255, "out": 52, "cached": 1152, "ts": 1794788075.939}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.39, "in": 1607, "out": 130, "cached": 1536, "ts": 1794788075.974}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.53, "in": 24202, "out": 36, "cached": 23808, "ts": 1794788104.736}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 0.8, "in": 1268, "out": 52, "cached": 1152, "ts": 1794788106.34}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.61, "in": 1620, "out": 127, "cached": 1536, "ts": 1794788107.152}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.09, "in": 24204, "out": 13, "cached": 23808, "ts": 1794788137.923}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.33, "in": 1243, "out": 52, "cached": 1152, "ts": 1794788141.012}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.81, "in": 1595, "out": 126, "cached": 1536, "ts": 1794788141.485}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.31, "in": 24199, "out": 21, "cached": 23808, "ts": 1794788173.672}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.25, "in": 1251, "out": 35, "cached": 1152, "ts": 1794788176.708}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.52, "in": 1603, "out": 128, "cached": 1536, "ts": 1794788176.972}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.96, "in": 24202, "out": 151, "cached": 23808, "ts": 1794788204.947}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.3, "in": 24523, "out": 51, "cached": 24320, "ts": 1794788216.95}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.18, "in": 1283, "out": 37, "cached": 1152, "ts": 1794788221.936}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.59, "in": 1635, "out": 118, "cached": 1536, "ts": 1794788222.339}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.84, "in": 24202, "out": 143, "cached": 23808, "ts": 1794788257.328}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.63, "in": 24518, "out": 58, "cached": 24320, "ts": 1794788273.418}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 0.98, "in": 1291, "out": 35, "cached": 1152, "ts": 1794788276.804}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.61, "in": 1643, "out": 120, "cached": 1408, "ts": 1794788277.441}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.3, "in": 24200, "out": 133, "cached": 23808, "ts": 1794788305.624}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.97, "in": 24508, "out": 56, "cached": 24320, "ts": 1794788319.348}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.19, "in": 1641, "out": 120, "cached": 1536, "ts": 1794788321.867}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.22, "in": 1289, "out": 38, "cached": 1152, "ts": 1794788321.896}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.76, "in": 24203, "out": 70, "cached": 23808, "ts": 1794788351.468}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 0.86, "in": 1289, "out": 37, "cached": 1152, "ts": 1794788353.745}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.58, "in": 1641, "out": 127, "cached": 1536, "ts": 1794788354.458}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.12, "in": 24202, "out": 26, "cached": 23808, "ts": 1794788380.498}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.12, "in": 1256, "out": 54, "cached": 1152, "ts": 1794788382.801}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.78, "in": 1608, "out": 125, "cached": 1536, "ts": 1794788383.461}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.25, "in": 24200, "out": 29, "cached": 23808, "ts": 1794788413.717}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.28, "in": 1259, "out": 58, "cached": 1152, "ts": 1794788416.33}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.58, "in": 1611, "out": 126, "cached": 1536, "ts": 1794788416.634}
+{"event": "ok", "model": "deepseek-flash", "seconds": 3.19, "in": 24193, "out": 319, "cached": 23680, "ts": 1794788457.263}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.88, "in": 1282, "out": 36, "cached": 1024, "ts": 1794788458.749}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.15, "in": 1638, "out": 89, "cached": 1280, "ts": 1794788459.02}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.74, "in": 24190, "out": 98, "cached": 23680, "ts": 1794788482.227}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.66, "in": 1255, "out": 38, "cached": 1024, "ts": 1794788483.805}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.88, "in": 1607, "out": 91, "cached": 1408, "ts": 1794788484.028}
+{"event": "ok", "model": "deepseek-flash", "seconds": 3.32, "in": 24192, "out": 421, "cached": 23680, "ts": 1794788521.004}
+{"event": "ok", "model": "deepseek-flash", "seconds": 3.13, "in": 29424, "out": 280, "cached": 24320, "ts": 1794788524.189}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.94, "in": 1660, "out": 94, "cached": 1408, "ts": 1794788526.59}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.08, "in": 1304, "out": 38, "cached": 1152, "ts": 1794788526.734}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.2, "in": 24191, "out": 316, "cached": 23680, "ts": 1794788556.82}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.72, "in": 24674, "out": 87, "cached": 24192, "ts": 1794788569.992}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.98, "in": 1311, "out": 40, "cached": 1152, "ts": 1794788573.015}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.21, "in": 1663, "out": 90, "cached": 1408, "ts": 1794788573.242}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.49, "in": 24189, "out": 75, "cached": 23680, "ts": 1794788603.215}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.01, "in": 1295, "out": 38, "cached": 1152, "ts": 1794788604.97}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.05, "in": 1650, "out": 91, "cached": 1280, "ts": 1794788605.01}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.71, "in": 24193, "out": 133, "cached": 23680, "ts": 1794788635.629}
+{"event": "ok", "model": "deepseek-flash", "seconds": 3.3, "in": 27314, "out": 368, "cached": 24320, "ts": 1794788638.945}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.7, "in": 1271, "out": 39, "cached": 1024, "ts": 1794788639.957}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.96, "in": 1623, "out": 97, "cached": 1408, "ts": 1794788640.213}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.33, "in": 24195, "out": 57, "cached": 23680, "ts": 1794788671.599}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.94, "in": 1605, "out": 92, "cached": 1408, "ts": 1794788673.569}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.25, "in": 1253, "out": 38, "cached": 1024, "ts": 1794788673.881}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.99, "in": 24191, "out": 135, "cached": 23680, "ts": 1794788700.882}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.06, "in": 1262, "out": 41, "cached": 1024, "ts": 1794788702.764}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.4, "in": 1614, "out": 97, "cached": 1408, "ts": 1794788703.103}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.63, "in": 24192, "out": 73, "cached": 23680, "ts": 1794788733.181}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.01, "in": 1607, "out": 91, "cached": 1408, "ts": 1794788736.6}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.06, "in": 1255, "out": 39, "cached": 1024, "ts": 1794788736.652}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.58, "in": 24193, "out": 317, "cached": 23680, "ts": 1794788772.635}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.94, "in": 27669, "out": 133, "cached": 24448, "ts": 1794788789.938}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.97, "in": 1279, "out": 44, "cached": 1024, "ts": 1794788795.284}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.12, "in": 1631, "out": 94, "cached": 1408, "ts": 1794788795.428}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.15, "in": 24140, "out": 106, "cached": 23680, "ts": 1794788819.194}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.56, "in": 28876, "out": 222, "cached": 24192, "ts": 1794788821.809}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.34, "in": 29134, "out": 42, "cached": 28800, "ts": 1794788823.16}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.87, "in": 1616, "out": 71, "cached": 1408, "ts": 1794788825.755}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.36, "in": 29426, "out": 36, "cached": 29056, "ts": 1794788924.748}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.8, "in": 1652, "out": 71, "cached": 1280, "ts": 1794788927.572}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.8, "in": 24138, "out": 148, "cached": 23680, "ts": 1794788955.99}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.66, "in": 28926, "out": 238, "cached": 24192, "ts": 1794788958.699}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.87, "in": 1619, "out": 74, "cached": 1408, "ts": 1794788960.258}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.64, "in": 29421, "out": 46, "cached": 29056, "ts": 1794789062.867}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.01, "in": 1647, "out": 77, "cached": 1280, "ts": 1794789064.573}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.18, "in": 24139, "out": 90, "cached": 23680, "ts": 1794789092.807}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.32, "in": 28869, "out": 62, "cached": 24192, "ts": 1794789094.183}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.97, "in": 1636, "out": 73, "cached": 1408, "ts": 1794789095.698}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.58, "in": 29181, "out": 78, "cached": 28928, "ts": 1794789193.08}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.04, "in": 1713, "out": 71, "cached": 1152, "ts": 1794789196.297}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.2, "in": 24141, "out": 90, "cached": 23680, "ts": 1794789222.682}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.37, "in": 28871, "out": 174, "cached": 24192, "ts": 1794789225.106}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.12, "in": 1613, "out": 74, "cached": 1408, "ts": 1794789226.821}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.34, "in": 29299, "out": 34, "cached": 28928, "ts": 1794789325.356}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.29, "in": 1647, "out": 78, "cached": 1280, "ts": 1794789328.35}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.29, "in": 24136, "out": 90, "cached": 23680, "ts": 1794789349.901}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.53, "in": 28866, "out": 50, "cached": 24192, "ts": 1794789351.48}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.18, "in": 1624, "out": 74, "cached": 1408, "ts": 1794789354.185}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.45, "in": 29171, "out": 30, "cached": 28800, "ts": 1794789457.97}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.81, "in": 1654, "out": 71, "cached": 1408, "ts": 1794789460.372}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.25, "in": 24139, "out": 92, "cached": 23680, "ts": 1794789485.274}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.72, "in": 28880, "out": 128, "cached": 24192, "ts": 1794789487.052}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.26, "in": 1613, "out": 76, "cached": 1408, "ts": 1794789489.464}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.69, "in": 29263, "out": 28, "cached": 28928, "ts": 1794789591.231}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.94, "in": 1641, "out": 74, "cached": 1408, "ts": 1794789592.915}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.66, "in": 24143, "out": 90, "cached": 23680, "ts": 1794789621.677}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.61, "in": 28873, "out": 82, "cached": 24192, "ts": 1794789623.338}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.1, "in": 1647, "out": 76, "cached": 1408, "ts": 1794789625.495}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.28, "in": 29208, "out": 44, "cached": 28928, "ts": 1794789727.197}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.85, "in": 1691, "out": 75, "cached": 1280, "ts": 1794789728.891}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.12, "in": 24143, "out": 90, "cached": 23680, "ts": 1794789756.771}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.18, "in": 28873, "out": 158, "cached": 24192, "ts": 1794789759.007}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.95, "in": 1631, "out": 73, "cached": 1408, "ts": 1794789760.111}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.04, "in": 29283, "out": 30, "cached": 28928, "ts": 1794789856.674}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.99, "in": 1661, "out": 71, "cached": 1408, "ts": 1794789858.673}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.09, "in": 24144, "out": 90, "cached": 23680, "ts": 1794789884.536}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.27, "in": 28874, "out": 57, "cached": 24192, "ts": 1794789885.862}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.62, "in": 30448, "out": 134, "cached": 28928, "ts": 1794789888.492}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.82, "in": 1626, "out": 76, "cached": 1408, "ts": 1794789889.538}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.46, "in": 30840, "out": 34, "cached": 30464, "ts": 1794789988.28}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.08, "in": 1660, "out": 71, "cached": 1280, "ts": 1794789989.938}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.79, "in": 24141, "out": 90, "cached": 23680, "ts": 1794790011.156}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.33, "in": 28871, "out": 49, "cached": 24192, "ts": 1794790012.537}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.66, "in": 32370, "out": 161, "cached": 28800, "ts": 1794790015.337}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.25, "in": 1623, "out": 77, "cached": 1408, "ts": 1794790016.908}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.17, "in": 32785, "out": 39, "cached": 32512, "ts": 1794790113.537}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.08, "in": 1662, "out": 74, "cached": 1408, "ts": 1794790115.569}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.5, "in": 24151, "out": 28, "cached": 23808, "ts": 1794790151.046}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.34, "in": 1601, "out": 103, "cached": 1280, "ts": 1794790153.705}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.09, "in": 24432, "out": 41, "cached": 24064, "ts": 1794790249.522}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.75, "in": 1642, "out": 114, "cached": 1408, "ts": 1794790251.987}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.59, "in": 24151, "out": 98, "cached": 23808, "ts": 1794790282.19}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.8, "in": 28889, "out": 77, "cached": 24192, "ts": 1794790285.038}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.75, "in": 1650, "out": 106, "cached": 1536, "ts": 1794790287.015}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.67, "in": 29220, "out": 47, "cached": 28928, "ts": 1794790382.705}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.58, "in": 1696, "out": 109, "cached": 1408, "ts": 1794790385.857}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.95, "in": 24146, "out": 51, "cached": 23808, "ts": 1794790408.588}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.74, "in": 27185, "out": 167, "cached": 24192, "ts": 1794790411.344}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.24, "in": 1749, "out": 106, "cached": 1280, "ts": 1794790413.455}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.64, "in": 27607, "out": 45, "cached": 27264, "ts": 1794790513.349}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.6, "in": 1754, "out": 107, "cached": 1408, "ts": 1794790516.727}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.82, "in": 24146, "out": 98, "cached": 23808, "ts": 1794790542.369}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 3.11, "in": 28920, "out": 191, "cached": 24192, "ts": 1794790545.534}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.44, "in": 1764, "out": 105, "cached": 1280, "ts": 1794790549.23}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.51, "in": 29365, "out": 33, "cached": 28800, "ts": 1794790648.887}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.19, "in": 1742, "out": 109, "cached": 1408, "ts": 1794790650.425}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.87, "in": 24150, "out": 98, "cached": 23808, "ts": 1794790675.821}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.64, "in": 28924, "out": 147, "cached": 24192, "ts": 1794790678.52}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.9, "in": 1722, "out": 108, "cached": 1280, "ts": 1794790681.301}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.96, "in": 29324, "out": 50, "cached": 29056, "ts": 1794790777.02}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.55, "in": 1767, "out": 106, "cached": 1408, "ts": 1794790779.276}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.72, "in": 24151, "out": 25, "cached": 23808, "ts": 1794790801.017}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.89, "in": 1598, "out": 106, "cached": 1536, "ts": 1794790804.858}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.58, "in": 24428, "out": 29, "cached": 24064, "ts": 1794790901.29}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.5, "in": 1627, "out": 106, "cached": 1408, "ts": 1794790903.856}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.98, "in": 24148, "out": 26, "cached": 23808, "ts": 1794790930.043}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.75, "in": 1599, "out": 106, "cached": 1536, "ts": 1794790932.345}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.83, "in": 24424, "out": 44, "cached": 24064, "ts": 1794791031.908}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.64, "in": 1643, "out": 110, "cached": 1408, "ts": 1794791035.621}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.68, "in": 24148, "out": 108, "cached": 23808, "ts": 1794791066.678}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.16, "in": 28886, "out": 81, "cached": 24192, "ts": 1794791068.886}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.8, "in": 1654, "out": 106, "cached": 1536, "ts": 1794791072.815}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.45, "in": 29221, "out": 44, "cached": 28928, "ts": 1794791169.826}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.3, "in": 1697, "out": 51, "cached": 1408, "ts": 1794791174.183}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.07, "in": 24148, "out": 98, "cached": 23808, "ts": 1794791198.951}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.33, "in": 28886, "out": 195, "cached": 24192, "ts": 1794791201.331}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.27, "in": 29095, "out": 38, "cached": 29056, "ts": 1794791203.619}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.6, "in": 1611, "out": 103, "cached": 1536, "ts": 1794791206.438}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.67, "in": 29454, "out": 41, "cached": 29056, "ts": 1794791305.609}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.67, "in": 1652, "out": 111, "cached": 1408, "ts": 1794791308.5}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.38, "in": 24152, "out": 45, "cached": 23808, "ts": 1794791333.122}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.3, "in": 1618, "out": 106, "cached": 1536, "ts": 1794791335.071}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.65, "in": 24451, "out": 40, "cached": 24192, "ts": 1794791435.373}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.94, "in": 1658, "out": 114, "cached": 1408, "ts": 1794791438.635}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.07, "in": 24097, "out": 22, "cached": 23808, "ts": 1794791463.549}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.3, "in": 1556, "out": 116, "cached": 1408, "ts": 1794791466.159}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.69, "in": 24368, "out": 39, "cached": 24064, "ts": 1794791475.175}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.16, "in": 1246, "out": 13, "cached": 1152, "ts": 1794791477.125}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.86, "in": 1651, "out": 116, "cached": 1408, "ts": 1794791477.824}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.66, "in": 24647, "out": 31, "cached": 24320, "ts": 1794791486.424}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.17, "in": 1231, "out": 13, "cached": 1152, "ts": 1794791489.148}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.8, "in": 1650, "out": 173, "cached": 1408, "ts": 1794791489.776}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.68, "in": 24096, "out": 36, "cached": 23808, "ts": 1794791518.174}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.17, "in": 1570, "out": 116, "cached": 1408, "ts": 1794791520.729}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.44, "in": 24379, "out": 62, "cached": 24064, "ts": 1794791530.744}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.12, "in": 1269, "out": 13, "cached": 1152, "ts": 1794791535.548}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.15, "in": 1690, "out": 108, "cached": 1280, "ts": 1794791536.576}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.84, "in": 24682, "out": 52, "cached": 24320, "ts": 1794791545.908}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.32, "in": 1252, "out": 13, "cached": 1152, "ts": 1794791549.97}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.12, "in": 1694, "out": 170, "cached": 1408, "ts": 1794791550.764}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.92, "in": 24099, "out": 69, "cached": 23808, "ts": 1794791581.344}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.71, "in": 27156, "out": 96, "cached": 24064, "ts": 1794791583.069}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.87, "in": 28984, "out": 148, "cached": 27136, "ts": 1794791585.99}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.73, "in": 1682, "out": 108, "cached": 1408, "ts": 1794791591.047}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.61, "in": 29381, "out": 109, "cached": 29056, "ts": 1794791602.256}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.83, "in": 29508, "out": 34, "cached": 29440, "ts": 1794791604.103}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.22, "in": 1241, "out": 13, "cached": 1152, "ts": 1794791606.943}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.05, "in": 1746, "out": 108, "cached": 1280, "ts": 1794791607.771}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.03, "in": 29784, "out": 62, "cached": 29440, "ts": 1794791621.604}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 0.95, "in": 1262, "out": 13, "cached": 1152, "ts": 1794791623.422}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.17, "in": 1692, "out": 178, "cached": 1280, "ts": 1794791624.636}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.99, "in": 24101, "out": 55, "cached": 23808, "ts": 1794791652.896}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.63, "in": 1589, "out": 108, "cached": 1408, "ts": 1794791655.954}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.92, "in": 24404, "out": 31, "cached": 24064, "ts": 1794791666.809}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.14, "in": 1238, "out": 13, "cached": 1152, "ts": 1794791671.278}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.41, "in": 1676, "out": 111, "cached": 1408, "ts": 1794791671.549}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.85, "in": 24675, "out": 48, "cached": 24320, "ts": 1794791683.755}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.2, "in": 1248, "out": 13, "cached": 1152, "ts": 1794791688.964}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.23, "in": 1659, "out": 175, "cached": 1408, "ts": 1794791689.991}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.8, "in": 24101, "out": 32, "cached": 23808, "ts": 1794791714.858}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.67, "in": 1572, "out": 108, "cached": 1408, "ts": 1794791718.071}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.76, "in": 24379, "out": 33, "cached": 24064, "ts": 1794791728.744}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.12, "in": 1240, "out": 13, "cached": 1152, "ts": 1794791730.704}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.68, "in": 1655, "out": 115, "cached": 1408, "ts": 1794791731.26}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.8, "in": 24653, "out": 38, "cached": 24320, "ts": 1794791741.244}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 0.76, "in": 1238, "out": 13, "cached": 1152, "ts": 1794791743.103}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.84, "in": 1651, "out": 174, "cached": 1408, "ts": 1794791744.184}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.61, "in": 24098, "out": 67, "cached": 23808, "ts": 1794791774.905}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.34, "in": 1607, "out": 114, "cached": 1408, "ts": 1794791777.139}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.36, "in": 24410, "out": 18, "cached": 24064, "ts": 1794791786.78}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.14, "in": 1225, "out": 13, "cached": 1152, "ts": 1794791789.592}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.66, "in": 1680, "out": 108, "cached": 1280, "ts": 1794791790.109}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.73, "in": 24668, "out": 42, "cached": 24320, "ts": 1794791799.157}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 0.86, "in": 1242, "out": 13, "cached": 1152, "ts": 1794791801.315}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.29, "in": 1640, "out": 171, "cached": 1408, "ts": 1794791802.739}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.09, "in": 24100, "out": 113, "cached": 23808, "ts": 1794791826.752}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.01, "in": 28929, "out": 71, "cached": 24192, "ts": 1794791828.812}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.78, "in": 1611, "out": 112, "cached": 1408, "ts": 1794791834.217}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.75, "in": 29247, "out": 34, "cached": 28928, "ts": 1794791844.025}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.28, "in": 1241, "out": 13, "cached": 1152, "ts": 1794791846.918}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.95, "in": 1695, "out": 116, "cached": 1408, "ts": 1794791847.588}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.86, "in": 29523, "out": 39, "cached": 29184, "ts": 1794791860.97}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.17, "in": 1239, "out": 13, "cached": 1152, "ts": 1794791865.842}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.16, "in": 1654, "out": 167, "cached": 1408, "ts": 1794791866.825}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.95, "in": 24100, "out": 152, "cached": 23808, "ts": 1794791888.265}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.84, "in": 1662, "out": 108, "cached": 1408, "ts": 1794791890.525}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.86, "in": 24498, "out": 40, "cached": 24192, "ts": 1794791899.885}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.31, "in": 1248, "out": 13, "cached": 1152, "ts": 1794791901.865}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.64, "in": 1744, "out": 108, "cached": 1408, "ts": 1794791902.189}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.19, "in": 24783, "out": 37, "cached": 24448, "ts": 1794791912.683}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.12, "in": 1237, "out": 13, "cached": 1152, "ts": 1794791916.464}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.01, "in": 1658, "out": 171, "cached": 1408, "ts": 1794791917.346}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.59, "in": 24097, "out": 51, "cached": 23808, "ts": 1794791949.711}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.34, "in": 27136, "out": 104, "cached": 24064, "ts": 1794791952.064}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 3.79, "in": 29327, "out": 239, "cached": 27008, "ts": 1794791955.903}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.58, "in": 29580, "out": 17, "cached": 29440, "ts": 1794791957.499}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.75, "in": 1551, "out": 112, "cached": 1408, "ts": 1794791960.556}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.76, "in": 29841, "out": 116, "cached": 29568, "ts": 1794791970.921}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.06, "in": 29975, "out": 83, "cached": 29952, "ts": 1794791972.995}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.45, "in": 30204, "out": 150, "cached": 29952, "ts": 1794791975.457}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.49, "in": 30385, "out": 23, "cached": 30336, "ts": 1794791976.962}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.11, "in": 1230, "out": 13, "cached": 1152, "ts": 1794791978.598}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.7, "in": 1630, "out": 111, "cached": 1408, "ts": 1794791979.195}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.5, "in": 30651, "out": 177, "cached": 30336, "ts": 1794791990.391}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.53, "in": 30842, "out": 16, "cached": 30720, "ts": 1794791991.938}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.06, "in": 1216, "out": 13, "cached": 1152, "ts": 1794791994.605}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.31, "in": 1619, "out": 175, "cached": 1408, "ts": 1794791995.855}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.2, "in": 24101, "out": 57, "cached": 23808, "ts": 1794792024.497}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.76, "in": 1597, "out": 114, "cached": 1408, "ts": 1794792027.888}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.97, "in": 24406, "out": 41, "cached": 24064, "ts": 1794792039.039}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.32, "in": 1248, "out": 13, "cached": 1152, "ts": 1794792041.613}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.92, "in": 1691, "out": 114, "cached": 1408, "ts": 1794792042.211}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.88, "in": 24689, "out": 45, "cached": 24320, "ts": 1794792052.212}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 0.98, "in": 1245, "out": 13, "cached": 1152, "ts": 1794792054.788}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.18, "in": 1666, "out": 173, "cached": 1408, "ts": 1794792055.984}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.88, "in": 24094, "out": 100, "cached": 23680, "ts": 1794792088.864}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.15, "in": 27223, "out": 157, "cached": 24192, "ts": 1794792091.036}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.14, "in": 1613, "out": 77, "cached": 1152, "ts": 1794792094.145}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.39, "in": 27626, "out": 133, "cached": 27264, "ts": 1794792104.176}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.76, "in": 1296, "out": 13, "cached": 1024, "ts": 1794792106.129}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.45, "in": 1750, "out": 82, "cached": 1280, "ts": 1794792106.814}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.24, "in": 27999, "out": 101, "cached": 27648, "ts": 1794792116.55}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.66, "in": 1246, "out": 13, "cached": 1024, "ts": 1794792117.837}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.52, "in": 1719, "out": 129, "cached": 1152, "ts": 1794792118.691}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.25, "in": 24090, "out": 87, "cached": 23680, "ts": 1794792150.79}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.0, "in": 28815, "out": 102, "cached": 24064, "ts": 1794792152.846}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.25, "in": 1602, "out": 77, "cached": 1280, "ts": 1794792155.142}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.32, "in": 29162, "out": 84, "cached": 28800, "ts": 1794792164.944}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.68, "in": 29264, "out": 30, "cached": 29056, "ts": 1794792166.643}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.14, "in": 1238, "out": 13, "cached": 1024, "ts": 1794792168.477}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.3, "in": 1681, "out": 90, "cached": 1280, "ts": 1794792168.637}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.87, "in": 29534, "out": 35, "cached": 29184, "ts": 1794792179.373}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.7, "in": 1236, "out": 13, "cached": 1024, "ts": 1794792182.556}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.5, "in": 1647, "out": 127, "cached": 1280, "ts": 1794792183.358}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.23, "in": 24089, "out": 98, "cached": 23680, "ts": 1794792208.027}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.14, "in": 1588, "out": 77, "cached": 1280, "ts": 1794792209.59}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.99, "in": 24434, "out": 245, "cached": 24064, "ts": 1794792221.039}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.87, "in": 1296, "out": 13, "cached": 1152, "ts": 1794792222.088}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.08, "in": 1733, "out": 82, "cached": 1280, "ts": 1794792222.293}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.61, "in": 24915, "out": 130, "cached": 24576, "ts": 1794792233.791}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.78, "in": 1259, "out": 13, "cached": 1024, "ts": 1794792235.654}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.39, "in": 1732, "out": 136, "cached": 1280, "ts": 1794792236.267}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.49, "in": 24087, "out": 87, "cached": 23680, "ts": 1794792260.714}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.21, "in": 28812, "out": 126, "cached": 24064, "ts": 1794792262.98}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.42, "in": 1590, "out": 77, "cached": 1280, "ts": 1794792264.806}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.14, "in": 29184, "out": 85, "cached": 28928, "ts": 1794792273.749}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.69, "in": 29287, "out": 43, "cached": 29056, "ts": 1794792275.451}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.03, "in": 1251, "out": 13, "cached": 1024, "ts": 1794792277.169}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.12, "in": 1698, "out": 86, "cached": 1152, "ts": 1794792278.255}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.99, "in": 29569, "out": 53, "cached": 29312, "ts": 1794792288.765}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.09, "in": 1254, "out": 13, "cached": 1024, "ts": 1794792290.606}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.64, "in": 1678, "out": 133, "cached": 1280, "ts": 1794792291.158}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.46, "in": 24090, "out": 113, "cached": 23680, "ts": 1794792316.518}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.36, "in": 28919, "out": 127, "cached": 24192, "ts": 1794792318.934}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.52, "in": 1592, "out": 77, "cached": 1280, "ts": 1794792321.077}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.99, "in": 29295, "out": 130, "cached": 28928, "ts": 1794792331.641}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.31, "in": 29443, "out": 27, "cached": 29184, "ts": 1794792332.964}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.71, "in": 1235, "out": 13, "cached": 1024, "ts": 1794792335.085}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.3, "in": 1675, "out": 87, "cached": 1280, "ts": 1794792335.677}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.92, "in": 29709, "out": 79, "cached": 29440, "ts": 1794792346.048}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.56, "in": 1247, "out": 13, "cached": 1024, "ts": 1794792347.534}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.34, "in": 1654, "out": 133, "cached": 1280, "ts": 1794792348.312}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.64, "in": 24090, "out": 87, "cached": 23680, "ts": 1794792369.72}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.38, "in": 28815, "out": 76, "cached": 24064, "ts": 1794792371.156}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.15, "in": 1623, "out": 77, "cached": 1280, "ts": 1794792373.09}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.82, "in": 29138, "out": 86, "cached": 28800, "ts": 1794792382.939}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.83, "in": 29242, "out": 47, "cached": 29056, "ts": 1794792384.781}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.04, "in": 1255, "out": 13, "cached": 1024, "ts": 1794792386.19}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.05, "in": 1714, "out": 87, "cached": 1280, "ts": 1794792386.195}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.46, "in": 29529, "out": 45, "cached": 29184, "ts": 1794792395.884}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.15, "in": 1246, "out": 13, "cached": 1024, "ts": 1794792398.415}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.72, "in": 1674, "out": 133, "cached": 1280, "ts": 1794792398.981}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.29, "in": 24090, "out": 45, "cached": 23680, "ts": 1794792431.926}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.69, "in": 27123, "out": 68, "cached": 24064, "ts": 1794792433.639}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.98, "in": 28845, "out": 49, "cached": 27136, "ts": 1794792435.661}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.51, "in": 1590, "out": 77, "cached": 1280, "ts": 1794792437.844}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.57, "in": 29143, "out": 46, "cached": 28800, "ts": 1794792446.72}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.7, "in": 1254, "out": 13, "cached": 1024, "ts": 1794792447.812}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.27, "in": 1686, "out": 91, "cached": 1280, "ts": 1794792448.374}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.23, "in": 29429, "out": 33, "cached": 29184, "ts": 1794792456.693}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.08, "in": 1234, "out": 13, "cached": 1024, "ts": 1794792459.023}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.52, "in": 1661, "out": 134, "cached": 1280, "ts": 1794792459.46}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.34, "in": 24090, "out": 87, "cached": 23680, "ts": 1794792481.236}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.52, "in": 28815, "out": 62, "cached": 24064, "ts": 1794792482.806}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.17, "in": 1603, "out": 77, "cached": 1280, "ts": 1794792484.67}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.77, "in": 29125, "out": 41, "cached": 28800, "ts": 1794792496.15}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.89, "in": 1249, "out": 13, "cached": 1024, "ts": 1794792498.064}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.06, "in": 1694, "out": 81, "cached": 1280, "ts": 1794792498.232}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.76, "in": 29406, "out": 41, "cached": 29056, "ts": 1794792508.847}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.12, "in": 1242, "out": 13, "cached": 1024, "ts": 1794792510.881}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.36, "in": 1663, "out": 132, "cached": 1280, "ts": 1794792511.124}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.76, "in": 24091, "out": 123, "cached": 23680, "ts": 1794792536.34}
+{"event": "ok", "model": "deepseek-flash", "seconds": 2.07, "in": 28805, "out": 136, "cached": 24192, "ts": 1794792538.459}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.27, "in": 1617, "out": 77, "cached": 1280, "ts": 1794792540.569}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.97, "in": 29187, "out": 170, "cached": 28928, "ts": 1794792550.588}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.86, "in": 29371, "out": 31, "cached": 29184, "ts": 1794792552.459}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.88, "in": 1239, "out": 13, "cached": 1024, "ts": 1794792554.624}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.23, "in": 1698, "out": 88, "cached": 1280, "ts": 1794792554.973}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.78, "in": 29639, "out": 153, "cached": 29312, "ts": 1794792564.841}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.85, "in": 1284, "out": 13, "cached": 1024, "ts": 1794792569.266}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.35, "in": 1694, "out": 127, "cached": 1280, "ts": 1794792569.77}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.64, "in": 24088, "out": 96, "cached": 23680, "ts": 1794792594.54}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.64, "in": 29309, "out": 59, "cached": 24064, "ts": 1794792596.235}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.37, "in": 1594, "out": 77, "cached": 1280, "ts": 1794792598.497}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.68, "in": 29616, "out": 87, "cached": 29312, "ts": 1794792609.851}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.68, "in": 29721, "out": 41, "cached": 29568, "ts": 1794792611.544}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.03, "in": 1249, "out": 13, "cached": 1024, "ts": 1794792612.921}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.57, "in": 1691, "out": 90, "cached": 1280, "ts": 1794792613.459}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.77, "in": 30002, "out": 35, "cached": 29696, "ts": 1794792625.82}
+{"event": "ok", "model": "deepseek-flash", "seconds": 0.8, "in": 1236, "out": 13, "cached": 1024, "ts": 1794792627.059}
+{"event": "ok", "model": "deepseek-flash", "seconds": 1.52, "in": 1658, "out": 133, "cached": 1280, "ts": 1794792627.779}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.92, "in": 24644, "out": 90, "cached": 23808, "ts": 1794793064.541}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.66, "in": 28644, "out": 88, "cached": 24704, "ts": 1794793066.214}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.83, "in": 28802, "out": 94, "cached": 28672, "ts": 1794793068.056}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.76, "in": 28950, "out": 93, "cached": 28800, "ts": 1794793070.831}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 3.39, "in": 29077, "out": 188, "cached": 28928, "ts": 1794793074.231}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 3.77, "in": 30930, "out": 205, "cached": 29184, "ts": 1794793078.075}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.97, "in": 31171, "out": 195, "cached": 31104, "ts": 1794793081.052}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.72, "in": 31399, "out": 112, "cached": 31360, "ts": 1794793082.788}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.71, "in": 31542, "out": 173, "cached": 31488, "ts": 1794793085.516}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.08, "in": 31729, "out": 92, "cached": 31616, "ts": 1794793087.606}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.81, "in": 24644, "out": 90, "cached": 23808, "ts": 1794793125.514}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.59, "in": 28644, "out": 51, "cached": 24704, "ts": 1794793127.123}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.31, "in": 28736, "out": 50, "cached": 28672, "ts": 1794793128.449}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 5.6, "in": 28819, "out": 483, "cached": 28672, "ts": 1794793134.062}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 3.43, "in": 31242, "out": 211, "cached": 29184, "ts": 1794793137.537}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.91, "in": 31471, "out": 59, "cached": 31360, "ts": 1794793139.459}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 3.29, "in": 32636, "out": 250, "cached": 31488, "ts": 1794793143.05}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 3.24, "in": 32919, "out": 163, "cached": 32768, "ts": 1794793146.301}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.84, "in": 33118, "out": 176, "cached": 33024, "ts": 1794793149.153}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.6, "in": 33323, "out": 175, "cached": 33280, "ts": 1794793151.764}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.67, "in": 33512, "out": 43, "cached": 33408, "ts": 1794793153.442}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.39, "in": 33569, "out": 78, "cached": 33536, "ts": 1794793155.85}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.85, "in": 24644, "out": 90, "cached": 23808, "ts": 1794793248.503}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.3, "in": 28644, "out": 150, "cached": 24704, "ts": 1794793250.819}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 3.55, "in": 28878, "out": 241, "cached": 28672, "ts": 1794793254.385}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.22, "in": 29159, "out": 54, "cached": 29056, "ts": 1794793255.619}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.81, "in": 29230, "out": 204, "cached": 29184, "ts": 1794793258.438}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 4.05, "in": 31192, "out": 277, "cached": 29312, "ts": 1794793262.537}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.62, "in": 31505, "out": 176, "cached": 31360, "ts": 1794793265.174}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.24, "in": 31714, "out": 222, "cached": 31616, "ts": 1794793267.428}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 3.3, "in": 31967, "out": 182, "cached": 31872, "ts": 1794793270.745}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.17, "in": 32163, "out": 71, "cached": 32128, "ts": 1794793272.926}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.79, "in": 24644, "out": 90, "cached": 23808, "ts": 1794793363.812}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 1.81, "in": 28644, "out": 88, "cached": 24704, "ts": 1794793365.638}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 3.26, "in": 28802, "out": 163, "cached": 28672, "ts": 1794793368.911}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 2.25, "in": 28983, "out": 131, "cached": 28928, "ts": 1794793371.168}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 3.29, "in": 29167, "out": 197, "cached": 29056, "ts": 1794793374.469}
+{"event": "ok", "model": "deepseek-v4-pro", "seconds": 3.65, "in": 31131, "out": 242, "cached": 29312, "ts": 1794793378.172}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.81, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 2fb20d4d-3c3f-4231-880d-2a75526f5efc)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794793379.248}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: e0238594-444c-49bd-beb7-d834ac7be817)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794793424.886}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: be6dd0a3-f167-48c3-b9f8-e2858e58f8a5)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794793525.067}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.83, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 80e0a58f-9a79-4e1d-9cbc-a75e752903cf)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794793580.703}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.85, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: dfa1eb21-1038-402e-a417-f89dce025094)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794793641.919}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: ff7b3a7f-45ae-43bf-9099-2bcb939bdf09)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794793700.709}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.83, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: e78c0492-17ff-477c-9425-c1f3e852d33f)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794793764.606}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.81, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: e49b0ddf-cfb7-4b1a-9a53-3a20e7a1e8c5)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794793826.234}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.86, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 064b124f-3a6c-4fc2-b056-96fb1d12bbf1)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794793885.459}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.81, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: baa565b3-e64f-48c7-89cc-8472a6815eb6)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794793945.137}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.81, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: c3e2c412-b73a-45b1-917f-640c99e6a520)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794005.939}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.83, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 3cb06c79-b062-44d6-8fda-ca88ab5fa53d)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794064.397}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.79, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: d07faf89-6562-4c7b-9cbb-2357b73a9ecd)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794162.039}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.83, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 689833a8-7800-4578-ad97-4841e5d825fd)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794221.572}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.8, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: b30b2f5e-bd6b-4f82-a36e-6a4294784603)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794277.83}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.8, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 64608087-9b92-47d2-9f64-edd8a30514b7)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794339.745}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.84, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: ac5e1104-d3b7-4dd1-96cc-672b4dd2a702)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794400.977}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.81, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 2beb6d2d-e69f-4b29-add5-502425c75e8c)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794441.098}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 40712f31-470e-45d9-811a-82c646bb88a8)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794452.517}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.91, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: f7a44994-3873-47dd-9477-acacb2f2d95a)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794464.185}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.83, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 8193c034-c849-4162-9067-9b076680f97d)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794477.158}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.79, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 0fcc0669-48cb-4e49-a52f-2f1cca84e8a3)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794487.54}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.84, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 6d7252be-e129-48d9-875b-d097a57104e8)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794498.791}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.8, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: b6cfc0ba-bd23-4227-8c2b-19a64d5aad93)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794510.487}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.87, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: ac3db62f-87c4-4f32-b566-a4f95c86e50b)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794521.523}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.84, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 455d0c3f-7a76-4a3a-9666-e8d8e33ad21e)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794534.605}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.78, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 406d838e-f4e1-4e07-83c0-5f1d3b5df8e5)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794547.654}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.84, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 9e0f77b0-be85-4e80-adf6-05322210bb56)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794560.521}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.81, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: e3bd2688-7e8a-4233-800a-c2724630a7c8)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794574.925}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.81, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 02e6fb56-219e-4061-9409-7e3ab798406f)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794673.528}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: eae77fb5-196d-4d30-8563-1d8f5d28cc6c)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794686.197}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: e17d7e7f-cb63-48f5-9cfe-7cd25529b746)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794696.822}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.8, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 4aeffbdb-7de2-4171-94fd-313fcc907aab)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794709.023}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.89, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: d0fa4126-9cb6-44e2-81cd-031b8ba167f5)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794724.486}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 8feeddcb-ba7d-46e4-b16a-df7dc3e290d2)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794736.629}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.81, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: f166884e-2bf1-45c5-8a12-921aa5154e26)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794747.66}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 462edd9c-65b9-47e5-ad81-c53719388329)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794758.13}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.79, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: e252965d-e6d9-447b-bc71-7cba82c7da98)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794769.887}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.81, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: a32d526e-ad9f-4d28-a851-9eaba794bd2b)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794780.776}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.79, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: b5eb84a3-2c97-41a4-a118-4209954bf9fa)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794791.212}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 1754df68-2f0c-44e4-b05b-c6c865fb8e55)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794802.172}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.81, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: c39086fd-f3a9-4361-b9ca-3aa128f5fea3)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794816.552}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.88, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 5bbe890f-a2a6-4b1f-9a26-5435beaecd81)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794831.04}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.93, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: a54347f9-cdc9-4013-b3c3-f15063dc58b1)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794847.073}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.88, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 7c188bec-17a5-40c8-a245-c91c79c9b52c)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794860.645}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.81, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 0c5433ce-d8e0-487e-9807-8ba993b759d5)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794872.572}
+{"event": "fail", "model": "deepseek-v4-pro", "seconds": 0.83, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 6eb54280-266f-4408-ac6a-509f67f1e805)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794883.643}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.91, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 43a1d1d4-b31f-4efb-b79a-f6751c8a53c6)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794919.236}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 4db4626f-a558-453d-877c-d45192e76233)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794931.043}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: b7239578-4b92-4d13-8741-57ecf66948c3)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794941.741}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.81, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: d8043866-da12-40b2-881d-33d41ab45c01)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794953.891}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.81, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 59bed763-f4d8-4a7d-9918-2079a3f67e6d)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794970.36}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 31a6eb2f-a252-4f11-92be-28a483c08cca)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794987.015}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.83, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 4742d104-109d-4f2e-8c53-318e49d8489f)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794794997.829}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: bfbf1c5d-1990-46c5-bc5d-51b184fc9a14)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795011.721}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: d5fafd37-f6f0-49bb-9c5a-437476a7f3fe)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795023.135}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.84, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 469c170f-7290-4ea0-b8ff-3ac99bdc6cbd)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795034.881}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.83, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 9dd73546-47b2-424d-8180-8a8b631c2aa6)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795046.45}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 701449ee-91ed-4fe8-be06-073b9d71994b)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795056.937}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.59, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 1f6b912a-c413-4d7b-9c0c-e715206ede82)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795151.907}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.87, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 12a4caf3-28e5-47fb-8872-c67b8661f63c)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795163.314}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.84, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: ceb0c851-13d6-4427-98de-e373e5ead7f9)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795173.726}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.83, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: aa0bf594-6271-49a9-9216-ee4e3bc05d04)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795184.553}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.89, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: ef5dde17-c555-4b67-87cb-370f74b021fd)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795196.061}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.86, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 9e817613-72e8-4db5-add2-61eb45b6c767)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795208.114}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.84, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 1bdb3710-261a-4867-8260-4f07d4cbd3f0)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795221.425}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.89, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 7ebda3f5-ed40-44a9-af3d-9f6b96c7ae64)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795234.256}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.83, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: c7a3fd87-114b-41b4-8d18-76136a26dcae)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795247.389}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.82, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 69e2e9fb-9342-4725-afbe-1e8f957cf8d9)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795258.956}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.87, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: ba28470f-9a01-40c3-9683-202c077ec267)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795269.154}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.83, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: dd7cdba7-37e4-4302-bd78-12b7b6c0da0a)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795279.738}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.81, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: e7d2bd06-0329-4071-859c-4ed149f9ae84)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795291.141}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.57, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 94fd5d04-db35-4a17-ae45-947c5007bb95)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795301.148}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.79, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 3dd5659d-419f-4b42-9cd7-eef9ff3ad920)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795312.609}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.85, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 633e5f8f-8df9-4f4e-b159-9c194795a691)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795323.293}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.8, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 3eb1151f-cf2b-4578-b236-f9bad03986a7)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795334.253}
+{"event": "fail", "model": "deepseek-flash", "seconds": 0.83, "status": 402, "error": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance (request_id: 5ffd9e9f-1e89-4464-83ac-962d09e84f1f)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}}", "ts": 1794795345.387}

@@ -1,9 +1,10 @@
 import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 import type { ChildProcess } from 'child_process';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { DockerToolHost } from './tool-host.js';
+import { DockerToolHost, TOOL_HOST_READY_TIMEOUT_MS, scrubOutput, toolHostReadyTimeoutMs } from './tool-host.js';
+import type { VoiceLog } from './types.js';
 
 /** A child process whose stdio the test drives: what the host writes is read from `written`, the container's lines are pushed. */
 function fakeChild() {
@@ -221,5 +222,175 @@ describe('the docker tool host', () => {
     expect(child.written.at(-1)).toMatchObject({ control: 'new-call' });
     await th.close();
     th.refresh(); // closed: nothing is written, nothing throws
+  });
+});
+
+/** A log that keeps what it is told, by level. */
+function recorder() {
+  const lines: Array<{ level: string; obj: Record<string, unknown>; msg?: string }> = [];
+  const log: VoiceLog = {
+    debug: () => undefined,
+    info: (obj, msg) => void lines.push({ level: 'info', obj, msg }),
+    warn: (obj, msg) => void lines.push({ level: 'warn', obj, msg }),
+    error: (obj, msg) => void lines.push({ level: 'error', obj, msg }),
+  };
+  return { lines, log };
+}
+
+describe('the docker tool host: how long a start gets, and what it says when it does not work out', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // setImmediate stays real: the fake child's streams and its exit use it
+  const fakeClock = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const settleStreams = async () => {
+    await vi.advanceTimersByTimeAsync(0);
+    await new Promise((r) => setImmediate(r));
+    await vi.advanceTimersByTimeAsync(0);
+  };
+  const hostOf = (child: ReturnType<typeof fakeChild>, name: string, removed: string[], opts: { readyTimeoutMs?: number; log?: VoiceLog } = {}) =>
+    new DockerToolHost({
+      spawn: async () => ({ process: child.proc as unknown as ChildProcess, containerName: name }),
+      remove: async (n) => void removed.push(n),
+      exitWaitMs: 200,
+      ...opts,
+    });
+
+  it('gives a container the time its own start and its wait for its servers take: ready at 35 s is a ready host (30 s used to close it)', async () => {
+    fakeClock();
+    const child = fakeChild();
+    const removed: string[] = [];
+    const { lines, log } = recorder();
+    const th = hostOf(child, 'tailive-voice-s_x-1', removed, { log });
+    let outcome = 'pending';
+    const starting = th.start().then(
+      () => (outcome = 'ready'),
+      (err: Error) => (outcome = `failed: ${err.message}`),
+    );
+    await settleStreams();
+    await vi.advanceTimersByTimeAsync(35_000); // 8 s of docker start, the 20 s a server stalled, the 3.5 s to close it, and the rest
+    expect(outcome).toBe('pending');
+    expect(removed).toEqual([]);
+    child.say('@@TOOLHOST ready@@');
+    await settleStreams();
+    await starting;
+    expect(outcome).toBe('ready');
+    expect(th.alive).toBe(true);
+    expect(removed).toEqual([]);
+    await vi.advanceTimersByTimeAsync(400);
+    // one line for how long the container took from the start (the call's own line cannot say it for a host started ahead of the call)
+    const ready = lines.find((l) => l.msg === 'voice tool host: container ready');
+    expect(ready?.obj).toMatchObject({ container: 'tailive-voice-s_x-1', ms: 35_000 });
+  });
+
+  it('gives up at the budget (60 s by default), closes the container, and says what it had printed: the server that stalled', async () => {
+    fakeClock();
+    expect(TOOL_HOST_READY_TIMEOUT_MS).toBe(60_000);
+    const child = fakeChild();
+    const removed: string[] = [];
+    const th = hostOf(child, 'tailive-voice-s_x-2', removed);
+    let outcome = 'pending';
+    const starting = th.start().then(
+      () => (outcome = 'ready'),
+      (err: Error) => (outcome = err.message),
+    );
+    await settleStreams();
+    child.proc.stderr.write('[agent-runner] Tool host for group: s_x\n[agent-runner] LeanRAG registered: /workspace/leanrag/graph.pkl\n');
+    child.proc.stderr.write('[mcp-stdio] GITHUB_TOKEN: set, key sk-abcdefghijklmnopqrstuvwxyz0123456789ABCD\n');
+    await settleStreams();
+    await vi.advanceTimersByTimeAsync(59_900);
+    expect(outcome).toBe('pending');
+    await vi.advanceTimersByTimeAsync(200);
+    await starting;
+    expect(outcome).toMatch(/^the tool host was not ready in time \(60 s\)/);
+    expect(outcome).toContain('Tool host for group: s_x');
+    expect(outcome).toContain('LeanRAG registered');
+    expect(outcome).not.toContain('sk-abcdefghijklmnopqrstuvwxyz0123456789ABCD'); // nothing that looks like a credential reaches a log line
+    expect(outcome).toContain('<redacted>');
+    await vi.advanceTimersByTimeAsync(300);
+    expect(removed).toEqual(['tailive-voice-s_x-2']);
+    expect(th.alive).toBe(false);
+  });
+
+  it('says so when the container printed nothing at all, and when it exits before it is ready', async () => {
+    fakeClock();
+    const silent = fakeChild();
+    const t1 = hostOf(silent, 'tailive-voice-s_x-3', [], { readyTimeoutMs: 15_000 });
+    let silentOutcome = '';
+    const s1 = t1.start().catch((err: Error) => void (silentOutcome = err.message));
+    await settleStreams();
+    await vi.advanceTimersByTimeAsync(15_001);
+    await s1;
+    expect(silentOutcome).toMatch(/not ready in time \(15 s\) \(the container printed nothing\)/);
+
+    const dying = fakeChild();
+    const t2 = hostOf(dying, 'tailive-voice-s_x-4', []);
+    let dyingOutcome = '';
+    const s2 = t2.start().catch((err: Error) => void (dyingOutcome = err.message));
+    await settleStreams();
+    dying.proc.stderr.write('Error: Cannot find module /app/dist/tool-host.js\n');
+    await settleStreams();
+    dying.proc.emit('exit', 1);
+    await s2;
+    expect(dyingOutcome).toMatch(/exited \(1\) before it was ready/);
+    expect(dyingOutcome).toContain('Cannot find module');
+  });
+
+  it('warns when the container says ready but one of its servers did not come up (it waited 20 s for it and went on without): the call has no course knowledge, and nothing else says so', async () => {
+    fakeClock();
+    const child = fakeChild();
+    const { lines, log } = recorder();
+    const th = hostOf(child, 'tailive-voice-s_x-5', [], { log });
+    const starting = th.start();
+    await settleStreams();
+    await vi.advanceTimersByTimeAsync(26_000);
+    // the container printed its reason before its ready line; stdout and stderr are two pipes, so the ready line may come first
+    child.say('@@TOOLHOST ready@@');
+    await settleStreams();
+    child.proc.stderr.write('[agent-runner] MCP server leanrag did not start: leanrag did not start within 20 s\n[agent-runner] Tool host ready: nanoclaw\n');
+    await settleStreams();
+    await starting;
+    expect(th.alive).toBe(true);
+    await vi.advanceTimersByTimeAsync(400);
+    const warned = lines.filter((l) => l.level === 'warn');
+    expect(warned).toHaveLength(1);
+    expect(warned[0].msg).toBe('voice tool host: ready, but a server of its did not start');
+    expect(warned[0].obj).toMatchObject({ container: 'tailive-voice-s_x-5', ms: 26_000 });
+    expect(String((warned[0].obj.output as string[])[0])).toContain('MCP server leanrag did not start');
+    expect(lines.some((l) => l.msg === 'voice tool host: container ready')).toBe(false);
+  });
+
+  it('keeps what the container printed while it started, and nothing it prints for its calls once ready has been looked at (that is what the student asked)', async () => {
+    fakeClock();
+    const child = fakeChild();
+    const th = hostOf(child, 'tailive-voice-s_x-6', []);
+    const starting = th.start();
+    await settleStreams();
+    child.proc.stderr.write('[agent-runner] Tool host for group: s_x\n');
+    child.say('@@TOOLHOST ready@@');
+    await settleStreams();
+    await starting;
+    await vi.advanceTimersByTimeAsync(400);
+    child.proc.stderr.write("query_knowledge: question='how does raft elect a leader' difficulty=auto\n");
+    await settleStreams();
+    const kept = (th as unknown as { recent: string[] }).recent;
+    expect(kept).toEqual(['[agent-runner] Tool host for group: s_x']);
+  });
+
+  it('reads TAI_VOICE_TOOLHOST_READY_SEC: 10 to 300 s, anything else is the default', () => {
+    expect(toolHostReadyTimeoutMs({})).toBe(60_000);
+    expect(toolHostReadyTimeoutMs({ TAI_VOICE_TOOLHOST_READY_SEC: '' })).toBe(60_000);
+    expect(toolHostReadyTimeoutMs({ TAI_VOICE_TOOLHOST_READY_SEC: '90' })).toBe(90_000);
+    expect(toolHostReadyTimeoutMs({ TAI_VOICE_TOOLHOST_READY_SEC: '10' })).toBe(10_000);
+    expect(toolHostReadyTimeoutMs({ TAI_VOICE_TOOLHOST_READY_SEC: '300' })).toBe(300_000);
+    for (const bad of ['9', '301', '0', '-5', 'abc', 'NaN', 'Infinity']) expect(toolHostReadyTimeoutMs({ TAI_VOICE_TOOLHOST_READY_SEC: bad })).toBe(60_000);
+  });
+
+  it('blanks what looks like a credential and cuts a line short, whatever a container printed', () => {
+    expect(scrubOutput('  Authorization: Bearer abcdefghijklmnopqrstuvwxyzABCDEF0123456789  ')).toBe('Authorization: Bearer <redacted>');
+    expect(scrubOutput('MCP server leanrag did not start: leanrag did not start within 20 s')).toBe('MCP server leanrag did not start: leanrag did not start within 20 s');
+    expect(scrubOutput('x '.repeat(300)).length).toBeLessThanOrEqual(200);
+    expect(scrubOutput('a\n  b\t c')).toBe('a b c');
   });
 });

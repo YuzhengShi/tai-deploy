@@ -66,7 +66,7 @@ import { deleteWorkFact, listWorkFacts, upsertWorkFact } from './memory.js';
 import { takeSendFlag } from './intervention-log.js';
 import { seedCourseSync } from './course-sync.js';
 import { chatFromPortal, createVoiceHub } from './voice/hub.js';
-import { DockerToolHost } from './voice/tool-host.js';
+import { DockerToolHost, toolHostReadyTimeoutMs } from './voice/tool-host.js';
 import { startCourseStatusJob } from './course-status.js';
 import { courseUpdates, type CourseUpdate } from './course-updates.js';
 import { startStudentCourseJob } from './student-course.js';
@@ -951,6 +951,8 @@ async function main(): Promise<void> {
           spawnToolHost: (folder) =>
             new DockerToolHost({
               log: logger,
+              // the container's start and its wait for its servers fit in this (src/voice/tool-host.ts TOOL_HOST_READY_TIMEOUT_MS; TAI_VOICE_TOOLHOST_READY_SEC)
+              readyTimeoutMs: toolHostReadyTimeoutMs(process.env),
               spawn: async () => {
                 const entry = Object.entries(registeredGroups).find(([, g]) => g.folder === folder);
                 if (!entry) throw new Error(`no registered group for ${folder}`);

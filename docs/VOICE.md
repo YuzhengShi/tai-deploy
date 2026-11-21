@@ -256,7 +256,7 @@ started is not retried and the functions say "not available right now".
 
 ```ts
 export interface ToolHost {
-  start(): Promise<void>;                                  // resolves at "ready"; rejects on "failed", an exit, or 30 s
+  start(): Promise<void>;                                  // resolves at "ready"; rejects on "failed", an exit, or 60 s (TAI_VOICE_TOOLHOST_READY_SEC; "A tool host that is slow to come up")
   call(tool: string, args: Record<string, unknown>, opts?: { server?: string; timeoutMs?: number }): Promise<{ ok: boolean; text: string }>;
   builtin(name: 'web_fetch' | 'read_file', args: Record<string, unknown>): Promise<{ ok: boolean; text: string }>;
   close(): Promise<void>;
@@ -689,6 +689,40 @@ see a tool host: a warm host cannot take a chat's slot, and the voice side's wor
 whatever warm does. Keeping the machine's last slot for a chat is for the orchestrator to say through `VoiceDeps.spareContainer` (a getter on the queue and one
 line in `src/index.ts`): **not wired**, so today only the voice side's own limits apply.
 
+### A tool host that is slow to come up (2026-11-15)
+
+**What was seen.** 6 of the 50 calls on the voice lab's route (`?voice=lab`; 2026-11-14 07:21 to 2026-11-15 08:00 UTC) logged `voice tool host did not start` ("the tool host was not ready in
+time", 30 s after the container was spawned) and went on without tools: no `look_at_week`, `evaluate_answer`, `look_at_image`, no course knowledge. None of the other 50 calls did.
+
+**Cause: three things in our code multiplied.**
+1. The container says READY only when every MCP server has connected or given up (`runToolHost`, a `Promise.all`), gives a server 20 s (`connectTimeoutMs`) and up to 3.5 s more to close one
+   that did not answer. A tool host starts two: nanoclaw (Node, required) and leanrag (Python, the course knowledge, mounted from `leanrag/`, optional).
+2. leanrag's Python imports 1128 files (35 MB) at start, 47 % of them for the numpy, networkx and boto3 that `leanrag/query.py` imports at the top and the BM25 stand-in never uses. With those files in
+   the page cache the server answers `initialize` 1.2 s after it starts (by hand, in a throwaway container); out of it, on this host's disk (`vda`, `await` 20 to 50 ms a read), it does not answer in 20 s.
+3. The host gave the whole start 30 s, and `docker run` alone took 4.7 to 17.7 s to reach the network join (21 tool hosts; 3.7 to 16 s for 50 text agents). A stalled server means READY at about
+   join + 22 s, which is 27 to 40 s after the spawn: each failed call closed a container 0.3 to 9.5 s from READY (the seventh stalled start, with an early join, was READY at 26.9 s and had no course knowledge).
+
+**Why the cache was cold** (`sar` and the journal of the host; not proven by evicting it on purpose). The page cache fell from 7.6 GB to 2.0 GB between 04:50 and 05:00 UTC on 11-14 (cause not in any log); the
+first two failures, 07:21 and 07:30, are the first fresh tool hosts after that (only `status` containers and two ad hoc docker runs started in between). From 22:50 UTC on 11-14 the local voice container (docs/LOCAL_VOICE.md) leaves 0.2 to 1 GB
+of memory free and the kernel reclaims pages in bursts (`sar -B` pgscank, 865 pages/s at 04:00 UTC on 11-15); the libraries are read only when a container starts, so they go first. The four later failures
+(22:58, 00:01, 05:09, 08:00) and the slow start at 23:46 are in that time. A throwaway container (no mount but `leanrag/`, no network, no secrets) reproduced it twice in a row (`MCP server leanrag did not start:
+leanrag did not start within 20 s`, READY at 28.7 and 28.4 s, 1.1 and 1.4 s of CPU: waiting, not computing, as in the failed calls' systemd records), and not in the eight runs after one that read the libraries to the end
+(READY at 6.3 to 9.7 s, the container's own start being most of that).
+
+**Live calls.** The same pool, image, container and servers: they can be hit, and the first seconds of a student's call would lose their look-ups the same way. None was seen because there were 4 fresh live starts in
+that time against 10 on the lab route (7 stalled: p of about 0.04 for the routes being different, too few live starts to say; nothing in the lab's code touches the tool host differently: both go through `acquire()`).
+
+**Changed (the host only, no image rebuild).** The container gets 60 s to say READY (`TOOL_HOST_READY_TIMEOUT_MS`; `TAI_VOICE_TOOLHOST_READY_SEC`, 10 to 300): a start that is slow now ends as a ready host and stays in the
+pool for the next call. The error of a start that did not work out carries the container's last output (scrubbed: nothing that looks like a credential; "the container printed nothing" when it did not). One INFO line per
+container, `voice tool host: container ready`, with `ms` from the spawn (the call's own `voice tool host ready` is from the call's start and says less for a host started ahead of it). A WARN when the container says ready with a
+server missing, `voice tool host: ready, but a server of its did not start` (the call has its tools and no course knowledge). A function still waits at most `toolHostWaitMs` (30 s) for the host and is told "not available right
+now" after that; a later one finds the host ready.
+
+**Not changed, for the owner to decide.** (a) The container says READY after the required server only and starts the optional ones in the background (a call to one waits for it): saves the 20 s and the 3.5 s in every
+stalled start; needs an image rebuild (`container/agent-runner/src/tool-host.ts`). (b) The numpy, networkx and boto3 imports of `leanrag/query.py` inside the functions that use them: halves what a cold start reads, and
+ships with the normal deploy (the directory is mounted), but the file on the host is the one from before the LeanRAG work, not this branch's. (c) The cause of the cold cache: the local voice container's memory against the
+host's 12 GB.
+
 **Voice pace (2026-11-06; why the interviewer's voice changed).** The owner, after a real mock interview: "in interview mode the voice comes much slower than the text". The call's journal and
 history said the server was not slow (an interviewer turn took 1.3 to 1.9 s from the end of the student's words to the first sound, the text of a turn reached the page within 0.05 s
 of its first audio). What differed was the voice: a synthetic call through the live portal gave 2.7 words a second for `flux-miles-en` (the interviewer) against 3.5 for
@@ -747,6 +781,7 @@ not parse falls back to its default with a warning):
 | `TAI_VOICE_TALK_MAX_MIN` | 15 | longest talk-it-through inside a call (wrap-up prompt a minute before) |
 | `TAI_VOICE_TALK_MODEL` | `qwen` | the model of a talk-it-through (relay `modelFor`; every other mode keeps `TAI_VOICE_MODEL`). On the batch-1 probes (the listener's seven scenarios, three runs each): qwen answered a student who stopped mid-thought with "mm-hm." six times out of six and named what was right in its feedback; gpt-oss wrote a script of nudges and feedback in one answer ("mm-hm....go on....right...."), answered the student's own question in the middle of their explanation, and wrote a "[System note]" of its own. The gateway falls back to gpt-oss when qwen's share of the tokens is used up. Set it to the voice model's name to turn the difference off. |
 | `TAI_VOICE_TOOLHOST_KEEP_SEC` / `TAI_VOICE_TOOLHOST_KEEP_MAX` | 600 / 3 | a student's tool host stays up this long after their call for their next one (0: closed with the call, as before), and at most this many idle ones at once |
+| `TAI_VOICE_TOOLHOST_READY_SEC` | 60 | how long a tool host's container gets to say ready (10 to 300; anything else is 60). The start has to hold docker's (up to 18 s here) and the container's wait for its servers (20 s each, 3.5 s to close one): "A tool host that is slow to come up" |
 | `TAI_VOICE_WARM_COURSE` | on | `0`: the call does not ask Canvas for the course's files, modules, pages and assignments when its tool host is up (the first search of the slides then waits for them, 6.8 s in a real call). The pre-written "one sec" after 1.5 s of a look-up and "still looking" 5 s later are not settings (`VoiceTiming.fillerAfterMs`, `stillLookingMs`). |
 | `TAI_VOICE_ASYNC_AFTER_MS` | 0 (off) | a look-up that has run this long (ms) is answered for now and its result follows as a note while the conversation goes on ("A look-up that runs long"). **To try it: `tai_live.sh set TAI_VOICE_ASYNC_AFTER_MS=4000`, then `restart`; to turn it off again: `=0` and `restart`** (the default and the behaviour until set are unchanged: the function holds the call as before). What a trial listens for is in "A look-up that runs long" |
 | `TAI_VOICE_VOICE_CHAT` / `TAI_VOICE_VOICE_INTERVIEW` | `flux-hannah-en` / `aura-2-mars-en` | The conversation's voice is a Flux TTS voice (v2 speak; refused, it falls back to `aura-2-thalia-en`). The interviewer's is an Aura one since 2026-11-06: `flux-miles-en`, its voice before, wandered in pace by a factor of two from run to run ("Voice pace", below); `TAI_VOICE_VOICE_INTERVIEW=flux-miles-en` brings it back. A talk-it-through uses the chat voice |

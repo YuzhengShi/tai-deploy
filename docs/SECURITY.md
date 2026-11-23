@@ -219,6 +219,7 @@ chain leads to it**, so it is only ever a deliberate choice (`SETTINGS.md`, "Dee
 (`gateway.env` only); the aliases `glm` and `glm-vision` (GLM-5.3-Flash at z.ai's own endpoint, in another jurisdiction) are in no fallback chain either, and `glm-vision` is what reads a
 student's picture when `TAI_VISION=1` (`VISION.md`): that picture goes to z.ai and nowhere else. The key is a GLM Coding Plan key, and z.ai's own terms limit that plan to supported coding
 tools; the owner decided on 2026-11-05 that this key may serve students. It rests on that decision, not on anything z.ai said: a pay-per-token key typed with `tai_credentials.sh zai` would replace it with no code change.
+Since 2026-11-23 06:39 UTC, the live service's chats, calls, patrols and writers all use `glm`. Students' words therefore go to z.ai (Zhipu AI's international API), and `deepseek` is unused (`SETTINGS.md`, "GLM").
 A key typed or pasted anywhere but that hidden prompt (a chat, a command line) is to be revoked and replaced.
 
 ### 6. Tool Guards (PreToolUse hooks)

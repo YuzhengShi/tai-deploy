@@ -100,7 +100,7 @@ such alias, and an empty balance answers 402 to every turn: the key being there 
 | --- | --- | --- |
 | `DEEPSEEK_API_KEY` | gateway (`gateway.env`) | Typed hidden by `tai_credentials.sh deepseek` and checked with two read-only requests (the balance, and that `deepseek-flash` is in the model list). It goes to `~/tai-live/gateway.env` only, as `KEY=value` with no quotes (docker's `--env-file` keeps quotes as part of the value), and never to `credentials.env`, TAi's `.env` or a container. The gateway reads it when it is created again (`tai_live.sh gateway`, or a deploy that changes the gateway), which cuts a call that is running. Without it the gateway starts and a request for `deepseek` fails. |
 | `ZAI_API_KEY` | gateway (`gateway.env`) | Typed hidden by `tai_credentials.sh zai` and checked with one tiny request to z.ai's Coding Plan endpoint (`glm-5.3-flash`, thinking off: a handful of tokens). It is stored exactly like DeepSeek's (`~/tai-live/gateway.env` only, `KEY=value` with no quotes, never in `credentials.env`, TAi's `.env` or a container) and read when the gateway is created again (`tai_live.sh gateway`, which cuts a call that is running). Without it the gateway starts and a request for `glm` or `glm-vision` fails with 401; `tai_live.sh status` shows whether it is stored and `tai_live.sh models glm glm-vision` whether the running gateway answers for it. The aliases are in no fallback chain, and `glm-vision` is what reads a picture when `TAI_VISION=1` (`VISION.md`). It is a GLM Coding Plan key; the owner decided on 2026-11-05 that it may serve students (`SECURITY.md`). |
-| `thinking: {type: disabled}` (`glm`, `glm-vision`) | `eval/litellm/config.yaml` | z.ai's docs say GLM-5.3-Flash always thinks, but this field switches it off (measured 2026-11-05 on the owner's key: 57-86 output tokens in 2.2-2.8 s for a Nora voice question, against 130-260 tokens in 3.6-5.5 s with thinking on). LiteLLM's `anthropic/` provider drops it (it is Anthropic's default, so it sends nothing), which is why these two aliases use `openai/glm-5.3-flash` at `https://api.z.ai/api/coding/paas/v4`, where the field goes out unchanged in `extra_body`. |
+| `thinking: {type: disabled}` (`glm`, `glm-vision`) | `eval/litellm/config.yaml` | z.ai's docs say GLM-5.3-Flash always thinks, but this field switches it off (measured 2026-11-05 on the owner's key: 57-86 output tokens in 2.2-2.8 s for a Nora voice question, against 130-260 tokens in 3.6-5.5 s with thinking on). LiteLLM's `anthropic/` provider drops it (it is Anthropic's default, so it sends nothing), which is why these two aliases call the OpenAI-compatible `https://api.z.ai/api/coding/paas/v4`, where the field goes out unchanged in `extra_body`: `glm` through LiteLLM's `zai/` provider (since 2026-11-23: under `openai/` the Anthropic route the text agent uses went to a Responses endpoint z.ai does not have), `glm-vision` through `openai/` (it is read through chat completions only). |
 | `thinking: {type: disabled}` (`deepseek`) | `eval/litellm/config.yaml` | Thinking is on by default at DeepSeek, and with `tools` every later request must send the earlier `reasoning_content` back or the API answers 400; the agent and the voice relay always send tools. `extra_body` reaches DeepSeek unchanged (no `drop_params`), so nothing else is put in it. Checked offline against the real LiteLLM in the gateway image: the field is in every request, tool round trips included. |
 
 **Everything that names a Cerebras model** (a path left out keeps failing for as long as Cerebras does): `tai_live.sh model deepseek` is the chats and the scheduled tasks; the
@@ -114,6 +114,37 @@ it); `models` and the offline capture use fresh conversations only. Run `tai_liv
 
 DeepSeek answers 402 when its balance is empty (the same trap Cerebras set on 2026-11-04): `tai_live.sh check` reports a model that answers 402 by name. Under load it can
 hold a request for up to ten minutes (keep-alive lines): the voice relay gives up on a model request after 60 s (`relay.ts`), the text agent after 120 s (pi).
+
+## GLM: the live model since 2026-11-23
+
+**Since 2026-11-23 06:39:11 UTC, every model setting of the live service that said `deepseek` says `glm`.** `glm` is GLM-5.3-Flash, Zhipu AI's model, called through
+z.ai's international API at `https://api.z.ai/api/coding/paas/v4` (the GLM Coding Plan endpoint), with thinking off. The settings it replaced:
+- `tai_live.sh model glm` sets every model name in `base.env`: the chats, and the scheduled tasks with the patrol. The student-model and state writers follow
+  the chats' model.
+- `tai_live.sh set TAI_VOICE_MODEL=glm TAI_VOICE_TALK_MODEL=glm TAI_VOICE_EVAL_MODEL=glm TAI_CHOICES_CHECK_MODELS=glm`, then `restart`.
+
+Why: DeepSeek had answered 402 (an empty balance) to every request since 2026-11-16, so chats, calls and patrols had all failed. The owner chose GLM on 2026-11-23.
+
+The release that went with it is e748905:
+- The `glm` alias moved to LiteLLM's `zai/` provider. Under `openai/`, the Anthropic route the text agent uses went to a Responses endpoint that z.ai does not have
+  (HTTP 404). The voice relay's chat completions worked either way.
+- `tai_live.sh model glm` refuses unless the running gateway answers for `glm` with a tool round trip, as `model deepseek` does.
+
+No fallback leads to or from `glm`. `deepseek` stays in the gateway, unused: once its balance is topped up, `tai_live.sh model deepseek` and the same four settings
+bring it back (its guard refuses while it answers 402). Taking the switch back: `~/tai-live/rollback-pre-glm/ROLLBACK.txt`.
+
+The key is the owner's GLM Coding Plan key (`ZAI_API_KEY`, `gateway.env`). The owner decided on 2026-11-05 that it may serve students (`SECURITY.md`). Nora's voice
+uses a copy of the same key, so the two share the plan's quota; a quota used up answers 429, and `tai_live.sh check` names the model.
+
+Measured through the live gateway on 2026-11-23: a tiny answer in 1.4 s, and a tool round trip in 3.1 + 3.2 s. Voice turns were 1.5 to 4 s slower on GLM than on
+DeepSeek when that was measured on 2026-11-05 (thinking off).
+
+Verified live right after the switch:
+- `check` passed with exit 0.
+- `smoke` as the owner, with the real tokens, answered in 87 s with this week's Canvas work, through its tools.
+- `smoke ask` with a Go program called `run_go`; the program printed gVisor's kernel, and the answer took 47 s.
+- `smoke voice chat`, a real call through the page, ended OK: it answered the Raft question in 12.1 s of audio, with no errors.
+- The gateway logged 17 `glm-5.3-flash` calls, all ok, and none to `deepseek`.
 
 The agent container writes `competency/interaction-summary.md` itself after every answer (the last 20 exchanges, one line each):
 the model did not keep it, which left the persona's "is this student new?" test saying yes for everyone.

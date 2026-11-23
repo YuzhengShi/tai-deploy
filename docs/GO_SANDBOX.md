@@ -147,7 +147,9 @@ Memory, which costs the host, would be the answer for versions not listed: a col
 2. The smoke on runsc against the live image, round-2 style, passed 27 of 27 (its fill pass 3 of 3; the two Gin tests passed on their first try, at 44 and 45 s).
 3. `TAI_SANDBOX_RUNTIME=runsc` was set and the service restarted at 05:12:19 UTC. The same real run then printed gVisor's kernel (`4.19.0-gvisor`) in 14.5 s, again with one container.
 
-Every isolation check of the smoke passed under runsc in all four rounds. The cost, measured before the switch ("Measured" below): Gin runs from an empty module cache run out of their minute more often than under runc, and warm runs take up to 9 s longer.
+Every isolation check of the smoke passed under runsc in all four rounds. The cost, measured before the switch ("Measured" below): Gin runs from an empty module cache ran out of their minute more often than under runc (6 against 8 of 10 first tries in round 3; the host's disk varied more than that), and warm runs take 1 to 3 s longer for a small program and up to 9 s longer for Gin.
+
+Not tried under runsc: a run from a voice call (`run_code`). The model's provider refused that day. The voice function says "still running" at 50 s, so a Gin run in a call will reach that limit more often than under runc.
 
 To go back to runc: `tai_live.sh set TAI_SANDBOX_RUNTIME=runc`, then a restart (`~/tai-live/rollback-pre-sandboxruntime/ROLLBACK.txt`). Beware: a later deploy of a tree WITHOUT this change runs code that does not read the setting, so the sandbox goes back to runc and loses the skip, silently.
 

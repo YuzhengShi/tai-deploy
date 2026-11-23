@@ -149,7 +149,7 @@ Memory, which costs the host, would be the answer for versions not listed: a col
 
 Every isolation check of the smoke passed under runsc in all four rounds. The cost, measured before the switch ("Measured" below): Gin runs from an empty module cache ran out of their minute more often than under runc (6 against 8 of 10 first tries in round 3; the host's disk varied more than that), and warm runs take 1 to 3 s longer for a small program and up to 9 s longer for Gin.
 
-Not tried under runsc: a run from a voice call (`run_code`). The model's provider refused that day. The voice function says "still running" at 50 s, so a Gin run in a call will reach that limit more often than under runc.
+A run from a voice call (`run_code`) under runsc was tried once, after the live model was switched to GLM (2026-11-23 06:49 UTC: `smoke voice chat` asking for a tiny Go program). It ran in 13.9 s, and the call said what it printed. The voice function says "still running" at 50 s, so a Gin run in a call will reach that limit more often than under runc.
 
 To go back to runc: `tai_live.sh set TAI_SANDBOX_RUNTIME=runc`, then a restart (`~/tai-live/rollback-pre-sandboxruntime/ROLLBACK.txt`). Beware: a later deploy of a tree WITHOUT this change runs code that does not read the setting, so the sandbox goes back to runc and loses the skip, silently.
 

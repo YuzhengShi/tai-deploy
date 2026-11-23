@@ -20,7 +20,7 @@ A useful report says:
 
 TAi's security design is in [docs/SECURITY.md](docs/SECURITY.md), and its sandbox in [docs/GO_SANDBOX.md](docs/GO_SANDBOX.md). The thesis already names these weak points, so there is no need to report them:
 
-- **The Go sandbox uses Docker's default runtime, runc.** A kernel bug could still let code break out. gVisor is not in use, and the planned independent review of the sandbox was never completed.
+- **The Go sandbox's runtime.** By default it uses Docker's runc, where a kernel bug could let code break out. The course's server has run it under gVisor (`TAI_SANDBOX_RUNTIME=runsc`) since 2026-11-23 (UTC); [docs/GO_SANDBOX.md](docs/GO_SANDBOX.md) says what was tested there. The planned independent review of the sandbox was never completed.
 - **The Canvas token is limited by code, not isolation.** One Canvas token can read the whole class. Inside a student's container, only code restricts it to that student. The agent and the tool service that holds the token share one user account.
 - **One admin right grants both views:** the whole class, and students' own words.
 - **Two protections depend on the model following its persona, not on code:** staying faithful to what the tools returned, and withholding assignment answers.

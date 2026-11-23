@@ -26,6 +26,7 @@ So the most useful thing an AI TA can do here is give students a place to rehear
 
 > [!NOTE]
 > **The tag [`thesis-2026-12`](https://github.com/YuzhengShi/tai-deploy/releases/tag/thesis-2026-12) is the version the thesis describes.** Work on `main` may continue after it.
+> Since the tag, `main` has gained two changes that the course's server has run since 2026-11-23 (UTC): a setting that puts the Go sandbox under gVisor, and a gateway alias for z.ai's GLM.
 
 ## Demo
 
@@ -125,7 +126,7 @@ TAi forks [NanoClaw](https://github.com/gavrielc/nanoclaw), a framework that giv
 |---|---|---|
 | Runs on | AWS | The course's own server |
 | Students reach it through | WhatsApp | A web page with Google sign-in and voice calls built in |
-| Model | Claude on AWS Bedrock | Behind the gateway: Cerebras (qwen, gpt-oss), then DeepSeek, and now the Kimi API |
+| Model | Claude on AWS Bedrock | Behind the gateway: Cerebras (qwen, gpt-oss), then DeepSeek, and since 2026-11-23 (UTC) z.ai's GLM (glm-5.3-flash) |
 | Harness | Claude Code (Claude Agent SDK) | pi, with Claude Code available |
 | Voice | Amazon Nova 2 Sonic | Deepgram's voice agent with TAi's relay |
 | Course-material search | The LeanRAG graph, with AWS embeddings | BM25, with the rebuilt graph switched off |
@@ -219,9 +220,9 @@ Section 5.5 of the thesis lists the limitations in full. The main ones:
 
 - **Narrow evidence.** All of it comes from a single course and contains no student data. Fall usage is not reported.
 - **Two protections depend on the model following its persona, not on code:** staying faithful to what the tools returned, and withholding assignment answers.
-- **The Go sandbox uses Docker's default runtime, runc,** so an escape through a kernel bug is still possible. gVisor is not in use, and the planned independent security review of the sandbox was never completed.
+- **At the tag, the Go sandbox runs on Docker's default runtime, runc,** so a kernel bug could let code escape. Since 2026-11-23 (UTC) the live service runs its sandbox containers under gVisor (`TAI_SANDBOX_RUNTIME=runsc`), so a student's program talks to gVisor's user-space kernel rather than the host kernel ([GO_SANDBOX](docs/GO_SANDBOX.md)). The planned independent security review of the sandbox was never completed.
 - **One admin right grants both** the class-wide view and access to students' own words.
-- **What students say leaves the host in three places:** the model provider (currently the Kimi API), the voice platform, and, if image viewing is enabled, the provider of the image model.
+- **What students say or show leaves the host through three exits:** words go to the model provider (since 2026-11-23, z.ai's GLM), call audio to the voice platform, and pictures, when image viewing is on, to z.ai as well.
 
 ## Privacy
 

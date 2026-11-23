@@ -41,7 +41,7 @@ TAi 的主要工作是让学生先把这些话说出口。学生在网页上发�
 |---|---|---|
 | 运行在哪里 | AWS | 课程自己的服务器 |
 | 入口 | WhatsApp | 需要 Google 登录的网页，通话在页面里 |
-| 模型 | AWS Bedrock 上的 Claude | 经过网关（LiteLLM）：先是 Cerebras，然后 DeepSeek，现在是 Kimi API |
+| 模型 | AWS Bedrock 上的 Claude | 经过网关（LiteLLM）：先是 Cerebras，然后 DeepSeek，2026-11-23（UTC）起是 z.ai 的 GLM（glm-5.3-flash） |
 | 语音 | Amazon Nova 2 Sonic | Deepgram 语音代理加 TAi 的中继 |
 
 架构图、运行方式、仓库结构和评测见[英文 README](README.md)。

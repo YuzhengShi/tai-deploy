@@ -133,3 +133,18 @@ The commit that merges the tool-host fix into the voice-lab line was made for th
 | `9df62da` | `24f1a1a` | 2026-11-15 | docs: 9.21 (rating-independent half): sherpa-onnx's Kokoro path drops the unstressed -er phoneme and compre... |
 | `45f02aa` | `8de1cbe` | 2026-11-15 | eval + docs: round 3 result: blind, level-matched, rate-matched Kokoro (all three English voices, engine de... |
 | `0e4eb72` | `c9f5af1` | 2026-11-15 | docs: 9.21 wording after review: the verdict rests on the repaired conditions, not on the context clip; "2.... |
+
+## After the tag
+
+On 2026-11-23, eight commits made after the tag on the live release's own branch were re-applied here with the same rules. Their messages and dates are unchanged. They add the gVisor runtime setting for the Go sandbox, the GLM gateway alias, and the documents about both.
+
+| Old id | Published id | Date | Subject |
+|---|---|---|---|
+| `926d873` | `1d6cf54` | 2026-11-22 | sandbox: gVisor runtime setting, and no modules container when the cache holds the modules |
+| `2a4d178` | `9452d29` | 2026-11-22 | docs: the Go sandbox runs on gVisor in the live service since 2026-11-23 05:12 UTC |
+| `8da9cf0` | `c44df45` | 2026-11-22 | docs: the cost of runsc with its numbers, and the voice path not tried under it |
+| `e748905` | `d376845` | 2026-11-22 | gateway: the glm alias through LiteLLM's zai/ provider, and `tai_live.sh model glm` behind the same guard a... |
+| `c589db6` | `9a66ac2` | 2026-11-22 | docs: GLM is the live model since 2026-11-23 06:39:11 UTC |
+| `1b75de2` | `3447c20` | 2026-11-22 | docs: the openai/ 404 described as observed (a path the coding endpoint does not have), not as a Responses... |
+| `5f8ce95` | `345b6f6` | 2026-11-22 | docs: a voice call's code run under runsc, tried once after the switch to GLM (13.9 s) |
+| `125338f` | `e0a8e07` | 2026-11-23 | docs: why GLM answers slower than DeepSeek did (measured 2026-11-23): slower calls, and requests sent toget... |

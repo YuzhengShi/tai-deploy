@@ -146,5 +146,31 @@ Verified live right after the switch:
 - `smoke voice chat`, a real call through the page, ended OK: it answered the Raft question in 12.1 s of audio, with no errors.
 - The gateway logged 17 `glm-5.3-flash` calls, all ok, and none to `deepseek`.
 
+**Speed** (measured on 2026-11-23, after the switch). GLM through the Coding Plan is much slower than DeepSeek was.
+
+Voice turns, from the end of the student's turn to TAi's first sound (the service's own "voice turn latency" lines):
+
+| | without a tool | with a tool |
+|---|---|---|
+| DeepSeek (11-04 to 11-15, 1,163 turns) | p50 1.4 s, p90 1.8 s | p50 3.4 s, p90 6.2 s |
+| GLM (the first 3 turns) | 4.8 s | 8.7 s and 14.3 s |
+
+The same gateway log, call by call:
+- DeepSeek: p50 0.6 to 1.7 s at every prompt size, including 16k to 32k tokens uncached.
+- GLM: p50 2 to 3 s for small prompts, 6 s for 8k to 16k, and 9 to 35 s for 16k to 32k.
+
+Where the time goes:
+1. **Every call is slower.** A single call takes 1.2 to 3.6 s to its first token, then about 44 tokens a second. Neither prompt size nor caching explains it: a 22,000-token uncached prompt answered in 3 to 4 s, at the OpenAI and the Anthropic endpoint alike, and through the gateway or straight to z.ai alike.
+2. **Requests sent at the same time are held back.** Four short requests sent at once (each about 2 s alone) all waited until about 16 s, then finished together.
+   - A call makes such overlaps on its own. When the student pauses mid-thought, Deepgram starts a think request, then drops it when they go on (the relay aborts it: the gateway logs it with one output token, and the relay dump does not).
+   - In the first smoke call, four such requests overlapped and the answer took 14.2 s to its first token.
+   - Several students at once would overlap too.
+3. **A text chat also waits for its agent container** before the first model call: 9 to 26 s, as before the switch. The text agent sends about 24,000 tokens every call, and one first call took 35 s.
+
+Not the cause:
+- Nora: idle for 24 h, and stopped at 06:57 UTC with no change in the numbers.
+- The gateway.
+- Thinking: answers had 1 to 100 output tokens.
+
 The agent container writes `competency/interaction-summary.md` itself after every answer (the last 20 exchanges, one line each):
 the model did not keep it, which left the persona's "is this student new?" test saying yes for everyone.

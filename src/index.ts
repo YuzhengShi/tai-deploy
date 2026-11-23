@@ -52,6 +52,7 @@ import { GroupQueue } from './group-queue.js';
 import { startIpcWatcher } from './ipc.js';
 import { createCanvasSource } from './docs/canvas-source.js';
 import { createDocs } from './docs/index.js';
+import { sandboxRuntimeSetting } from './sandbox/docker.js';
 import { createSandbox } from './sandbox/runner.js';
 import { createSqliteRates } from './sandbox/rates.js';
 import type { SandboxApi } from './sandbox/types.js';
@@ -795,12 +796,16 @@ async function main(): Promise<void> {
 
   // Running a student's Go code (docs/GO_SANDBOX.md): a disposable container started by the host, never the agent container. TAI_SANDBOX=0 switches it off (every request then says so);
   // without the image (tai_live.sh sandbox build) every request says it is not set up. The reaper removes containers and run directories that outlived their time.
-  const sandbox = process.env.TAI_SANDBOX === '0' ? undefined : createSandbox({
+  // TAI_SANDBOX_RUNTIME picks the containers' OCI runtime: unset is Docker's default (runc), `runsc` is gVisor's; any other value switches running code off (never a fall-back).
+  const sandboxRuntime = sandboxRuntimeSetting(process.env.TAI_SANDBOX_RUNTIME);
+  if (!sandboxRuntime.ok) logger.error({ setting: 'TAI_SANDBOX_RUNTIME' }, `${sandboxRuntime.message}: running code is off`);
+  const sandbox = process.env.TAI_SANDBOX === '0' || !sandboxRuntime.ok ? undefined : createSandbox({
     dir: path.join(DATA_DIR, 'sandbox'),
     uploadsDir: (folder) => path.join(GROUPS_DIR, folder, 'uploads'),
     githubToken: () => process.env.GITHUB_TOKEN_PUBLIC || readEnvFile(['GITHUB_TOKEN_PUBLIC']).GITHUB_TOKEN_PUBLIC,   // read at each fetch, never kept
     rates: createSqliteRates(),
     log: logger,
+    runtime: sandboxRuntime.ok ? sandboxRuntime.runtime : undefined,
   });
   const runSandbox: SandboxApi['run'] | undefined = sandbox ? (who, request) => sandbox.run(who, request) : undefined;
   let sandboxReaper: ReturnType<typeof setInterval> | undefined;
@@ -809,7 +814,7 @@ async function main(): Promise<void> {
     sandboxReaper = setInterval(() => void sandbox.reap(), 60_000);
     sandboxReaper.unref();
   }
-  logger.info({ sandbox: !!sandbox }, 'Go sandbox');
+  logger.info({ sandbox: !!sandbox, runtime: sandboxRuntime.ok ? (sandboxRuntime.runtime ?? 'docker default') : 'invalid' }, 'Go sandbox');
 
   // The document viewer's service (docs/DOCUMENTS.md, docs/CHAT_OBJECTS.md): a PDF is turned into page images and words by a disposable container, kept for the student, and shown by the page's
   // viewer and the calls' show_document; TAI_DOCS=0 turns it off (the page has no viewer then), and without the image (tai_live.sh doc build) every open says it is not set up.

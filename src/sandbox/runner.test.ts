@@ -37,6 +37,8 @@ class FakeDocker implements DockerClient {
   killedNames: string[] = [];
   listing: Array<{ name: string; startedMs: number | null }> = [];
   listError = false;
+  /** What `docker info` says about runtimes; unset: a client that cannot be asked (taken to know every runtime). */
+  runtimes?: () => Promise<string[] | null>;
   behave: (ctl: Ctl) => Promise<Verdict> = async () => ({ exitCode: 0 });
   private verdicts = new Map<string, Verdict>();
   private killers = new Map<string, () => void>();
@@ -214,6 +216,148 @@ describe('the order of the phases', () => {
     expect(r).toMatchObject({ ok: false, phase: 'refused', message: SANDBOX_OFF });
     expect(docker.specs).toHaveLength(0);
     expect(rates.rows()).toHaveLength(0);
+  });
+
+  it('starts both containers on the runtime it is given, and on Docker\'s default when it is given none', async () => {
+    expect(await make({ runtime: 'runsc' }).run(ana, withModules)).toMatchObject({ ok: true });
+    expect(docker.specs.map((s) => values(s.args, '--runtime'))).toEqual([['runsc'], ['runsc']]); // the modules container, then the run container
+    docker.specs = [];
+    expect(await make().run(ana, withModules)).toMatchObject({ ok: true });
+    expect(docker.specs).toHaveLength(2);
+    expect(docker.specs.some((s) => s.args.includes('--runtime'))).toBe(false);
+  });
+
+  it('is "not set up" while Docker does not know the runtime it is set to: no container on another runtime, nothing counted, one warning; it runs once Docker knows it', async () => {
+    docker.runtimes = async () => ['io.containerd.runc.v2', 'runc'];
+    const sandbox = make({ runtime: 'runsc' });
+    expect(await sandbox.run(ana, hello)).toMatchObject({ ok: false, phase: 'refused', message: SANDBOX_OFF });
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(await sandbox.run(ana, hello)).toMatchObject({ ok: false, phase: 'refused', message: SANDBOX_OFF });
+    expect(docker.specs).toHaveLength(0);
+    expect(rates.rows()).toHaveLength(0);
+    expect(log.warn.mock.calls.filter(([, m]) => /does not know the runtime/.test(m))).toHaveLength(1);
+    docker.runtimes = async () => ['io.containerd.runc.v2', 'runc', 'runsc'];
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(await sandbox.run(ana, hello)).toMatchObject({ ok: true });
+    expect(values(docker.specs[0].args, '--runtime')).toEqual(['runsc']);
+  });
+
+  it('is "not set up" too when Docker does not answer about runtimes; with no runtime set it never asks', async () => {
+    docker.runtimes = async () => null;
+    expect(await make({ runtime: 'runsc' }).run(ana, hello)).toMatchObject({ ok: false, message: SANDBOX_OFF });
+    docker.runtimes = async () => {
+      throw new Error('docker info failed');
+    };
+    expect(await make({ runtime: 'runsc' }).run(ana, hello)).toMatchObject({ ok: false, message: SANDBOX_OFF });
+    let asked = 0;
+    docker.runtimes = async () => (asked++, []);
+    expect(await make().run(ana, hello)).toMatchObject({ ok: true });
+    expect(asked).toBe(0);
+    expect(docker.specs).toHaveLength(1);
+  });
+
+  describe('leaving the modules container out when the cache already holds the modules (modcache.ts)', () => {
+    const goMod = 'module x\n\ngo 1.27\n\nrequire (\n\tgithub.com/google/uuid v1.6.0\n\tgithub.com/BurntSushi/toml v1.4.0 // indirect\n)\n';
+    const cached = (mod = goMod): SandboxRequest => ({ ...withModules, source: { kind: 'files', files: [{ path: 'go.mod', content: mod }, { path: 'a_test.go', content: 'package x\n' }] } });
+    /** What `go mod download` leaves in the cache for one module: its directory, and .mod and .ziphash (and more Go does not need). */
+    const put = (p: string, v: string) => {
+      const esc = (s: string) => s.replace(/[A-Z]/g, (c) => `!${c.toLowerCase()}`);
+      const root = path.join(dir, 'gomodcache');
+      fs.mkdirSync(path.join(root, `${esc(p)}@${v}`), { recursive: true });
+      fs.mkdirSync(path.join(root, 'cache', 'download', esc(p), '@v'), { recursive: true });
+      for (const ext of ['mod', 'ziphash', 'zip', 'info']) fs.writeFileSync(path.join(root, 'cache', 'download', esc(p), '@v', `${v}.${ext}`), 'x');
+    };
+    const kinds = () => docker.specs.map((s) => (s.args.includes(MODULES_SCRIPT) ? 'modules' : 'run'));
+    const missed = 'router.go:3:8: module lookup disabled by GOPROXY=off\nFAIL\tx [setup failed]\n';
+
+    it('starts only the run container when every module is there, and both when one is missing', async () => {
+      put('github.com/google/uuid', 'v1.6.0');
+      put('github.com/BurntSushi/toml', 'v1.4.0');
+      expect(await make().run(ana, cached())).toMatchObject({ ok: true, exitCode: 0 });
+      expect(kinds()).toEqual(['run']);
+      expect(docker.specs[0].args).toContain('--network'); // (the run container: no network, the cache read-only)
+      fs.rmSync(path.join(dir, 'gomodcache', 'cache', 'download', 'github.com', '!burnt!sushi', 'toml', '@v', 'v1.4.0.ziphash'));
+      docker.specs = [];
+      expect(await make().run(ana, cached())).toMatchObject({ ok: true });
+      expect(kinds()).toEqual(['modules', 'run']);
+      expect(rates.rows()).toHaveLength(2);
+    });
+
+    it('keeps the modules container for a repository, an archive, a go.mod with no go line or with a replace, whatever the cache holds', async () => {
+      put('github.com/google/uuid', 'v1.6.0');
+      put('github.com/BurntSushi/toml', 'v1.4.0');
+      await make().run(ana, repo());
+      expect(kinds()).toEqual(['modules', 'run']);
+      for (const mod of ['module x\n\nrequire github.com/google/uuid v1.6.0\n', `${goMod}replace github.com/google/uuid => ./uuid\n`]) {
+        docker.specs = [];
+        await make().run(ana, cached(mod));
+        expect(kinds(), mod).toEqual(['modules', 'run']);
+      }
+    });
+
+    it('when the cache looked complete and Go still missed a module: downloads, runs again in the same minute, counts one run, and remembers that go.mod', async () => {
+      put('github.com/google/uuid', 'v1.6.0');
+      put('github.com/BurntSushi/toml', 'v1.4.0');
+      let runs = 0;
+      docker.behave = async (ctl) => {
+        if (ctl.kind === 'modules') return { exitCode: 0 };
+        runs++;
+        if (runs === 1) {
+          ctl.write(missed);
+          return { exitCode: 1 };
+        }
+        ctl.write('ok  \tx\t0.01s\n');
+        return { exitCode: 0 };
+      };
+      const sandbox = make();
+      const r = await sandbox.run(ana, cached());
+      expect(r).toMatchObject({ ok: true, exitCode: 0, output: 'ok  \tx\t0.01s\n' }); // the answer of the second run only
+      expect(kinds()).toEqual(['run', 'modules', 'run']);
+      expect(rates.rows()).toHaveLength(1);
+      expect(runDirs()).toEqual([]);
+      expect(log.info.mock.calls.filter(([, m]) => /looked complete .* and was not/.test(m))).toHaveLength(1);
+      // the same go.mod again: the modules container first, without looking at the cache
+      docker.specs = [];
+      expect(await sandbox.run(ana, cached())).toMatchObject({ ok: true });
+      expect(kinds()).toEqual(['modules', 'run']);
+      // another go.mod (the same modules, one comment more) is looked at afresh
+      docker.specs = [];
+      expect(await sandbox.run(ana, cached(`${goMod}// another project\n`))).toMatchObject({ ok: true });
+      expect(kinds()).toEqual(['run']);
+    });
+
+    it('takes the read-only cache\'s lock error as a missed module too, and nothing else', async () => {
+      put('github.com/google/uuid', 'v1.6.0');
+      put('github.com/BurntSushi/toml', 'v1.4.0');
+      let runs = 0;
+      docker.behave = async (ctl) => {
+        if (ctl.kind === 'run' && ++runs === 1) {
+          ctl.write('a_test.go:3:8: open /gomodcache/cache/download/github.com/google/uuid/@v/v1.6.0.lock: read-only file system\n');
+          return { exitCode: 1 };
+        }
+        return { exitCode: 0 };
+      };
+      await make().run(ana, cached());
+      expect(kinds()).toEqual(['run', 'modules', 'run']);
+      // a test that fails for its own reasons is its answer: one container, no download
+      docker.specs = [];
+      docker.behave = async (ctl) => (ctl.write('--- FAIL: TestA\nFAIL\n'), { exitCode: 1 });
+      expect(await make().run(ana, cached())).toMatchObject({ ok: true, exitCode: 1, output: '--- FAIL: TestA\nFAIL\n' });
+      expect(kinds()).toEqual(['run']);
+    });
+
+    it('says there was too little time when the first run took most of the minute, and the next try downloads first', async () => {
+      put('github.com/google/uuid', 'v1.6.0');
+      put('github.com/BurntSushi/toml', 'v1.4.0');
+      docker.behave = async (ctl) => (ctl.kind === 'run' && docker.specs.length === 1 ? (await sleep(48_000), ctl.write(missed), { exitCode: 1 }) : { exitCode: 0 });
+      const sandbox = make();
+      const r = await settle(sandbox.run(ana, cached()), 50_000);
+      expect(r).toMatchObject({ ok: false, phase: 'modules', message: expect.stringMatching(/too little of the minute/) });
+      expect(kinds()).toEqual(['run']);
+      docker.specs = [];
+      expect(await sandbox.run(ana, cached())).toMatchObject({ ok: true });
+      expect(kinds()).toEqual(['modules', 'run']);
+    });
   });
 
   it('asks about the image once in 30 seconds, and again after', async () => {

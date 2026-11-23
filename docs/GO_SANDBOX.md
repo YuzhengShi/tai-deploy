@@ -16,7 +16,7 @@ running code" in its format, and the course is a Go course (concurrency, vector 
 
 | threat | what stops it |
 |---|---|
-| escape from the container to the host | no capabilities (`--cap-drop ALL`), `no-new-privileges`, Docker's default seccomp profile, read-only root file system, not privileged, no Docker socket, no host path mounted except the code (read-only), a user that is not root in the container. Docker with `runc` only: a kernel bug could still break out. The honest remaining risk; gVisor (`runsc`) would close most of it and is a decision for the owner (it is installed on the host, shared with other services). |
+| escape from the container to the host | As the live service runs it (2026-11-23: runc, Docker's default; `TAI_SANDBOX_RUNTIME` unset): no capabilities (`--cap-drop ALL`), `no-new-privileges`, read-only root file system, not privileged, no Docker socket, no host path mounted except the code (read-only), a user that is not root in the container, the host's cgroup limits, Docker's own seccomp profile; a kernel bug could still let code out. With `TAI_SANDBOX_RUNTIME=runsc` (gVisor: installed on the host on 2026-11-22 and tested, NOT switched on in the live service, see "gVisor" below): the same flags, and the program's system calls are answered by gVisor's Sentry, a kernel that runs in user space, not by the host's kernel; the Sentry reaches the host through a small set of system calls under its own seccomp filter, from its own user and mount namespaces (runsc leaves Docker's seccomp profile out: its `--oci-seccomp` flag is off by default); the remaining risk is then a flaw in gVisor, or in the part of the host's kernel the Sentry still uses. |
 | the code reads secrets | none in the container: no environment from the host, no mounts of the project, no tokens; the module download phase runs only `go mod download` (our binary, no student code) |
 | network abuse, scanning, mining, exfiltration | `--network none` while any student code runs (the module download is a separate earlier step with no student code); CPU 1 core, 20 s wall for a run, 45 s for tests; `--pids-limit` |
 | fork bomb, memory bomb, disk fill, endless output | `--pids-limit 128`, `--memory 512m` with the same swap, two memory-backed tmpfs (`/tmp` 256 MB for Go's build cache and the programs it builds, `/work` 96 MB for the project: the only writable places, both charged to the 512 MB), `--ulimit fsize=50 MB nofile=256 core=0` (no core dump reaches the host's crash handler), `--log-driver none` (a flood is not also written to a log file on the host's disk; the attached `docker run` still streams it), output read by the host with a cap (64 KB: the first 60% and the last 40% kept) and the container killed when the program has printed 4 MB, a hard wall-clock kill from the host (`docker kill`) whatever happens inside |
@@ -42,7 +42,8 @@ student's chat (text agent)                      voice call (conversation / inte
              2. per-student and global limits (rate table, 2 at once, queue of 4)
              3. stage: a fresh directory of the host's user: inline files, or the repository's archive (the host fetches it from
                 the student's bound GitHub account, 20 MB cap), or the attached file; an archive stays ONE file, the run container extracts it
-             4. modules (inline files: only if there is a go.mod with requirements and no vendor folder; an ARCHIVE: always, because the host does not look
+             4. modules (inline files: only if the go.mod at the top has requirements and there is no vendor folder beside it, the script's own rule, and NOT when
+                the shared cache already holds every module that go.mod requires: "Module step skipped" below; an ARCHIVE: always, because the host does not look
                 inside it, and the container finds out for itself and exits at once when there is nothing to download): a container WITH network that runs
                 `sandbox-modules` = `go mod download` only, into the shared cache (checked against the Go checksum database), 60 s at the most. The code is
                 unpacked in it so that its go.mod can be read; nothing of the student's runs, and the only thing of the request on its command line is a folder name
@@ -83,6 +84,16 @@ student's chat (text agent)                      voice call (conversation / inte
   on the CS6650 host on 2026-11-06 for ANY image (its disk answered a write in 13 ms and a container start needs some 500 of them), so the budget starts from an estimate of 4 s and follows what it sees. The host's clock kills the container
   20 s after the program's wall clock, or 3 s before the minute ends, whichever is first; a guard answers 1 s before the minute ends if Docker itself hangs. `timedOut` is set when the host's clock fired, or when the exit is 124 or 137
   after the wall clock was used (137 is also what an OOM kill looks like, which Docker's `OOMKilled` tells apart: it is true when a grandchild of the script was killed, `go run`'s program, too).
+* Module step skipped (2026-11-23, `src/sandbox/modcache.ts`): a container start is the dearest part of the minute on this host (2.5 to 42 s, "gVisor" below), and a Gin test needed two of them even when every module was in the cache.
+  For INLINE code the host now leaves the modules container out when the go.mod at the top is plain (a `go` line of 1.17 or later, so that it names every module the build needs; `require` lines and blocks of checked
+  paths and canonical versions, at most 200; no `replace`, `exclude`, unknown verb, quote or block comment) and the shared cache already holds each module it requires the way Go 1.27.3 takes it with no network:
+  the unpacked `<path>@<version>` directory, `cache/download/<path>/@v/<version>.mod` and `.ziphash`, and no `.partial` (capitals escaped as Go does, `!` and the small letter). That list was measured on the host, one file put
+  aside at a time: without the `.mod` Go says "module lookup disabled by GOPROXY=off"; without the directory or the `.ziphash`, or with a `.partial`, it tries to unpack the zip again and fails on the read-only cache
+  ("…/@v/<version>.lock: read-only file system"); without the `.zip` or the `.info` the test passes; a directory of a module that is required but never imported is not needed either (the check asks for it anyway).
+  The host only `lstat`s names it built from checked parts, inside the cache; it reads nothing there and writes nothing. If Go misses a module all the same (one of those two messages, and a failing exit), the runner runs the modules
+  container and the program again in what is left of the same minute (one run counted), and remembers that go.mod (by its SHA-256, the last 500) so that it gets the modules container first from then on. Nothing changes for
+  a repository or an attached archive (the host never opens one), and the first run of a project whose versions are not in the cache still downloads first. The image and its scripts are unchanged.
+  Measured in round 3 ("gVisor"): no run whose modules were in the cache started the modules container. The live cache, read on the host on 2026-11-23 (`lstat` only), holds every module of the six warm lists by this rule.
 
 ## Who may ask, and what the model is told
 
@@ -129,11 +140,118 @@ container) and the run (the second) together: a handler test with httptest and t
 None ran out of memory. The seconds are whole runs on this host, where two container starts cost 25 s or more; v1.10.1 came within 6 s of the minute a run may take in total (SANDBOX_TOTAL_MS): a module download that does not finish says so, and asking again a minute later finds what was fetched.
 Memory, which costs the host, would be the answer for versions not listed: a cold gin needs about 1.4 GB, and 2 GB passes `go test` in 40 s (not `go run`, whose clock is 20 s).
 
+## gVisor (runsc), 2026-11-22
+
+**Status (2026-11-23): installed on the host and tested outside the service; NOT switched on in the live service**, which keeps running the sandbox on runc (the setting unset). Every isolation
+check of the smoke passed under runsc in all three rounds. In the first two, Gin test runs ran out of their minute more often than under runc; with the module step skipped when the cache holds
+the modules (round 3, "Measured" below), runsc met the pass criteria written down before the run, as runc did, and still lost more first runs from an empty cache. Switching is the owner's
+decision, made at a deploy (planned: the fix and the setting go live on runc, then a smoke on runsc against the live image decides).
+
+**What it is here.** `TAI_SANDBOX_RUNTIME` (`SETTINGS.md`) picks the OCI runtime of the sandbox's two containers (the one that downloads modules and the one that runs the code). Unset: Docker's default (runc), as before.
+`runsc`: both are started with `docker run --runtime runsc`, so the program's system calls go to gVisor's Sentry, a kernel that runs in user space, instead of to the host's kernel. Nothing else changes runtime: Docker's default stays runc, and the agent containers, the voice tool host,
+the document renderer, the world's services and `tai_live.sh sandbox warm` (the warm list's own modules, no student code) keep it. A value other than `runc` or `runsc` turns running code off (an error line at start), and a runtime Docker does not know makes the
+sandbox "not set up" (a warning; asked with the image, every 30 s): never a fall-back to runc. `tai_live.sh sandbox status` says which runtime is set and whether Docker knows it; `sandbox smoke` runs on the service's runtime, and its case "the program runs on the
+runtime the sandbox is set to" reads `/proc/version` (gVisor answers with a kernel of its own).
+
+**Installed on the host on 2026-11-22** (the owner: "请你装gVisor"). gVisor release-20261116.0 (`runsc --version`: `release-20261116.0`, OCI spec 1.2.1), from the official release bundle
+`https://storage.googleapis.com/gvisor/releases/release/20261116/x86_64/gvisor.tar.bz2` (84,718,885 bytes; the sha512 published beside it in the same bucket matched: that proves the download, it is not a signature), unpacked into `/usr/local/bin` as gVisor's install
+page says: `runsc` (19,532,779 bytes), `containerd-shim-runsc-v1` (24,403,683; Docker does not use it here) and `gvisor-bin/` (the Sentry, `gvisor_sentry`, and six helpers that runsc looks for next to itself). Registered with Docker as an EXTRA runtime in a new
+`/etc/docker/daemon.json` (there was none) that holds only `{"runtimes": {"runsc": {"path": "/usr/local/bin/runsc"}}}`, checked with `dockerd --validate`, read with `systemctl reload docker` (SIGHUP: Docker was not restarted, which on this host, with live-restore off,
+would stop every container; its process stayed the same, the 15 containers kept their start times and restart counts, and the only container events of the reload were health checks). Platform: systrap, gVisor's default (`/dev/kvm` exists on this virtual machine; KVM
+was not tried). No runtime flags. Taking it back, and in which order: `~/tai-live/rollback-pre-gvisor/ROLLBACK.txt` (the setting back to runc and a restart FIRST, then the entry out of daemon.json and a reload). Updates are by hand, the same steps with a newer bundle:
+no package manager sees it.
+
+**What changes for a program** (measured on this host on 2026-11-22, the deployed image, the runner's own flags; runc beside it):
+
+* Inside, `/proc/version` reads `Linux version 4.19.0-gvisor`, `/proc/meminfo` shows the container's 512 MB, and `runtime.NumCPU()` is 2 (runsc rounds the 1-CPU quota up to its minimum of 2: `--cpu-num-from-quota`, on by default). `GOMAXPROCS` is 2 under both runtimes
+  (under runc `NumCPU` is the host's 8, and Go takes the cgroup's quota, with the same minimum of 2), so the compiler is as parallel. No cgroup files inside.
+* The host enforces the same limits: the container's cgroup (`system.slice/docker-<id>.scope`) has `memory.max` 512 MiB, `memory.swap.max` 0, `cpu.max` 100000 100000 and `pids.max` 128, read on the host while a program ran, as under runc.
+* An allocation without end: Docker's `OOMKilled` is true under both. Under runc the kernel kills the program and `go run` prints "signal: killed" (exit 1); under runsc the whole sandbox is killed (exit 137, without that last line). The runner reads `OOMKilled` and says the
+  same sentence either way.
+* A fork bomb is stopped at 29 children (runc: 30) by the host's process limit (the cgroup's `pids.events` counted the refusals, `pids.peak` was 128); the program is told "cannot allocate memory" where runc's kernel says "resource temporarily unavailable". The
+  Sentry's own threads take about 51 of the 128 before the program starts (runc: 13).
+* The tmpfs limits hold (`/work` full at 95 MB, `/tmp` at 252 MB: "no space left on device"); `-race` works (ThreadSanitizer finds the race); the modules container downloads over Docker's bridge network through gVisor's own network stack, and what it writes
+  into the shared cache belongs to the host's user (uid 1000), as under runc.
+
+**What the host sees.** The gVisor processes of a container (the Sentry, its gofer) run as uid 0 (each in a user namespace of its own, with the identity uid map), in a mount namespace of their own (the Sentry's root is an empty directory), each under a seccomp
+filter, with a few capabilities (the Sentry: chown, dac_override, dac_read_search, fowner, fsetid, sys_ptrace). One small helper of runsc, `runsc-fd-parking`, stays in the host's namespaces with full capabilities and no seccomp filter; it does not run the program's
+code. That is gVisor's design, not a setting of ours. The student's program runs as uid 1000 inside the Sentry.
+
+**Measured: runc against runsc** (2026-11-22/23, this host, outside the service: the smoke of a scratch build of this change, and the live build's own container arguments with `--runtime` added).
+
+Cold and warm: each program on one runtime right after the sandbox image's Go toolchain and build cache were evicted from the page cache (`posix_fadvise(DONTNEED)` on those files only: 40,026 files, 2.6 GB of the two sandbox images; nothing of another service),
+then the same program once more at once; two rounds, the runtimes' order alternating; the medians of the program's own time by Docker's clock, and of the container's peak memory read from its cgroup every 0.15 s:
+
+| program | cold, runc | cold, runsc | warm, runc | warm, runsc | peak memory warm, runc / runsc |
+|---|---|---|---|---|---|
+| hello world, `go run` | 10.3 s (1 of 2 over the 20 s clock) | 9.2 s | 0.9 s | 2.2 s | 45 / 59 MB |
+| a program with `net/http`, `go run` | 14.8 s | 20.0 s (1 of 2 over) | 2.7 s | 2.9 s | - / 100 MB |
+| `go test`, passing | 14.1 s | 15.0 s | 0.7 s | 2.7 s | 58 / 86 MB |
+| `go test -race`, finds the race | 17.4 s | 16.2 s | 2.2 s | 3.3 s | 55 / 84 MB |
+| Gin 1.12 handler, `go test` | 37.6 s (1 of 2 over the 45 s clock) | 35.7 s (1 of 2 over) | 22.7 s | 13.4 s | 423 / 441 MB |
+| Gin 1.12 app, `go run` | 21.2 s (2 of 2 over the 20 s clock) | 20.8 s (2 of 2 over) | 2.0 s | 5.3 s | 159 / 247 MB |
+
+Starting a container (from `docker run` to the program's start) cost 6.7 to 12.5 s under both runtimes: the host's own cost, as on 2026-11-06. Warm, runsc adds about 1 to 3 s to a small program and 15 to 90 MB of memory (the Sentry), well inside 512 MB;
+the Gin rows vary from run to run (their warm maximum was 28 s on runc and 40 s on runsc: the "warm" run follows a cold one whose reads filled the container's memory, which counts the page cache it reads), and two rounds of this table do not rank the runtimes
+there (the smoke and the Gin table below do lean). Cold, the disk decides, not the runtime: both are about as slow and both ran out of the clock in 4 of their 12 cold runs. That is a property of this host which predates gVisor: the first run after the image's files
+have left the page cache can run out of its 20 s on runc too (the very first probe of 2026-11-22, a program of hello-world size on runc, did: 28 s and no output). Not changed here; a longer clock or keeping those files warm would be a decision of its own.
+
+**The smoke, three times on each runtime** (2026-11-22/23, a scratch build of this change on the host; round 1 from an empty module cache, round 2 with the three Gin cases run once before into the same cache, round 3 as round 2 with the module step
+skipped, "Round 3" below):
+
+| | round 1 (empty cache) | round 2 (cache filled first) | round 3 (as round 2, the module step skipped) |
+|---|---|---|---|
+| runc | 25 of 27: the Gin handler test and the Gin v1.11.0 `-race` test ran out of their minute | 27 of 27 (the Gin v1.11.0 case on its second try) | 27 of 27 |
+| runsc | 25 of 27: the network case (a cold first build, no output within its 20 s) and the Gin v1.11.0 `-race` test ran out of time | 25 of 27: the Gin handler test and the Gin v1.11.0 `-race` test ran out of their minute | 27 of 27 |
+
+Every isolation check (the runtime, the network, the environment, `/`, the read-only root, the limits, the archives, the queue, nothing left over) passed in all six. Every failure is time: a Gin `go test` needed two container starts, the module step and a compile inside
+one minute (SANDBOX_TOTAL_MS), and the two runsc failures of round 2 were left 13 and 16 s for the program, the rest gone to the starts and the module step. With the pre-fill passes counted too, the two Gin `go test` cases passed 2 of 6 times on each runtime in rounds 1
+and 2; the Gin `go run` case passed every time on both.
+
+**Gin from an empty module cache, both runtimes** (2026-11-23, 02:12 to 02:48 UTC; the five versions and two modes of "Gin" above, made the same way, through the real runner; the runtimes' order alternating by version; a configuration that failed was run once more on
+the cache its first try left):
+
+| | passed on the first try | passed within two tries | attempts that passed |
+|---|---|---|---|
+| runc | 2 of 10 | 6 of 10 | 6 of 18 |
+| runsc | 1 of 10 | 3 of 10 | 3 of 19 |
+
+Gin v1.11.0 with `-race` never passed under runsc (0 of 5, the smoke and this table together; runc 2 of 5). No run in the table ran out of memory (the highest peak: 441 MB). A container's start (Docker's `Created` to `StartedAt`) took 2.5 to 42 s in these runs under both
+runtimes (medians: about 7 to 8 s for the module step's container, 5 s for the run's). The samples are small and the host's own slowness varies more than the runtimes do, so they do not prove runsc worse; but every Gin comparison except the smoke's tie leans against
+it, and none leans for it.
+
+**Older than gVisor, found on the way:** on 2026-11-07 all ten of these configurations passed on runc from an empty cache, in 36 to 54 s (the table under "Gin" above); on 2026-11-23 only 2 did on the first try. So the live service (runc) may be running out of the
+minute on a student's first Gin test today. The host's disk was slow while this was measured: a 4 KB synchronous write into a scratch directory took 8 ms to 1.4 s (median 0.11 s) over a minute from 02:58 UTC, and for a few minutes around 02:54 the kernel counted
+80 to 93 % of the time stalled on the disk, a kernel worker waiting on it; the root file system is mounted with online `discard`. After round 3 (04:42 to 04:49 UTC), with no process or container of these tests left,
+the disk spent all its time on discards (10 s of discard time in each 10 s, about 1.6 GB of ranges in 39 requests), io stalled about 90 % of the time, and the waiting kernel worker was ext4's discard work (`ext4_discard_work`, `blkdev_issue_discard`): with online
+`discard`, deleting files costs this virtual disk minutes afterwards, and the tests delete a module cache of a few hundred MB after each configuration, so their runs slow each other (and the host). The weekly `fstrim` (enabled; 3.5 GiB in 44 s at 01:17 UTC that day)
+does the same work in one go. The mount is the owner's call, not this change's. What would make a Gin test fit, on either runtime: no module container when the cache already holds what go.mod needs (one container start less: done for inline code, "Module step
+skipped" above, measured in round 3 below), or a longer minute (not done).
+
+**Round 3: the module step skipped** (2026-11-23, 03:29 to 04:41 UTC; a scratch build of this change, with "Module step skipped" above; one job at a time). The pass criteria were written down before the run: the smoke 27 of 27 on runc, and on runsc too to recommend
+the switch; the warm list's Gin programs on a warmed cache 12 of 12 on runc and at least 11 of 12 on runsc, none of them starting a modules container; Gin from scratch with a second try ALWAYS run on the cache the first try left, at least 9 of 10 second tries on each
+runtime; the switch only if all three hold for runsc.
+
+| | the smoke (cache filled first) | the warm list's Gin programs, three rounds, warmed cache | Gin from scratch: first try | second try | within two tries |
+|---|---|---|---|---|---|
+| runc | 27 of 27 | 12 of 12, 10 to 22 s | 8 of 10 | 9 of 10 | 9 of 10 |
+| runsc | 27 of 27 | 12 of 12, 12 to 25 s | 6 of 10 | 9 of 10 | 10 of 10 |
+
+Every criterion held on both runtimes; the second tries only just (9 of 10 was the bar). None of the 42 runs on the warmed cache and none of the 20 second tries started a modules container. The two second tries that failed: Gin 1.9.1 `go test` on runc (its run
+container took 32 s to start; dropped at 59 s) and Gin 1.9.1 `-race` on runsc (started in 5 s; the test's 45 s clock ran out after 46 s of compiling and testing a Gin the warm list does not hold). Before the smoke, its three Gin cases were run once into the empty cache
+it then used: on runc all three passed, both tests only at the smoke's own second try (85 and 102 s in all); on runsc two passed, and the Gin v1.11.0 `-race` test ran out of its clock with 19 s of the minute left for it (the smoke tries again when a run was dropped
+or left too little time, not when the program's own clock ran out).
+
+What round 3 shows, and what it does not. A first try from an empty cache still starts the modules container, so the skip does not touch it; yet first tries passed 8 and 6 times in 10 where round 2 saw 2 and 1. The host was less busy, and one round cannot tell how much
+of the second tries' gain (round 2: runc 4 of 8, runsc 2 of 9) is the skip. What the skip removes is one container start, which took 2.8 to 34 s on the first tries of this round (median about 4 s). Between the runtimes, inside round 3: runsc passed fewer first tries
+(6 against 8 of 10; with `-race`, 2 against 4 of 5), and on the warmed cache its Gin runs took up to 9 s longer (medians 22, 23, 20 and 13 s against 17, 14, 20 and 10 s: the handler test, the same with `-race`, Gin 1.11.0 with `-race`, the app), all far inside the
+minute.
+
 ## Checks (before anything goes live)
 
 Unit tests with a fake Docker for everything the host decides (validation, limits, queue, staging checks, the command lines it builds: flag by flag, the answer's shape), the scripts under bash with a fake `go`, the fetch with a fake `fetch`; the real image on the host with
-`tai_live.sh sandbox smoke` (`src/sandbox/smoke.ts`): a hello world; a `go test` that passes and one that fails; `-race` finding a race; a program that loops forever (killed at the wall clock); one that allocates without end (OOM-killed, the host stays up); a fork bomb
-(stopped by the process limit); a program that writes endless output (cut at the cap); a program that tries the network (no route), reads `/proc/1/environ` and `/proc/self/environ` (nothing of the host in them), lists `/`, writes to `/` (read-only), writes more than the memory-backed
+`tai_live.sh sandbox smoke` (`src/sandbox/smoke.ts`, on the service's runtime or the one `--runtime` names): a hello world; that it ran on that runtime (`/proc/version`: gVisor's own kernel under runsc, the host's under runc); a `go test` that passes and one that fails; `-race` finding a race; a program that loops forever (killed at the wall clock); one that allocates without end (OOM-killed, the host stays up); a fork bomb
+(stopped by the process limit; gVisor tells the program "cannot allocate memory" where runc says "resource temporarily unavailable"); a program that writes endless output (cut at the cap); a program that tries the network (no route), reads `/proc/1/environ` and `/proc/self/environ` (nothing of the host in them), lists `/`, writes to `/` (read-only), writes more than the memory-backed
 disk holds; an inline go.mod that needs a module (downloaded with network, then run without); a Gin handler tested with httptest and testify, a Gin v1.11.0 project (its own dependency versions, so its own warm module) tested with `-race`, and a Gin app run with `go run` that serves one request to itself and exits (both at the versions of the warm list, so the image's compiled
 Gin is used: inside 45 s and 20 s and 512 MB, where a cold Gin needs about 1.4 GB); attached archives with `../x`, an absolute path, a symlink out, a hard link, a bomb (300 MB of zeros in 300 KB) and too many files (all contained: it ends within its limits, a canary
 file beside the run directories is untouched); two runs at once, four waiting and a seventh told "busy"; no container and no run directory left after all of it. Each case prints PASS or FAIL with what was expected; the exit code says whether all passed. An adversarial read of
@@ -146,6 +264,8 @@ To change the warm list: add or edit a directory under `deploy/cs6650/sandbox/wa
 ## Known gaps (said to the lead with the build of 2026-11-06)
 
 * A project whose module versions are not the warmed ones compiles what is not cached in the memory it has. Gin 1.9.1 to 1.12.0 were tried from scratch and fit (see "Gin" above); a library or a version that is not on the warm list and has dependencies as big as Gin's may not.
+  They fit in memory still; in time, on 2026-11-23, many first tries from an empty module cache ran out of the minute, on runc as on runsc (round 2: 2 and 1 of 10; round 3, a less busy host: 8 and 6 of 10). A second try of
+  inline code, whose modules the first left in the cache, now skips the module step (round 3: 9 of 10 on each runtime, "gVisor", "Measured").
 * The modules container unpacks an archive to read its go.mod, so "nothing of the student's is in it" is "nothing of the student's RUNS in it, and nothing of the request but a folder name is on its command line".
 
 ## Review (2026-11-06, by the lead: NOT independent)
@@ -163,12 +283,12 @@ What the host looked like when this was read: Ubuntu 26.04, Docker 29.1.3, runc 
 
 Residual risks, in the order they matter:
 
-1. The kernel is the real boundary of a container. The host had not been restarted since its kernel updates (it ran 7.0.0-28 with 7.0.0-42 installed); it was restarted on 2026-11-07 at 03:25 UTC into 7.0.0-42 (every container and the service came back by themselves, in about 4 minutes for TAi and 8 for the whole world; the whole smoke passed on it). A newer kernel (7.0.0-43) and apparmor 5.0.2 sit in the `-updates` pocket and are not installed: unattended-upgrades takes only the security pocket. A flaw in the kernel or in runc is a flaw in every container of this machine; gVisor or a separate virtual machine would be the answer, and neither is in this version.
+1. The kernel is the real boundary of a container. The host had not been restarted since its kernel updates (it ran 7.0.0-28 with 7.0.0-42 installed); it was restarted on 2026-11-07 at 03:25 UTC into 7.0.0-42 (every container and the service came back by themselves, in about 4 minutes for TAi and 8 for the whole world; the whole smoke passed on it). A newer kernel (7.0.0-43) and apparmor 5.0.2 sit in the `-updates` pocket and are not installed: unattended-upgrades takes only the security pocket. A flaw in the kernel or in runc is a flaw in every runc container of this machine. Since gVisor (2026-11-22, "gVisor (runsc)" above), the sandbox's two containers can run on runsc (`TAI_SANDBOX_RUNTIME=runsc`): the program then talks to the Sentry, and only the Sentry's narrow, filtered set of calls reaches the host's kernel; a flaw in gVisor, or in that part of the kernel, remains. The live service does not set it yet (the owner decides at a deploy: "gVisor", round 3), so today this risk is runc's. The agent containers and the rest of the host stay on runc; a separate virtual machine is still not in this version.
 2. The containers run as the service's own user (uid 1000, `ubuntu`), which is in the `sudo` and `docker` groups: whichever uid the container used, an escape would end as root. A dedicated uid was considered and adds nothing here.
 3. The shared module cache is written only by the modules container, from the Go proxy, checked by `go` against the checksum database; it is capped (3000 MB) and emptied by the reaper. What a student's program does to its own run is its own business; no student's code ever runs in the container that writes the cache.
 4. The tool that runs code refuses in a scheduled task, but the host cannot tell where an IPC request came from: the rate limits (10 runs an hour and 40 a day for a student, 2 at once on the host, a queue of 4) are what bound it.
 
 ## Not in this version
 
-A server that stays up between runs, several nodes talking to each other, packet loss or delay, fake clocks, Terraform/Docker/AWS, zip archives, a language other than Go, running code in a scheduled task, gVisor.
-Each is a later decision (several of them build on this runner: a private network of sandboxes for the multi-node case).
+A server that stays up between runs, several nodes talking to each other, packet loss or delay, fake clocks, Terraform/Docker/AWS, zip archives, a language other than Go, running code in a scheduled task.
+Each is a later decision (several of them build on this runner: a private network of sandboxes for the multi-node case). gVisor, listed here until 2026-11-22, is installed on the host and is now a setting (`TAI_SANDBOX_RUNTIME`, "gVisor" above) for these two containers only; the live service does not set it yet.

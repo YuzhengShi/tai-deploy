@@ -12,12 +12,15 @@ import {
   RUN_SCRIPT,
   TMP_TMPFS_MB,
   WORK_TMPFS_MB,
+  SANDBOX_RUNTIMES,
   createDockerClient,
   modulesContainerSpec,
   mountable,
   newContainerName,
   runContainerSpec,
+  sandboxRuntimeSetting,
 } from './docker.js';
+import type { SandboxRuntime } from './docker.js';
 import { SANDBOX_LIMITS } from './types.js';
 
 const base = { name: 'tai-sandbox-0123456789ab', startedMs: 1_700_000_000_000, image: 'tai-go-sandbox:live', user: { uid: 1001, gid: 1002 }, inDir: '/srv/run-x/in', cacheDir: '/srv/gomodcache' };
@@ -133,7 +136,66 @@ function fakeSpawn(plan: (s: Started, child: EventEmitter & { stdout: PassThroug
   return { started, spawnImpl };
 }
 
+describe('the runtime (TAI_SANDBOX_RUNTIME)', () => {
+  it('names none by default: Docker starts both containers on its default runtime', () => {
+    expect(runContainerSpec({ ...base, request, wallSeconds: 45 }).args).not.toContain('--runtime');
+    expect(modulesContainerSpec({ ...base, wallSeconds: 40 }).args).not.toContain('--runtime');
+  });
+
+  for (const runtime of SANDBOX_RUNTIMES) {
+    it(`${runtime}: both containers get it once, before the image, and every other flag stays as it was`, () => {
+      const run = runContainerSpec({ ...base, request, wallSeconds: 45, runtime }).args;
+      const modules = modulesContainerSpec({ ...base, wallSeconds: 40, runtime }).args;
+      for (const [args, plain] of [
+        [run, runContainerSpec({ ...base, request, wallSeconds: 45 }).args],
+        [modules, modulesContainerSpec({ ...base, wallSeconds: 40 }).args],
+      ]) {
+        expect(values(args, '--runtime')).toEqual([runtime]);
+        expect(args.indexOf('--runtime')).toBeLessThan(args.indexOf('tai-go-sandbox:live'));
+        const without = [...args];
+        without.splice(args.indexOf('--runtime'), 2);
+        expect(without).toEqual(plain);
+      }
+    });
+  }
+
+  it('refuses a runtime that is not runc or runsc, even from code that went around the types', () => {
+    expect(() => runContainerSpec({ ...base, request, wallSeconds: 45, runtime: 'runsc --debug' as SandboxRuntime })).toThrow(/runc or runsc/);
+    expect(() => modulesContainerSpec({ ...base, wallSeconds: 40, runtime: 'kata' as SandboxRuntime })).toThrow(/runc or runsc/);
+  });
+
+  it('reads the setting: unset or empty is the default, runc and runsc are themselves, anything else is an error (no fall-back)', () => {
+    expect(sandboxRuntimeSetting(undefined)).toEqual({ ok: true });
+    expect(sandboxRuntimeSetting('')).toEqual({ ok: true });
+    expect(sandboxRuntimeSetting('  ')).toEqual({ ok: true });
+    expect(sandboxRuntimeSetting('runc')).toEqual({ ok: true, runtime: 'runc' });
+    expect(sandboxRuntimeSetting(' runsc ')).toEqual({ ok: true, runtime: 'runsc' });
+    for (const bad of ['gvisor', 'RUNSC', 'runsc --debug', 'runsc,runc', 'io.containerd.runc.v2', 'kata-runtime']) {
+      const r = sandboxRuntimeSetting(bad);
+      expect(r.ok, bad).toBe(false);
+      if (!r.ok) expect(r.message).toMatch(/must be runc or runsc/);
+    }
+  });
+});
+
 describe('the real client', () => {
+  it('lists the runtimes Docker knows, and says null when Docker did not answer or answered something else', async () => {
+    const answers = ['{"io.containerd.runc.v2":{"path":"runc"},"runc":{"path":"runc"},"runsc":{"path":"/usr/local/bin/runsc"}}\n', 'not json', '["runc"]', ''];
+    const codes = [0, 0, 0, 1];
+    let call = 0;
+    const f = fakeSpawn((_s, child) => {
+      const i = call++;
+      child.stdout.end(answers[i]);
+      child.emit('close', codes[i]);
+    });
+    const docker = createDockerClient({ spawnImpl: f.spawnImpl });
+    expect(await docker.runtimes?.()).toEqual(['io.containerd.runc.v2', 'runc', 'runsc']);
+    expect(await docker.runtimes?.()).toBeNull();
+    expect(await docker.runtimes?.()).toBeNull();
+    expect(await docker.runtimes?.()).toBeNull();
+    expect(f.started[0].args).toEqual(['info', '--format', '{{json .Runtimes}}']);
+  });
+
   it('starts docker with an argument list and no shell, whatever it is asked', async () => {
     const f = fakeSpawn((_s, child) => {
       child.stdout.end('0 false\n');

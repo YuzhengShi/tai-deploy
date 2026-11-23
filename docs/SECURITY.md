@@ -155,7 +155,7 @@ the live `DATA_DIR` is `~/tai-live/tai/data`. A run that finds nothing is only a
 
 #### Running a student's code (`sandbox_run`, `run_go`, `run_code`, 2026-11-06)
 
-A student's chat agent (`run_go`), a voice call (`run_code`: the conversation and the interviewer) and the admin chat can ask the host to run Go code in a disposable container (`GO_SANDBOX.md` has the container's threat model). What the callers can ask, and the rules that hold whoever asks:
+A student's chat agent (`run_go`), a voice call (`run_code`: the conversation and the interviewer) and the admin chat can ask the host to run Go code in a disposable container (`GO_SANDBOX.md` has the container's threat model; with `TAI_SANDBOX_RUNTIME=runsc` the container runs on gVisor, so the program's system calls go to gVisor's user-space kernel instead of the host's; gVisor is installed on the host but the live service does not set it yet: `GO_SANDBOX.md`, "gVisor (runsc)"). What the callers can ask, and the rules that hold whoever asks:
 
 | | |
 |---|---|

@@ -40,13 +40,15 @@
 #   bash deploy/cs6650/tai_live.sh timers on|off                  every night: the backup, and the knowledge corpus rebuilt from what the world publishes
 #   bash deploy/cs6650/tai_live.sh humanness [--days N] [--split ISO] [--judge N] [--include-main]
 #                                                                 how much TAi's replies and calls read like a bot (docs/HUMANNESS.md); read-only
-#   bash deploy/cs6650/tai_live.sh sandbox build [--base IMAGE] | warm | status | smoke [--only TEXT]
+#   bash deploy/cs6650/tai_live.sh sandbox build [--base IMAGE] | warm | status | smoke [--only TEXT] [--runtime runc|runsc]
 #                                                                 running a student's Go code (docs/GO_SANDBOX.md). build: ships deploy/cs6650/sandbox/ to the host and builds the
 #                                                                 image tai-go-sandbox:live (at most 2 CPUs and 3 GB, about ten minutes, a cache of the standard library and of the usual third-party packages compiled in it: not in class hours;
 #                                                                 --base names a mirror of the golang image when Docker Hub's pull limit for this address is reached). warm: fills the shared
 #                                                                 module cache (data/sandbox/gomodcache) with the modules the course's homework uses (warm/go.mod), through the modules container.
-#                                                                 status: the image and its size, the cache's size, sandbox containers running, run directories left, runs counted in the last
-#                                                                 hour. smoke: runs the checks against the real image (hostile programs and archives, the queue; up to 2 CPUs for several minutes)
+#                                                                 status: the image and its size, the runtime the service starts the containers with (TAI_SANDBOX_RUNTIME: unset = Docker's default
+#                                                                 runc, runsc = gVisor) and whether Docker knows it, the cache's size, sandbox containers running, run directories left, runs counted in
+#                                                                 the last hour. smoke: runs the checks against the real image (hostile programs and archives, the queue; up to 2 CPUs for several
+#                                                                 minutes) on the service's runtime, or the one --runtime names. warm runs on Docker's default runtime (the warm list's own modules, no student code)
 #   bash deploy/cs6650/tai_live.sh doc build [--base IMAGE] | status | smoke [--only TEXT]
 #                                                                 the document viewer's renderer (docs/DOCUMENTS.md). build: ships deploy/cs6650/doc-render/ to the host and builds the image
 #                                                                 tai-doc:live (poppler, LibreOffice and fonts on the python image the host has; at most 2 CPUs and 3 GB; about twelve minutes the first time and under one when only the scripts changed; --base names another copy of that image). status: the
@@ -1206,6 +1208,7 @@ humanness() {        # humanness [report options]: the report of src/humanness (
 # ---- running a student's Go code (docs/GO_SANDBOX.md): the image, the shared module cache, and the checks. The orchestrator itself starts the containers; these are the operator's.
 SANDBOX_IMAGE=tai-go-sandbox:live
 sandbox_dir() { echo "$T/data/sandbox"; }
+sandbox_runtime() { grep -m1 '^TAI_SANDBOX_RUNTIME=' "$L/orch.env" 2>/dev/null | cut -d= -f2- | tr -d '" ' || true; }   # the service's runtime setting; empty: Docker's default
 
 sandbox_build() {      # sandbox_build [--base IMAGE]: the context was shipped by the PC-side part of this script into $L/sandbox-build
   local base="" ctx="$L/sandbox-build" log="$L/logs/sandbox-build.log"
@@ -1262,6 +1265,19 @@ sandbox_status() {
   else
     echo "image:        $SANDBOX_IMAGE NOT built (tai_live.sh sandbox build): running code is off"
   fi
+  local rt known
+  rt=$(sandbox_runtime)
+  if [ -z "$rt" ]; then
+    echo "runtime:      Docker's default (runc; TAI_SANDBOX_RUNTIME is not set)"
+  else
+    known=$(docker info --format '{{range $k, $v := .Runtimes}}{{$k}} {{end}}' 2>/dev/null || true)
+    case "$rt" in
+      runc|runsc)
+        if [[ " $known " == *" $rt "* ]]; then echo "runtime:      $rt (TAI_SANDBOX_RUNTIME; Docker knows it)"
+        else echo "runtime:      $rt (TAI_SANDBOX_RUNTIME) but Docker does NOT know it: running code is off until it does (docs/GO_SANDBOX.md, gVisor)"; fi ;;
+      *) echo "runtime:      TAI_SANDBOX_RUNTIME=$rt is not runc or runsc: running code is off" ;;
+    esac
+  fi
   echo "module cache: $([ -d "$dir/gomodcache" ] && du -sm "$dir/gomodcache" | cut -f1 || echo 0) MB in $dir/gomodcache (the orchestrator empties it above 3000 MB: SANDBOX_LIMITS.moduleCacheMb; sandbox warm refills it)"
   echo "containers:   $(docker ps --filter 'label=tai-sandbox=1' --format '{{.Names}}' | grep -c . || true) sandbox container(s) running"
   echo "run dirs:     $(find "$dir" -maxdepth 1 -type d -name 'run-*' 2>/dev/null | wc -l) left in $dir"
@@ -1281,7 +1297,11 @@ PY
 sandbox_smoke() {      # the checks of docs/GO_SANDBOX.md against the real image
   [ -f "$T/dist/sandbox/smoke.js" ] || die "this build has no sandbox smoke (dist/sandbox/smoke.js): deploy first"
   docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1 || die "no $SANDBOX_IMAGE yet: tai_live.sh sandbox build"
-  say "== the sandbox smoke: hostile programs and archives, up to 2 CPUs for several minutes; not in class hours, not during a voice call"
+  local rt a
+  rt=$(sandbox_runtime)
+  for a in "$@"; do [ "$a" != --runtime ] || rt=""; done   # the caller named one: theirs
+  [ -z "$rt" ] || set -- "$@" --runtime "$rt"
+  say "== the sandbox smoke ($([ -n "$rt" ] && echo "the service's runtime: $rt" || echo "runtime: as given, else Docker's default")): hostile programs and archives, up to 2 CPUs for several minutes; not in class hours, not during a voice call"
   ( cd "$T" && node dist/sandbox/smoke.js "$@" )
 }
 
@@ -1293,7 +1313,7 @@ sandbox_cmd() {
     warm) sandbox_warm ;;
     status) sandbox_status ;;
     smoke) sandbox_smoke "$@" ;;
-    *) die "tai_live.sh sandbox build [--base IMAGE] | warm | status | smoke [--only TEXT]" ;;
+    *) die "tai_live.sh sandbox build [--base IMAGE] | warm | status | smoke [--only TEXT] [--runtime runc|runsc]" ;;
   esac
 }
 

@@ -19,7 +19,8 @@ import type { SandboxRequest } from './types.js';
 
 export const RUN_DIR = /^run-[0-9a-f]{16}$/;
 
-export type StageResult = { ok: true; modules: boolean } | { ok: false; phase: 'fetch' | 'stage'; message: string };
+/** `goMod`: for inline files that need modules, the text of the go.mod the modules container would read (the top one), so that the runner can see whether the cache holds it all. */
+export type StageResult = { ok: true; modules: boolean; goMod?: string } | { ok: false; phase: 'fetch' | 'stage'; message: string };
 
 export interface StageOptions {
   /** `<deps.dir>/run-<id>`: made here (it must not exist). */
@@ -39,12 +40,18 @@ const within = (root: string, target: string): boolean => {
   return rel !== '' && rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
 };
 
-const REQUIRE_LINE = /^\s*require[\s(]/m;
+// the modules script's own test, line by line: grep -Eq '^[[:space:]]*require[[:space:](]'
+const REQUIRE_LINE = /^[ \t\v\f\r]*require[ \t\v\f\r(]/m;
 
-/** Whether the code, as the host can see it, needs its modules downloaded first: inline files with a go.mod that requires something and no vendor folder. */
-function inlineNeedsModules(files: Array<{ path: string; content: string }>): boolean {
-  if (files.some((f) => f.path === 'vendor' || f.path.startsWith('vendor/') || f.path.includes('/vendor/'))) return false;
-  return files.some((f) => (f.path === 'go.mod' || f.path.endsWith('/go.mod')) && REQUIRE_LINE.test(f.content));
+/**
+ * Whether inline code needs its modules downloaded first, by the modules script's own rule (deploy/cs6650/sandbox/sandbox-modules): inline files are worked on at their
+ * top, so only a go.mod there counts, and only when it has a `require` line and there is no vendor folder beside it; otherwise the script would start, find nothing to
+ * download and exit, which costs a container start for nothing. The go.mod's text comes along for the runner's look at the cache.
+ */
+function inlineNeedsModules(files: Array<{ path: string; content: string }>): { modules: boolean; goMod?: string } {
+  const goMod = files.find((f) => f.path === 'go.mod');
+  if (!goMod || !REQUIRE_LINE.test(goMod.content) || files.some((f) => f.path.startsWith('vendor/'))) return { modules: false };
+  return { modules: true, goMod: goMod.content };
 }
 
 const UPLOAD_TEXT = 'Not run: the file they attached is not there under that name, or it is not a regular file of a size the sandbox takes. Say so and ask them to attach it again.';
@@ -65,6 +72,7 @@ export async function stageRun(o: StageOptions): Promise<StageResult> {
   }
 
   let modules = false;
+  let goMod: string | undefined;
   const source = request.source;
   try {
     if (source.kind === 'files') {
@@ -76,7 +84,7 @@ export async function stageRun(o: StageOptions): Promise<StageResult> {
         if (!within(filesDir, target)) return { ok: false, phase: 'stage', message: 'Not run: a file name is not allowed.' };
         createFileExclusive(target, f.content, filesDir, 0o644);
       }
-      modules = inlineNeedsModules(source.files);
+      ({ modules, goMod } = inlineNeedsModules(source.files));
     } else if (source.kind === 'repo') {
       const fetched = await fetchRepoArchive({
         owner: o.who.githubUsername,
@@ -107,7 +115,7 @@ export async function stageRun(o: StageOptions): Promise<StageResult> {
   } catch {
     return { ok: false, phase: 'stage', message: 'Not run: the sandbox could not put the code in place on the server. Say so and try again in a minute.' };
   }
-  return { ok: true, modules };
+  return goMod === undefined ? { ok: true, modules } : { ok: true, modules, goMod };
 }
 
 /** Removes a run directory (and only one: the name and its place are checked again). Whether it is gone. */

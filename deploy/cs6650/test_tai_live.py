@@ -704,6 +704,7 @@ case "$1" in
     esac
     exit 0 ;;
   images) echo 1.59GB; exit 0 ;;
+  info) [ ! -f "$HOME/runtimes" ] || cat "$HOME/runtimes"; exit 0 ;;
   ps) [ ! -f "$HOME/running" ] || cat "$HOME/running"; exit 0 ;;
   build) if [ -f "$HOME/build-fails" ]; then cat "$HOME/build-fails"; exit 1; fi; exit 0 ;;
   run)
@@ -792,6 +793,19 @@ class SandboxCommandsTest(unittest.TestCase):
         self.assertIn("run dirs:     1 left", out)
         self.assertIn("runs:         3 in the last hour (2 student(s)), 4 in the last day", out)
         self.assertNotIn("ana", out)                                                    # counts only: no student's name
+
+    def test_status_says_the_runtime_of_the_service_and_whether_docker_knows_it(self):
+        self.flag("image-present")
+        self.assertIn("runtime:      Docker's default (runc; TAI_SANDBOX_RUNTIME is not set)", self.run_script("status")[1])
+        (self.live / "orch.env").write_text("TZ=America/Los_Angeles\nTAI_SANDBOX_RUNTIME=runsc\n", encoding="utf-8", newline="\n")
+        self.flag("runtimes", "io.containerd.runc.v2 runc runsc \n")
+        code, out = self.run_script("status")
+        self.assertEqual(code, 0, out)
+        self.assertIn("runtime:      runsc (TAI_SANDBOX_RUNTIME; Docker knows it)", out)
+        self.flag("runtimes", "io.containerd.runc.v2 runc \n")
+        self.assertIn("runtime:      runsc (TAI_SANDBOX_RUNTIME) but Docker does NOT know it: running code is off", self.run_script("status")[1])
+        (self.live / "orch.env").write_text("TAI_SANDBOX_RUNTIME=gvisor\n", encoding="utf-8", newline="\n")
+        self.assertIn("TAI_SANDBOX_RUNTIME=gvisor is not runc or runsc: running code is off", self.run_script("status")[1])
 
     def test_status_says_so_when_the_table_is_not_there_yet_or_the_database_cannot_be_read(self):
         sqlite3.connect(self.tree / "store" / "messages.db").close()
@@ -910,10 +924,24 @@ class SandboxCommandsTest(unittest.TestCase):
         self.assertTrue(seen.startswith(posix(self.tree)), seen)
         self.assertEqual(self.run_script("smoke", env={"NODE_EXIT": "1"})[0], 1)
 
+    def test_smoke_runs_on_the_services_runtime_unless_it_is_told_another(self):
+        (self.tree / "dist" / "sandbox").mkdir(parents=True)
+        (self.tree / "dist" / "sandbox" / "smoke.js").write_text("", encoding="utf-8")
+        self.flag("image-present")
+        (self.live / "orch.env").write_text("TAI_SANDBOX_RUNTIME=runsc\n", encoding="utf-8", newline="\n")
+        code, out = self.run_script("smoke", "--only", "hello")
+        self.assertEqual(code, 0, out)
+        self.assertIn("the service's runtime: runsc", out)
+        code, out = self.run_script("smoke", "--runtime", "runc")
+        self.assertEqual(code, 0, out)
+        calls = (self.home / "node-calls.txt").read_text(encoding="utf-8").strip().splitlines()
+        self.assertTrue(calls[0].endswith("dist/sandbox/smoke.js --only hello --runtime runsc"), calls[0])
+        self.assertTrue(calls[1].endswith("dist/sandbox/smoke.js --runtime runc"), calls[1])          # the caller's, not a second one
+
     def test_an_unknown_sandbox_command_says_what_there_is(self):
         code, out = self.run_script("frobnicate")
         self.assertNotEqual(code, 0)
-        self.assertIn("tai_live.sh sandbox build [--base IMAGE] | warm | status | smoke", out)
+        self.assertIn("tai_live.sh sandbox build [--base IMAGE] | warm | status | smoke [--only TEXT] [--runtime runc|runsc]", out)
 
 
 @unittest.skipIf(BASH is None, "needs Git Bash (or bash on Linux/macOS)")

@@ -8,6 +8,8 @@
  *     go.mod can be read; no program of the student's ever runs in it, and nothing of the request but a validated folder name reaches its command line.
  *   - RUN: `--network none`, the module cache read-only, runs only `sandbox-run` with the request as separate argument elements.
  * The environment of each is the fixed list below (`-e NAME=value`): nothing is inherited from the host's own environment.
+ * Both are started with the runtime the operator chose (`TAI_SANDBOX_RUNTIME`, `--runtime`): none named is Docker's default (runc); `runsc` is gVisor's, which puts a user-space
+ * kernel between the program and the host's (docs/GO_SANDBOX.md, "gVisor").
  */
 import { spawn } from 'node:child_process';
 import type { SpawnOptions } from 'node:child_process';
@@ -25,6 +27,26 @@ export const LABEL_STARTED = 'tai-sandbox-started';
 
 export const RUN_SCRIPT = '/usr/local/bin/sandbox-run';
 export const MODULES_SCRIPT = '/usr/local/bin/sandbox-modules';
+
+/**
+ * The OCI runtimes a sandbox container may be started with: `runc`, Docker's own, and `runsc`, gVisor's (the program's system calls go to gVisor's Sentry, a kernel in user
+ * space, instead of the host's). Only these names, and only from the operator's setting: a request never names one.
+ */
+export const SANDBOX_RUNTIMES = ['runc', 'runsc'] as const;
+export type SandboxRuntime = (typeof SANDBOX_RUNTIMES)[number];
+
+const isRuntime = (v: unknown): v is SandboxRuntime => typeof v === 'string' && (SANDBOX_RUNTIMES as readonly string[]).includes(v);
+
+/**
+ * The operator's `TAI_SANDBOX_RUNTIME`: unset or empty is Docker's default runtime (no `--runtime`), `runc` or `runsc` that one. Anything else is an error, and the caller turns
+ * running code off rather than fall back to another runtime: a typo must not quietly put student code on a runtime the operator did not choose.
+ */
+export function sandboxRuntimeSetting(value: string | undefined): { ok: true; runtime?: SandboxRuntime } | { ok: false; message: string } {
+  const v = (value ?? '').trim();
+  if (v === '') return { ok: true };
+  if (isRuntime(v)) return { ok: true, runtime: v };
+  return { ok: false, message: `TAI_SANDBOX_RUNTIME is ${JSON.stringify(v.slice(0, 40))}: it must be runc or runsc (or unset, for Docker's default)` };
+}
 
 /** No single file a program writes may be bigger (`--ulimit fsize`): a race test binary is about 20 MB. */
 export const FSIZE_BYTES = 50 * 1024 * 1024;
@@ -95,15 +117,19 @@ interface Common {
   inDir: string;
   /** The shared module cache. */
   cacheDir: string;
+  /** The OCI runtime (`--runtime`); none: Docker's default. */
+  runtime?: SandboxRuntime;
 }
 
 /** The flags of both kinds of container. */
 function hardening(c: Common): string[] {
+  if (c.runtime !== undefined && !isRuntime(c.runtime)) throw new Error('a sandbox container runs on runc or runsc only');
   return [
     'run',
     '--name', c.name,
     '--label', `${LABEL}=1`,
     '--label', `${LABEL_STARTED}=${c.startedMs}`,
+    ...(c.runtime ? ['--runtime', c.runtime] : []),
     '--pull', 'never',
     '--init',
     '--log-driver', 'none',
@@ -141,6 +167,8 @@ export interface RunSpecOptions {
   wallSeconds: number;
   /** A folder of the repository (`repo.path`), or none. */
   folder?: string;
+  /** The OCI runtime (`--runtime`); none: Docker's default. */
+  runtime?: SandboxRuntime;
 }
 
 /** The run container: no network, the module cache read-only, `sandbox-run` with the request as argument elements. */
@@ -174,6 +202,8 @@ export interface ModulesSpecOptions {
   cacheDir: string;
   wallSeconds: number;
   folder?: string;
+  /** The OCI runtime (`--runtime`); none: Docker's default. */
+  runtime?: SandboxRuntime;
 }
 
 /** The modules container: the default network, the module cache writable, `sandbox-modules` and nothing of the request but the folder. */
@@ -203,6 +233,8 @@ export interface DockerInspect {
 export interface DockerClient {
   /** Whether the image is there (`docker image inspect`). */
   imageExists(image: string): Promise<boolean>;
+  /** The names of the runtimes Docker knows (`docker info`), or null when Docker did not answer. A client without it (a test's) is taken to know every runtime. */
+  runtimes?(): Promise<string[] | null>;
   /**
    * `docker run <args>`, attached: `onOutput` gets what the program wrote (the scripts merge its two streams into one), `onDiag` what Docker itself said on its own stderr.
    * Resolves when the process ends. Never rejects: a `docker` that cannot be started is `{ exitCode: null, error }`.
@@ -282,6 +314,17 @@ export function createDockerClient(options: DockerClientOptions = {}): DockerCli
     async imageExists(image) {
       const r = await exec(['image', 'inspect', '--format', '{{.Id}}', image], 15_000);
       return r.code === 0;
+    },
+
+    async runtimes() {
+      const r = await exec(['info', '--format', '{{json .Runtimes}}'], 20_000);
+      if (r.code !== 0) return null;
+      try {
+        const parsed: unknown = JSON.parse(r.stdout.trim());
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? Object.keys(parsed) : null;
+      } catch {
+        return null;
+      }
     },
 
     run(spec, onOutput, onDiag) {

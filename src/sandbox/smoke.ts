@@ -3,7 +3,10 @@
  * `createSandbox` over a temporary directory (and an in-memory rate store), runs the catalogue of ordinary and hostile programs and archives, prints PASS or FAIL with what was
  * expected for each, and exits 0 only when all passed. At the end nothing of the sandbox may be left: no container, no run directory, and a canary file beside them untouched.
  *
- *   node dist/sandbox/smoke.js [--dir DIR] [--only TEXT] [--keep] [--image NAME]
+ *   node dist/sandbox/smoke.js [--dir DIR] [--only TEXT] [--keep] [--image NAME] [--runtime runc|runsc]
+ *
+ * `--runtime` starts every container on that OCI runtime (what TAI_SANDBOX_RUNTIME does for the service; `tai_live.sh sandbox smoke` passes the service's own setting); without it,
+ * Docker's default. One case checks that the program really ran on it (gVisor answers /proc/version with a kernel of its own).
  *
  * The hostile cases run one after the other under their own limits (a core of CPU each); the queue case runs sleeping programs, not spinning ones. It takes several minutes: every
  * container start costs what Docker costs on the machine, and a program that loops is let to run to its wall clock.
@@ -14,7 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createDockerClient, CONTAINER_PREFIX, SANDBOX_IMAGE } from './docker.js';
+import { createDockerClient, CONTAINER_PREFIX, SANDBOX_IMAGE, sandboxRuntimeSetting } from './docker.js';
 import { createMemoryRates } from './rates.js';
 import { createSandbox } from './runner.js';
 import { tarGz } from './tar.js';
@@ -40,6 +43,12 @@ const dir = path.resolve(arg('--dir') ?? path.join(os.tmpdir(), `sbx-smoke-${ran
 const only = arg('--only');
 const keep = process.argv.includes('--keep');
 const image = arg('--image') ?? SANDBOX_IMAGE;
+const runtimeSetting = sandboxRuntimeSetting(arg('--runtime'));
+if (!runtimeSetting.ok) {
+  console.log(`FAIL  ${runtimeSetting.message.replace('TAI_SANDBOX_RUNTIME', '--runtime')}`);
+  process.exit(2);
+}
+const runtime = runtimeSetting.runtime;
 /** The warm list's web module (Gin and testify, as `go mod tidy` makes a project with only them): the go.mod of the Gin cases, so that they run at the versions the image's cache holds. */
 const WARM_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../deploy/cs6650/sandbox/warm');
 const WARM_WEB = path.join(WARM_DIR, 'web', 'go.mod');
@@ -54,7 +63,7 @@ fs.writeFileSync(CANARY, CANARY_TEXT);
 const docker = createDockerClient();
 const rates = createMemoryRates();
 const log = { info: () => undefined, warn: (f: Record<string, unknown>, m: string) => console.log(`  [warn] ${m} ${JSON.stringify(f).slice(0, 200)}`), debug: () => undefined };
-const sandbox = createSandbox({ dir, uploadsDir: (folder) => path.join(dir, 'groups', folder, 'uploads'), rates, log, docker, image });
+const sandbox = createSandbox({ dir, uploadsDir: (folder) => path.join(dir, 'groups', folder, 'uploads'), rates, log, docker, image, runtime });
 
 let counter = 0;
 const nextFolder = (): string => `smoke${++counter}`;
@@ -118,6 +127,16 @@ const cases: Case[] = [
     },
   },
   {
+    name: `the program runs on the runtime the sandbox is set to (${runtime ?? 'Docker default'})`,
+    run: async () => {
+      // gVisor's Sentry answers /proc/version with a kernel of its own ("...-gvisor"); runc shows the host's. A check that the flag took effect, not a security test: code in
+      // the container could print anything, but this is the smoke's own program.
+      const r = await runGo('package main\n\nimport (\n\t"fmt"\n\t"os"\n)\n\nfunc main() {\n\tb, err := os.ReadFile("/proc/version")\n\tfmt.Println("version:", string(b), err)\n}\n');
+      const gvisor = /gvisor/i.test(r.output);
+      return { pass: r.ok && r.exitCode === 0 && /version: Linux/.test(r.output) && gvisor === (runtime === 'runsc'), expected: runtime === 'runsc' ? 'ok, /proc/version is gVisor\'s' : 'ok, /proc/version is the host\'s (no gVisor)', got: show(r) };
+    },
+  },
+  {
     name: 'a test that passes',
     run: async () => {
       const r = await testGo(PASSING_TEST);
@@ -158,8 +177,10 @@ const cases: Case[] = [
       const r = await runGo(
         'package main\n\nimport (\n\t"fmt"\n\t"os"\n\t"os/exec"\n\t"time"\n)\n\nfunc main() {\n\tif os.Getenv("CHILD") == "1" {\n\t\ttime.Sleep(30 * time.Second)\n\t\treturn\n\t}\n\tn := 0\n\tfor i := 0; i < 2000; i++ {\n\t\tc := exec.Command(os.Args[0])\n\t\tc.Env = append(os.Environ(), "CHILD=1")\n\t\tif err := c.Start(); err != nil {\n\t\t\tfmt.Println("started", n, "then:", err)\n\t\t\treturn\n\t\t}\n\t\tn++\n\t}\n\tfmt.Println("started", n, "and was not stopped")\n}\n',
       );
-      const m = /started (\d+) then: .*(temporarily unavailable|resource)/.exec(r.output);
-      return { pass: r.ok && m !== null && Number(m[1]) <= SANDBOX_LIMITS.pids, expected: `ok, "started N then: ... resource temporarily unavailable" with N at most ${SANDBOX_LIMITS.pids}`, got: show(r) };
+      // Under gVisor the host's process limit is hit by the Sentry (each new process of the program is a process of its own on the host: the cgroup's pids.events counts
+      // the refusals, measured 2026-11-22), and the Sentry tells the program "cannot allocate memory" where runc's kernel says "resource temporarily unavailable".
+      const m = /started (\d+) then: .*(temporarily unavailable|resource|cannot allocate memory)/.exec(r.output);
+      return { pass: r.ok && m !== null && Number(m[1]) <= SANDBOX_LIMITS.pids, expected: `ok, "started N then: ... resource temporarily unavailable" (gVisor: "cannot allocate memory") with N at most ${SANDBOX_LIMITS.pids}`, got: show(r) };
     },
   },
   {
@@ -360,7 +381,7 @@ const cases: Case[] = [
 ];
 
 async function main(): Promise<number> {
-  console.log(`go sandbox smoke: image ${image}, directory ${dir}`);
+  console.log(`go sandbox smoke: image ${image}, runtime ${runtime ?? 'Docker default'}, directory ${dir}`);
   if (!(await sandbox.ready())) {
     console.log(`FAIL  the image ${image} is not there (tai_live.sh sandbox build)`);
     return 1;

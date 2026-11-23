@@ -96,11 +96,23 @@ describe('staging inline files', () => {
 
   it('writes stdin as in/stdin, and decides that modules are needed only for a go.mod that requires something and no vendor folder', async () => {
     const withReq = opts({ ...files(['main.go', 'x'], ['go.mod', 'module x\n\nrequire github.com/google/uuid v1.6.0\n']), stdin: 'hello\n' });
-    expect(await stageRun(withReq)).toEqual({ ok: true, modules: true });
+    expect(await stageRun(withReq)).toEqual({ ok: true, modules: true, goMod: 'module x\n\nrequire github.com/google/uuid v1.6.0\n' }); // the go.mod, for the runner's look at the cache
     expect(fs.readFileSync(path.join(withReq.runDir, 'in/stdin'), 'utf8')).toBe('hello\n');
     expect(await stageRun(opts(files(['main.go', 'x'], ['go.mod', 'module x\n\ngo 1.22\n'])))).toEqual({ ok: true, modules: false });
     expect(await stageRun(opts(files(['go.mod', 'module x\nrequire (\n\ta v1\n)\n'], ['vendor/modules.txt', '# a v1\n'])))).toEqual({ ok: true, modules: false });
     expect(await stageRun(opts(files(['main.go', 'x'])))).toEqual({ ok: true, modules: false });
+  });
+
+  it('asks for modules by the modules script\'s own rule: only the go.mod at the top counts (inline code is worked on there), and only a vendor folder beside it', async () => {
+    // a go.mod further down: the script finds none at the top, downloads nothing and exits, so no container is started for it
+    expect(await stageRun(opts(files(['app/go.mod', 'module app\n\nrequire github.com/google/uuid v1.6.0\n'], ['app/main.go', 'x'])))).toEqual({ ok: true, modules: false });
+    // a vendor folder further down does not stand for the top go.mod's requirements
+    const top = 'module x\n\nrequire github.com/google/uuid v1.6.0\n';
+    expect(await stageRun(opts(files(['go.mod', top], ['tools/vendor/modules.txt', '# x\n'])))).toEqual({ ok: true, modules: true, goMod: top });
+    // the script's grep, line by line: "require" at the start of a line (after blanks), then a blank or "("
+    const block = 'module x\n\ngo 1.27\n\n\trequire(\n\tgithub.com/google/uuid v1.6.0\n)\n';
+    expect(await stageRun(opts(files(['go.mod', block])))).toEqual({ ok: true, modules: true, goMod: block });
+    expect(await stageRun(opts(files(['go.mod', 'module x\n// require github.com/google/uuid v1.6.0\nrequirements\n'])))).toEqual({ ok: true, modules: false });
   });
 });
 

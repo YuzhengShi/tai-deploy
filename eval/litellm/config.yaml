@@ -43,7 +43,7 @@ model_list:
   # nothing) and z.ai's default is ON, so through it the model always thought; here the field goes out unchanged in extra_body, as for deepseek, which is also why it is
   # off: with tools every later request would have to send the thinking blocks back.
   # `glm` uses LiteLLM's zai/ provider (2026-11-23, when the live chats moved to it): under openai/ the Anthropic route (/v1/messages, what the text agent sends)
-  # went to a Responses endpoint z.ai does not have (HTTP 404, and the alias then sat in cooldown); zai/ is OpenAI chat completions at the same endpoint, like
+  # called a path the coding endpoint does not have (HTTP 404 Not Found, and the alias then sat in cooldown); zai/ is OpenAI chat completions at the same endpoint, like
   # deepseek/. Measured on a scratch gateway with the owner's key: plain and streamed tool round trips through /v1/messages, two tool calls in one streamed answer
   # as two valid blocks, and the voice relay's /v1/chat/completions round trip, with 3 to 11 output tokens (thinking off). glm-vision is read through chat
   # completions only and stays as it was.

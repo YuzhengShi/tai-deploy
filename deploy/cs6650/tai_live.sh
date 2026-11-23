@@ -11,13 +11,13 @@
 #                                                                 check: also that the voice model and the agent's each answer through the gateway)
 #   bash deploy/cs6650/tai_live.sh expose | unexpose              put /tai behind traefik, or take it away (the service keeps running)
 #   bash deploy/cs6650/tai_live.sh set KEY=VALUE ...              orchestrator settings (orch.env), e.g. TAI_GOOGLE_CLIENT_ID=...; then: restart
-#   bash deploy/cs6650/tai_live.sh model gpt-oss|qwen|deepseek [--background]
+#   bash deploy/cs6650/tai_live.sh model gpt-oss|qwen|deepseek|glm [--background]
 #                                                                 the model every student's turn uses (base.env + .env), at the next container; with
 #                                                                 --background only the scheduled tasks' (the patrol): chats keep the model they have.
-#                                                                 deepseek is switched to only after the RUNNING gateway has answered for it (a tiny
-#                                                                 answer and a tool round trip), so its key (tai_credentials.sh deepseek) and the deploy come first
+#                                                                 deepseek and glm are switched to only after the RUNNING gateway has answered for them (a tiny
+#                                                                 answer and a tool round trip), so the key (tai_credentials.sh deepseek|zai) and the deploy come first
 #   bash deploy/cs6650/tai_live.sh models [MODEL...]              a tiny answer and a tool round trip from each model through the gateway (default: the
-#                                                                 ones in use), with the seconds each took; changes nothing: the way to try deepseek before switching to it
+#                                                                 ones in use), with the seconds each took; changes nothing: the way to try a model before switching to it
 #   bash deploy/cs6650/tai_live.sh patrol [DAYS]                  what the teaching patrol and its gate did in the last DAYS days (default 7): runs by the model,
 #                                                                 runs the gate skipped and why (src/patrol-gate.ts; TAI_PATROL_GATE=shadow tries it without skipping)
 #   bash deploy/cs6650/tai_live.sh users list|add EMAIL [--name N] [--canvas ID] [--github LOGIN] [--owner] [--from-facts]|remove EMAIL
@@ -719,19 +719,22 @@ for folder, at, status, result in skipped[-8:]:
 PY
 }
 
-deepseek_ready() {    # 0 when DeepSeek works through the RUNNING gateway: the guard of `model deepseek`
-  [ -n "$(grep -m1 '^DEEPSEEK_API_KEY=.' "$L/gateway.env" 2>/dev/null)" ] || { say "no DeepSeek key is stored: bash deploy/cs6650/tai_credentials.sh deepseek"; return 1; }
+gateway_model_ready() {    # gateway_model_ready ALIAS KEYVAR CREDENTIAL LABEL: 0 when a model with a key of its own (deepseek, glm) works through the RUNNING gateway: the guard of `model ALIAS`
+  local alias=$1 keyvar=$2 credential=$3 label=$4
+  [ -n "$(grep -m1 "^$keyvar=." "$L/gateway.env" 2>/dev/null)" ] || { say "no $label key is stored: bash deploy/cs6650/tai_credentials.sh $credential"; return 1; }
   # the gateway reads its env file only when it is created
-  docker exec "$GATEWAY" sh -c 'test -n "$DEEPSEEK_API_KEY"' >/dev/null 2>&1 || { say "the running gateway does not have the key yet: bash deploy/cs6650/tai_live.sh gateway (that cuts calls that are running)"; return 1; }
-  # having the key is not the model working: a gateway created before the deploy runs the old config (no `deepseek` alias), and an account with no balance answers 402
+  docker exec "$GATEWAY" sh -c "test -n \"\$$keyvar\"" >/dev/null 2>&1 || { say "the running gateway does not have the key yet: bash deploy/cs6650/tai_live.sh gateway (that cuts calls that are running)"; return 1; }
+  # having the key is not the model working: a gateway created before the deploy runs the old config (no such alias), and an account with no balance answers 402
   # to every turn. Both would pass the two checks above and take every chat down, so the switch needs a real answer and a tool round trip from the running gateway.
   local out
-  out=$(models_answer deepseek 2>&1) || { say "$out"; say "deepseek does not work through the running gateway (an old config without the alias: deploy first; an empty balance: top it up)"; return 1; }
+  out=$(models_answer "$alias" 2>&1) || { say "$out"; say "$alias does not work through the running gateway (an old config without the alias: deploy first; an empty balance: top it up)"; return 1; }
   case "$out" in
     *"tool round trip ok"*) ;;
-    *) say "$out"; say "deepseek answered, but no tool round trip could be shown: not switching (try again; the model has to call the tool for the check to count)"; return 1 ;;
+    *) say "$out"; say "$alias answered, but no tool round trip could be shown: not switching (try again; the model has to call the tool for the check to count)"; return 1 ;;
   esac
 }
+deepseek_ready() { gateway_model_ready deepseek DEEPSEEK_API_KEY deepseek DeepSeek; }    # the guard of `model deepseek`
+glm_ready() { gateway_model_ready glm ZAI_API_KEY zai z.ai; }                                  # the guard of `model glm` (z.ai, GLM-5.3-Flash, thinking off)
 
 check() {
   local domain code ok=1
@@ -1473,10 +1476,11 @@ case "$CMD" in
   unexpose) unexpose ;;
   set) set_cmd "$@" ;;
   model)
-    case "${1:-}" in gpt-oss|qwen|deepseek) ;; *) die "tai_live.sh model gpt-oss|qwen|deepseek [--background]" ;; esac
-    case "${2:-}" in ""|--background) ;; *) die "tai_live.sh model gpt-oss|qwen|deepseek [--background]" ;; esac
+    case "${1:-}" in gpt-oss|qwen|deepseek|glm) ;; *) die "tai_live.sh model gpt-oss|qwen|deepseek|glm [--background]" ;; esac
+    case "${2:-}" in ""|--background) ;; *) die "tai_live.sh model gpt-oss|qwen|deepseek|glm [--background]" ;; esac
     # a model the running gateway cannot call would take every chat down with it: refused here, nothing changed
     [ "$1" != deepseek ] || deepseek_ready || die "not switched: nothing was changed"
+    [ "$1" != glm ] || glm_ready || die "not switched: nothing was changed"
     if [ "${2:-}" = --background ]; then
       chats=$(grep -m1 '^ANTHROPIC_DEFAULT_SONNET_MODEL=' "$L/base.env" 2>/dev/null | cut -d= -f2- | grep . || echo "${TAI_MODEL:-gpt-oss}")
       write_base_env "$chats" "$1"

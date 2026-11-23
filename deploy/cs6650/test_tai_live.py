@@ -497,8 +497,35 @@ class ModelsTest(unittest.TestCase):
         for args in (("model", "gpt-4"), ("model",), ("model", "qwen", "--everywhere")):
             code, out = self.run_script(*args)
             self.assertNotEqual(code, 0, args)
-            self.assertIn("tai_live.sh model gpt-oss|qwen|deepseek [--background]", out)
+            self.assertIn("tai_live.sh model gpt-oss|qwen|deepseek|glm [--background]", out)
         self.assertEqual(self.base()["ANTHROPIC_DEFAULT_SONNET_MODEL"], "gpt-oss")
+
+    def test_glm_is_refused_until_the_zai_key_is_stored_and_the_running_gateway_answers_for_it(self):
+        code, out = self.run_script("model", "glm")
+        self.assertNotEqual(code, 0)
+        self.assertIn("no z.ai key is stored: bash deploy/cs6650/tai_credentials.sh zai", out)
+        (self.live / "gateway.env").write_text("DEEPSEEK_API_KEY=sk-DEEPSEEK-0123456789abcdef\nZAI_API_KEY=0123456789abcdef.AbCdEfGh\n", encoding="utf-8", newline="\n")
+        code, out = self.run_script("model", "glm")
+        self.assertNotEqual(code, 0)
+        self.assertIn("running gateway does not have the key yet", out)
+        self.assertIn("test -n \"$ZAI_API_KEY\"", (self.home / "docker-calls.txt").read_text(encoding="utf-8"))     # its own variable is asked about, never printed
+        (self.home / "gateway-has-key").write_text("", encoding="utf-8")
+        FakeGateway.behaviour = {"glm": "rejects_second"}
+        code, out = self.run_script("model", "glm")
+        self.assertNotEqual(code, 0)
+        self.assertIn("FAILED on the second request", out)
+        self.assertIn("glm does not work through the running gateway", out)
+        self.assertEqual((self.base()["ANTHROPIC_DEFAULT_SONNET_MODEL"], self.base()["ANTHROPIC_MODEL_LIGHT"]), ("gpt-oss", "gpt-oss"))     # nothing changed
+        FakeGateway.behaviour = {}
+        code, out = self.run_script("model", "glm")
+        self.assertEqual(code, 0, out)
+        base = self.base()
+        self.assertEqual((base["ANTHROPIC_DEFAULT_SONNET_MODEL"], base["ANTHROPIC_MODEL"], base["ANTHROPIC_MODEL_LIGHT"]), ("glm", "glm", "glm"))
+        self.assertIn(("glm", ["user", "assistant", "tool"], True), [(m, r, t) for m, r, t, _ in FakeGateway.seen])
+        # the deepseek guard keeps its own words
+        code, out = self.run_script("model", "deepseek", "--background")
+        self.assertEqual(code, 0, out)
+        self.assertEqual((self.base()["ANTHROPIC_DEFAULT_SONNET_MODEL"], self.base()["ANTHROPIC_MODEL_LIGHT"]), ("glm", "deepseek"))
 
     def test_a_deploys_preparation_keeps_both_models_and_gives_the_gateway_the_key_through_its_env_file_only(self):
         self.store_deepseek_key()
